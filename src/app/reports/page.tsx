@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { FaCalendarAlt, FaFileExcel, FaFilter, FaTrash, FaEdit, FaUserCircle, FaSave, FaTimes, FaEye, FaDownload } from "react-icons/fa";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { FaCalendarAlt, FaFileExcel, FaFilter, FaTrash, FaEdit, FaUserCircle, FaSave, FaTimes, FaEye, FaDownload, FaFilePdf } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import { motion } from "framer-motion";
@@ -141,6 +143,131 @@ export default function ReportsPage() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Consolidated Report");
         XLSX.writeFile(wb, `Consolidated_Report_${startDate}_to_${endDate}.xlsx`);
+    };
+
+    const handleDownloadPDF = () => {
+        if (consolidatedData.length === 0) {
+            setStatus({ type: "error", message: "No data to print." });
+            return;
+        }
+
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.width;
+
+        // --- Header ---
+        const logoUrl = "/logo.png";
+        const img = new Image();
+        img.src = logoUrl;
+
+        const generate = () => {
+            // College Name
+            doc.setFont("times", "bold");
+            doc.setFontSize(18);
+            doc.text("Dr. B.R. Ambedkar University, Srikakulam", pageWidth / 2, 20, { align: "center" });
+
+            // College Sub-Header
+            doc.setFontSize(12);
+            doc.text("College of Engineering", pageWidth / 2, 28, { align: "center" });
+
+            // Line Separator
+            doc.setLineWidth(0.5);
+            doc.line(15, 32, pageWidth - 15, 32);
+
+            // Report Details
+            doc.setFont("times", "normal");
+            doc.setFontSize(11);
+
+            const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
+            const secName = sections.find(s => s.id === sectionId)?.name || "All";
+
+            // Left Side Details
+            doc.text(`Department: ${deptName}`, 15, 42);
+            doc.text(`Year: ${year}   Semester: ${semester}`, 15, 48);
+            doc.text(`Section: ${secName}`, 15, 54);
+
+            // Right Side Details
+            doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
+            doc.text(`From: ${new Date(startDate).toLocaleDateString()}`, pageWidth - 15, 48, { align: "right" });
+            doc.text(`To: ${new Date(endDate).toLocaleDateString()}`, pageWidth - 15, 54, { align: "right" });
+
+            // Title
+            doc.setFont("times", "bold");
+            doc.setFontSize(14);
+            doc.text("Attendance Report", pageWidth / 2, 65, { align: "center" });
+
+            // --- Table ---
+            const tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
+            const tableRows: any[] = [];
+
+            consolidatedData.forEach(student => {
+                const percentage = student["Percentage"] ? student["Percentage"].replace("%", "") : "0";
+                const rowData = [
+                    student["Roll Number"],
+                    student["Name"],
+                    student["Total Classes"],
+                    student["Present"],
+                    student["Absent"],
+                    student["Percentage"]
+                ];
+                tableRows.push(rowData);
+            });
+
+            (doc as any).autoTable({
+                head: [tableColumn],
+                body: tableRows,
+                startY: 70,
+                theme: "plain", // Minimalist for print
+                styles: {
+                    font: "times",
+                    fontSize: 10,
+                    cellPadding: 3,
+                    lineColor: [0, 0, 0],
+                    lineWidth: 0.1,
+                },
+                headStyles: {
+                    fillColor: [240, 240, 240], // Light gray header
+                    textColor: [0, 0, 0],
+                    fontStyle: "bold",
+                    lineWidth: 0.1,
+                    lineColor: [0, 0, 0]
+                },
+                columnStyles: {
+                    0: { cellWidth: 30 }, // Roll No
+                    1: { cellWidth: 60 }, // Name
+                    2: { cellWidth: 20, halign: 'center' },
+                    3: { cellWidth: 20, halign: 'center' },
+                    4: { cellWidth: 20, halign: 'center' },
+                    5: { cellWidth: 20, halign: 'center' },
+                }
+            });
+
+            // Footer
+            const pageCount = (doc as any).internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.text(`Page ${i} of ${pageCount}`, pageWidth - 20, doc.internal.pageSize.height - 10, { align: "right" });
+                doc.text(`Generated on ${new Date().toLocaleDateString()}`, 15, doc.internal.pageSize.height - 10);
+            }
+
+            doc.save(`Consolidated_Report_${startDate}_${endDate}.pdf`);
+        };
+
+        img.onload = () => {
+            const logoWidth = 20;
+            const logoHeight = (img.height / img.width) * logoWidth;
+            doc.addImage(img, 'PNG', 15, 10, logoWidth, logoHeight);
+            generate();
+        };
+
+        img.onerror = () => {
+            generate();
+        };
+
+        setTimeout(() => {
+            if (img.complete) return;
+            generate();
+        }, 1000);
     };
 
     const handleView = (record: any) => {
@@ -472,7 +599,10 @@ export default function ReportsPage() {
                             <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
                                 <h3 className="font-semibold text-slate-700">Report Summary</h3>
                                 <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 text-sm font-semibold text-green-600 hover:text-green-800">
-                                    <FaFileExcel /> Download Excel
+                                    <FaFileExcel /> Excel
+                                </button>
+                                <button onClick={handleDownloadPDF} className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 ml-4">
+                                    <FaFilePdf /> PDF
                                 </button>
                             </div>
                             <div className="overflow-x-auto">
