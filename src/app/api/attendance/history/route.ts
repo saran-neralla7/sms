@@ -10,13 +10,28 @@ export async function GET(request: Request) {
     }
 
     try {
+        const { searchParams } = new URL(request.url);
+        const year = searchParams.get("year");
+        const semester = searchParams.get("semester");
+        const sectionId = searchParams.get("sectionId");
+        const filterDeptId = searchParams.get("departmentId");
+
         const whereClause: any = {};
         const { role, departmentId } = session.user as any;
 
-        // If HOD, only show history from their department
-        if (role === "HOD" && departmentId) {
-            whereClause.departmentId = departmentId;
+        // Role-based Department Filter
+        if (role === "HOD") {
+            // HOD can only see their own department
+            if (departmentId) whereClause.departmentId = departmentId;
+        } else if (role === "ADMIN") {
+            // Admin can filter by any department
+            if (filterDeptId) whereClause.departmentId = filterDeptId;
         }
+
+        // Other Filters
+        if (year) whereClause.year = year;
+        if (semester) whereClause.semester = semester;
+        if (sectionId) whereClause.sectionId = sectionId;
 
         const history = await prisma.attendanceHistory.findMany({
             where: whereClause,

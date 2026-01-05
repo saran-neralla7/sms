@@ -25,10 +25,12 @@ export default function Navbar() {
                 { href: "/admin/alumni", label: "Alumni" },
                 { href: "/admin/departments", label: "Depts" },
                 { href: "/admin/sections", label: "Sections" },
+                { href: "/reports", label: "Reports" },
                 { href: "/attendance/history", label: "History" },
             ];
         } else if (session.user.role === "HOD") {
             return [
+                { href: "/reports", label: "Reports" },
                 { href: "/attendance/history", label: "History" },
                 { href: "/admin/students", label: "Students" },
             ];
