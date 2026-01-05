@@ -604,12 +604,14 @@ export default function ReportsPage() {
                         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                             <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
                                 <h3 className="font-semibold text-slate-700">Report Summary</h3>
-                                <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 text-sm font-semibold text-green-600 hover:text-green-800">
-                                    <FaFileExcel /> Excel
-                                </button>
-                                <button onClick={handleDownloadPDF} className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 ml-4">
-                                    <FaFilePdf /> PDF
-                                </button>
+                                <div className="flex items-center">
+                                    <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 hover:border-green-300">
+                                        <FaFileExcel className="text-green-600" /> Excel
+                                    </button>
+                                    <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
+                                        <FaFilePdf className="text-red-600" /> PDF
+                                    </button>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left">
