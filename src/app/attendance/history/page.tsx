@@ -96,7 +96,7 @@ export default function HistoryPage() {
     };
 
     const handleDownloadFull = () => {
-        if (!viewRecord) return;
+        if (!viewRecord || !viewRecord.details) return;
         try {
             const data = JSON.parse(viewRecord.details);
             const ws = XLSX.utils.json_to_sheet(data);
@@ -107,7 +107,7 @@ export default function HistoryPage() {
     };
 
     const handleDownloadAbsentees = () => {
-        if (!viewRecord) return;
+        if (!viewRecord || !viewRecord.details) return;
         try {
             const data = JSON.parse(viewRecord.details);
             const absentees = data.filter((s: any) => s.Status === "Absent").map((s: any) => ({
