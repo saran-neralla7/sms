@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaUserGraduate, FaDownload, FaCheck, FaSearch } from "react-icons/fa";
+import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave } from "react-icons/fa";
 
 export default function Home() {
   const [year, setYear] = useState("");
@@ -122,6 +122,57 @@ export default function Home() {
       return students.filter((s) => selectedIds.has(s.id));
     } else {
       return students.filter((s) => !selectedIds.has(s.id));
+    }
+  };
+
+  const handleManualSave = async () => {
+    if (!year || !semester || !sectionId) {
+      alert("Please select Year, Semester, and Section first.");
+      return;
+    }
+
+    // Construct details similar to Full Report
+    const fullData = students.map((s) => {
+      const isSelected = selectedIds.has(s.id);
+      let status = "Present";
+      if (mode === "mark_absent") {
+        status = isSelected ? "Absent" : "Present";
+      } else {
+        status = isSelected ? "Present" : "Absent";
+      }
+      return {
+        "Roll Number": s.rollNumber,
+        "Name": s.name,
+        "Mobile": s.mobile,
+        "Status": status
+      };
+    });
+
+    const derivedDepartmentId = (session?.user as any).departmentId || departmentId || students[0]?.departmentId || "";
+    if (!derivedDepartmentId) {
+      alert("Error: Department not found.");
+      return;
+    }
+
+    try {
+      await fetch("/api/attendance/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year,
+          semester,
+          sectionId,
+          departmentId: derivedDepartmentId,
+          status: "Manual Save", // Or "Saved Draft"
+          fileName: "Manual Save",
+          date: new Date().toISOString(),
+          details: JSON.stringify(fullData)
+        }),
+      });
+      alert("Attendance Saved Successfully!");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save attendance.");
     }
   };
 
@@ -343,6 +394,14 @@ export default function Home() {
                   className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                 />
               </div>
+
+              {/* Save Button (Top) */}
+              <button
+                onClick={handleManualSave}
+                className="flex items-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-slate-900 hover:shadow-lg active:scale-95"
+              >
+                <FaSave /> Save
+              </button>
             </div>
 
             <div className="flex items-end justify-between px-1">
@@ -356,6 +415,13 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex gap-2">
+                {/* Save Button (Bottom) */}
+                <button
+                  onClick={handleManualSave}
+                  className="flex items-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-slate-900 hover:shadow-lg active:scale-95"
+                >
+                  <FaSave /> Save
+                </button>
                 <button
                   onClick={handleDownloadFullReport}
                   className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900 active:scale-95"
