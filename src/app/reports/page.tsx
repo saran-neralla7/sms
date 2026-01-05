@@ -213,14 +213,13 @@ export default function ReportsPage() {
                     const tableRows: any[] = [];
 
                     consolidatedData.forEach(student => {
-                        const percentage = student["Percentage"] ? student["Percentage"].replace("%", "") : "0";
                         const rowData = [
-                            student["Roll Number"],
-                            student["Name"],
-                            student["Total Classes"],
-                            student["Present"],
-                            student["Absent"],
-                            student["Percentage"]
+                            student.rollNumber,
+                            student.name,
+                            student.totalClasses,
+                            student.present,
+                            student.absent,
+                            student.percentage + "%"
                         ];
                         tableRows.push(rowData);
                     });
