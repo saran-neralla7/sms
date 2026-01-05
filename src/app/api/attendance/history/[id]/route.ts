@@ -5,8 +5,9 @@ import { authOptions } from "@/lib/auth";
 
 export async function DELETE(
     request: Request,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
+    const params = await props.params;
     const session = await getServerSession(authOptions);
     if (!session || (session.user.role !== "ADMIN" && session.user.role !== "HOD")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -24,8 +25,9 @@ export async function DELETE(
 
 export async function PUT(
     request: Request,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
+    const params = await props.params;
     const session = await getServerSession(authOptions);
     if (!session || (session.user.role !== "ADMIN" && session.user.role !== "HOD")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
