@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { AttendanceHistory } from "@/types";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { FaCalendarAlt, FaFileExcel, FaFilter, FaHistory, FaTrash, FaUserCircle } from "react-icons/fa";
+import { FaCalendarAlt, FaFileExcel, FaFilter, FaHistory, FaTrash, FaUserCircle, FaEye, FaDownload, FaTimes } from "react-icons/fa";
 
 import ConfirmationModal from "@/components/ConfirmationModal";
+import Modal from "@/components/Modal";
 
 export default function HistoryPage() {
     const [history, setHistory] = useState<AttendanceHistory[]>([]);
@@ -16,6 +17,11 @@ export default function HistoryPage() {
     // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [recordToDelete, setRecordToDelete] = useState<AttendanceHistory | null>(null);
+
+    // View Modal State
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [viewRecord, setViewRecord] = useState<AttendanceHistory | null>(null);
+    const [viewStats, setViewStats] = useState({ present: 0, absent: 0, total: 0 });
 
     // Filters
     const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "range">("all");
@@ -66,28 +72,64 @@ export default function HistoryPage() {
         }
     };
 
-    const handleReDownload = (record: AttendanceHistory) => {
+    const handleView = (record: AttendanceHistory) => {
         if (!record.details || record.details === "[]") {
-            // Replaced alert with status message for consistency, or keep alert if critical. 
-            // User requested inline feedback, so using status.
-            setStatus({ type: "error", message: "No details available for this record (Legacy data)." });
-            setTimeout(() => setStatus({ type: null, message: "" }), 3000);
+            setStatus({ type: "error", message: "No details available for this record." });
             return;
         }
-
         try {
             const data = JSON.parse(record.details);
+            // Calculate stats
+            let present = 0;
+            let absent = 0;
+            data.forEach((s: any) => {
+                if (s.Status === "Present") present++;
+                else absent++;
+            });
+            setViewStats({ present, absent, total: data.length });
+            setViewRecord(record);
+            setIsViewModalOpen(true);
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Error reading record details." });
+        }
+    };
+
+    const handleDownloadFull = () => {
+        if (!viewRecord) return;
+        try {
+            const data = JSON.parse(viewRecord.details);
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Report");
-            XLSX.writeFile(wb, record.fileName || "report.xlsx");
-            setStatus({ type: "success", message: "Report downloaded successfully." });
-            setTimeout(() => setStatus({ type: null, message: "" }), 3000);
-        } catch (e) {
-            console.error("Error parsing details", e);
-            setStatus({ type: "error", message: "Error regenerating file." });
-            setTimeout(() => setStatus({ type: null, message: "" }), 3000);
-        }
+            XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+            XLSX.writeFile(wb, viewRecord.fileName || "Full_Report.xlsx");
+        } catch (e) { console.error(e); }
+    };
+
+    const handleDownloadAbsentees = () => {
+        if (!viewRecord) return;
+        try {
+            const data = JSON.parse(viewRecord.details);
+            const absentees = data.filter((s: any) => s.Status === "Absent").map((s: any) => ({
+                "Roll Number": s["Roll Number"],
+                "Name": s["Name"],
+                "Mobile": s["Mobile"],
+                "Status": "Absent"
+            }));
+
+            if (absentees.length === 0) {
+                alert("No absentees in this record.");
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(absentees);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Absentees");
+            // Customize filename for absentees
+            const baseName = viewRecord.fileName || "Report.xlsx";
+            const filename = baseName.replace("FullReport", "Absentees").replace("Attendance Report", "Absentees");
+            XLSX.writeFile(wb, filename);
+        } catch (e) { console.error(e); }
     };
 
     const getFilteredHistory = () => {
@@ -199,7 +241,7 @@ export default function HistoryPage() {
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Class Details</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                                <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">File</th>
+                                <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">View</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Downloaded By</th>
                                 {session?.user.role === "ADMIN" && <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>}
                             </tr>
@@ -236,12 +278,12 @@ export default function HistoryPage() {
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <button
-                                                onClick={() => handleReDownload(record)}
-                                                className="group/btn flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-green-200 hover:bg-green-50 hover:text-green-700"
-                                                title="Click to Download Again"
+                                                onClick={() => handleView(record)}
+                                                className="group/btn flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                                                title="View Details"
                                             >
-                                                <FaFileExcel className="text-green-600" />
-                                                <span className="font-mono text-xs">{record.fileName}</span>
+                                                <FaEye className="text-blue-600" />
+                                                <span className="font-mono text-xs">View</span>
                                             </button>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
@@ -283,6 +325,64 @@ export default function HistoryPage() {
                 confirmText="Delete"
                 isDangerous={true}
             />
+
+            {viewRecord && (
+                <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Attendance Report">
+                    <div className="p-4">
+                        <div className="space-y-4">
+                            <div className="rounded-lg bg-slate-50 p-4 border border-slate-100">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="block text-slate-500 text-xs uppercase font-bold">Date</span>
+                                        <span className="font-medium text-slate-900">
+                                            {new Date(viewRecord.date).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
+                                        <span className="font-medium text-slate-900">
+                                            Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
+                                        </span>
+                                    </div>
+                                    <div className="col-span-2 my-2 border-t border-slate-200"></div>
+                                    <div>
+                                        <span className="block text-slate-500 text-xs uppercase font-bold">Total Students</span>
+                                        <span className="font-medium text-slate-900">{viewStats.total}</span>
+                                    </div>
+                                    <div></div>
+                                    <div>
+                                        <span className="block text-slate-500 text-xs uppercase font-bold">Present</span>
+                                        <span className="font-bold text-green-600">{viewStats.present}</span>
+                                    </div>
+                                    <div>
+                                        <span className="block text-slate-500 text-xs uppercase font-bold">Absent</span>
+                                        <span className="font-bold text-red-600">{viewStats.absent}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-3 mt-4">
+                                <button
+                                    onClick={handleDownloadFull}
+                                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                                >
+                                    <FaDownload /> Download Full Report
+                                </button>
+                                <button
+                                    onClick={handleDownloadAbsentees}
+                                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
+                                >
+                                    <FaDownload /> Download Absentees
+                                </button>
+                            </div>
+
+                            <button onClick={() => setIsViewModalOpen(false)} className="mt-2 w-full text-center text-xs text-slate-400 hover:text-slate-600 underline">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }

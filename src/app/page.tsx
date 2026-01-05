@@ -192,7 +192,7 @@ export default function Home() {
           semester,
           sectionId,
           departmentId: derivedDepartmentId,
-          status: "Saved",
+          status: "Attendance Report",
           fileName: "Attendance Report",
           date: new Date().toISOString(),
           details: JSON.stringify(fullData)
