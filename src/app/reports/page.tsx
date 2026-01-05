@@ -169,16 +169,22 @@ export default function ReportsPage() {
                 try {
                     // College Name
                     doc.setFont("times", "bold");
-                    doc.setFontSize(18);
-                    doc.text("Dr. B.R. Ambedkar University, Srikakulam", pageWidth / 2, 20, { align: "center" });
+                    doc.setFontSize(11); // Reduced size to fit long name
+                    const textX = 42; // Start text after the logo (Logo X=15 + Width=20 + Gap)
 
-                    // College Sub-Header
-                    doc.setFontSize(12);
-                    doc.text("College of Engineering", pageWidth / 2, 28, { align: "center" });
+                    doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", textX, 18);
+
+                    // College Sub-Header 1
+                    doc.setFontSize(10);
+                    doc.text("ENGINEERING AND TECHNOLOGY PROGRAM", textX, 23);
+
+                    // College Sub-Header 2
+                    doc.setFontSize(10);
+                    doc.text("RUSHIKONDA, VISAKHAPATNAM", textX, 28);
 
                     // Line Separator
                     doc.setLineWidth(0.5);
-                    doc.line(15, 32, pageWidth - 15, 32);
+                    doc.line(15, 35, pageWidth - 15, 35);
 
                     // Report Details
                     doc.setFont("times", "normal");
