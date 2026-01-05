@@ -20,6 +20,10 @@ export default function StudentsPage() {
 
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
+    // Bulk Selection State
+    const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
     // Filters
     const [year, setYear] = useState("");
     const [semester, setSemester] = useState("");
@@ -85,6 +89,7 @@ export default function StudentsPage() {
             if (res.ok) {
                 const data = await res.json();
                 setStudents(data);
+                setSelectedStudentIds(new Set()); // Reset selection on fresh fetch
             }
         } catch (error) {
             console.error(error);
@@ -156,6 +161,47 @@ export default function StudentsPage() {
             console.error(error);
             setStatus({ type: "error", message: "Error deleting student" });
         }
+    };
+
+    const handleBulkDelete = async () => {
+        setStatus({ type: null, message: "" });
+        try {
+            const res = await fetch("/api/students/bulk-delete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ studentIds: Array.from(selectedStudentIds) })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setStatus({ type: "success", message: `${data.count} students deleted successfully` });
+                setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
+                setSelectedStudentIds(new Set());
+                setIsBulkDeleteModalOpen(false);
+                setTimeout(() => setStatus({ type: null, message: "" }), 3000);
+            } else {
+                const data = await res.json();
+                setStatus({ type: "error", message: data.error || "Failed to delete students" });
+            }
+        } catch (error) {
+            console.error(error);
+            setStatus({ type: "error", message: "Error deleting students" });
+        }
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedStudentIds.size === students.length && students.length > 0) {
+            setSelectedStudentIds(new Set());
+        } else {
+            setSelectedStudentIds(new Set(students.map(s => s.id)));
+        }
+    };
+
+    const toggleStudentSelection = (id: string) => {
+        const newSet = new Set(selectedStudentIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedStudentIds(newSet);
     };
 
     const openAddModal = () => {
@@ -371,6 +417,14 @@ export default function StudentsPage() {
                     <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
                         <FaPlus size={12} /> Add Student
                     </button>
+                    {selectedStudentIds.size > 0 && (
+                        <button
+                            onClick={() => setIsBulkDeleteModalOpen(true)}
+                            className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors"
+                        >
+                            <FaTrash size={12} /> Delete ({selectedStudentIds.size})
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -416,6 +470,14 @@ export default function StudentsPage() {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/50">
+                                <th className="w-4 px-6 py-4">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        checked={students.length > 0 && selectedStudentIds.size === students.length}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Roll No</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Name</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Class</th>
@@ -423,9 +485,17 @@ export default function StudentsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {loading ? <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
+                            {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
                                 students.map((student) => (
                                     <tr key={student.id} className="group hover:bg-slate-50/80 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                checked={selectedStudentIds.has(student.id)}
+                                                onChange={() => toggleStudentSelection(student.id)}
+                                            />
+                                        </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-slate-600">{student.rollNumber}</td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{student.name}</td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
@@ -452,7 +522,7 @@ export default function StudentsPage() {
                                     </tr>
                                 ))}
                             {!loading && students.length === 0 && (
-                                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">No students found</td></tr>
+                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No students found</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -580,7 +650,12 @@ export default function StudentsPage() {
             {/* Delete Confirmation Modal */}
             <ConfirmationModal
                 isOpen={isDeleteModalOpen}
-                onClose={() => setIsDeleteModalOpen(false)}
+                onClose={() => {
+                    if (studentToDelete) {
+                        setStudentToDelete(null); // Clear studentToDelete when modal is closed
+                    }
+                    setIsDeleteModalOpen(false);
+                }}
                 onConfirm={() => {
                     if (studentToDelete) {
                         handleDelete(studentToDelete.id);
@@ -590,6 +665,17 @@ export default function StudentsPage() {
                 title="Delete Student"
                 message={`Are you sure you want to delete ${studentToDelete?.name}? This action cannot be undone.`}
                 confirmText="Delete"
+                isDangerous={true}
+            />
+
+            {/* Bulk Delete Confirmation Modal */}
+            <ConfirmationModal
+                isOpen={isBulkDeleteModalOpen}
+                onClose={() => setIsBulkDeleteModalOpen(false)}
+                onConfirm={handleBulkDelete}
+                title="Delete Multiple Students"
+                message={`Are you sure you want to delete ${selectedStudentIds.size} students? This action cannot be undone.`}
+                confirmText={`Delete ${selectedStudentIds.size} Students`}
                 isDangerous={true}
             />
 

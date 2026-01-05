@@ -125,7 +125,7 @@ export default function Home() {
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownloadAbsentees = async () => {
     const absentees = calculateAbsentees();
     const absenteeData = absentees.map((s) => ({
       "Roll Number": s.rollNumber,
@@ -149,20 +149,58 @@ export default function Home() {
     }).replace(/[\/\,\s\:]/g, "-").replace(/--/g, "_");
 
     const sectionName = sections.find(s => s.id === sectionId)?.name || "Unknown";
-    const filename = `${date}_${year}_${sectionName}.xlsx`;
+    const filename = `${date}_${year}_${sectionName}_Absentees.xlsx`;
 
     const ws = XLSX.utils.json_to_sheet(absenteeData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Absentees"); // Sheet name
+    XLSX.utils.book_append_sheet(wb, ws, "Absentees");
     XLSX.writeFile(wb, filename);
 
+    // Save history also for absentees (usually what's expected)
     const derivedDepartmentId = (session?.user as any).departmentId || departmentId || students[0]?.departmentId || "";
+    await saveHistory(derivedDepartmentId, filename, "Marked Absent", absenteeData);
+  };
 
-    if (!derivedDepartmentId) {
-      alert("Error: Could not determine Department for this batch.");
-      console.error("Missing Department ID for History");
-    }
+  const handleDownloadFullReport = async () => {
+    const fullData = students.map((s) => {
+      const isSelected = selectedIds.has(s.id);
+      // If in 'mark_absent' mode: Selected = Absent, Unselected = Present
+      // If in 'mark_present' mode: Selected = Present, Unselected = Absent
+      let status = "Present";
+      if (mode === "mark_absent") {
+        status = isSelected ? "Absent" : "Present";
+      } else {
+        status = isSelected ? "Present" : "Absent";
+      }
+      return {
+        "Roll Number": s.rollNumber,
+        "Name": s.name,
+        "Mobile": s.mobile,
+        "Status": status
+      };
+    });
 
+    const date = new Date().toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).replace(/[\/\,\s\:]/g, "-").replace(/--/g, "_");
+
+    const sectionName = sections.find(s => s.id === sectionId)?.name || "Unknown";
+    const filename = `${date}_${year}_${sectionName}_FullReport.xlsx`;
+
+    const ws = XLSX.utils.json_to_sheet(fullData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+    XLSX.writeFile(wb, filename);
+  };
+
+  const saveHistory = async (deptId: string, filename: string, statusLabel: string, details: any[]) => {
+    if (!deptId) return;
     await fetch("/api/attendance/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -170,11 +208,11 @@ export default function Home() {
         year,
         semester,
         sectionId,
-        departmentId: derivedDepartmentId,
-        status: mode === "mark_present" ? "Marked Present" : "Marked Absent",
+        departmentId: deptId,
+        status: statusLabel,
         fileName: filename,
         date: new Date().toISOString(),
-        details: JSON.stringify(absenteeData)
+        details: JSON.stringify(details)
       }),
     });
   };
@@ -317,12 +355,20 @@ export default function Home() {
                   </span>
                 </p>
               </div>
-              <button
-                onClick={handleDownload}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-95"
-              >
-                <FaDownload /> Download Report
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDownloadFullReport}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900 active:scale-95"
+                >
+                  <FaDownload /> Full Report
+                </button>
+                <button
+                  onClick={handleDownloadAbsentees}
+                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-95"
+                >
+                  <FaDownload /> Download Absentees
+                </button>
+              </div>
             </div>
 
             {/* Student Grid */}
