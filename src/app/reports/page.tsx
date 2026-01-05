@@ -146,11 +146,15 @@ export default function ReportsPage() {
     };
 
     const handleDownloadPDF = () => {
+        console.log("PDF: Button clicked");
         try {
             if (consolidatedData.length === 0) {
+                console.warn("PDF: No data");
                 setStatus({ type: "error", message: "No data to print." });
                 return;
             }
+
+            setStatus({ type: "success", message: "Generating PDF..." }); // Show status
 
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.width;
@@ -161,118 +165,159 @@ export default function ReportsPage() {
             img.src = logoUrl;
 
             const generate = () => {
-                // College Name
-                doc.setFont("times", "bold");
-                doc.setFontSize(18);
-                doc.text("Dr. B.R. Ambedkar University, Srikakulam", pageWidth / 2, 20, { align: "center" });
+                console.log("PDF: Generating content...");
+                try {
+                    // College Name
+                    doc.setFont("times", "bold");
+                    doc.setFontSize(18);
+                    doc.text("Dr. B.R. Ambedkar University, Srikakulam", pageWidth / 2, 20, { align: "center" });
 
-                // College Sub-Header
-                doc.setFontSize(12);
-                doc.text("College of Engineering", pageWidth / 2, 28, { align: "center" });
+                    // College Sub-Header
+                    doc.setFontSize(12);
+                    doc.text("College of Engineering", pageWidth / 2, 28, { align: "center" });
 
-                // Line Separator
-                doc.setLineWidth(0.5);
-                doc.line(15, 32, pageWidth - 15, 32);
+                    // Line Separator
+                    doc.setLineWidth(0.5);
+                    doc.line(15, 32, pageWidth - 15, 32);
 
-                // Report Details
-                doc.setFont("times", "normal");
-                doc.setFontSize(11);
+                    // Report Details
+                    doc.setFont("times", "normal");
+                    doc.setFontSize(11);
 
-                const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
-                const secName = sections.find(s => s.id === sectionId)?.name || "All";
+                    const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
+                    const secName = sections.find(s => s.id === sectionId)?.name || "All";
 
-                // Left Side Details
-                doc.text(`Department: ${deptName}`, 15, 42);
-                doc.text(`Year: ${year}   Semester: ${semester}`, 15, 48);
-                doc.text(`Section: ${secName}`, 15, 54);
+                    // Left Side Details
+                    doc.text(`Department: ${deptName}`, 15, 42);
+                    doc.text(`Year: ${year}   Semester: ${semester}`, 15, 48);
+                    doc.text(`Section: ${secName}`, 15, 54);
 
-                // Right Side Details
-                doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
-                doc.text(`From: ${new Date(startDate).toLocaleDateString()}`, pageWidth - 15, 48, { align: "right" });
-                doc.text(`To: ${new Date(endDate).toLocaleDateString()}`, pageWidth - 15, 54, { align: "right" });
+                    // Right Side Details
+                    doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
+                    doc.text(`From: ${new Date(startDate).toLocaleDateString()}`, pageWidth - 15, 48, { align: "right" });
+                    doc.text(`To: ${new Date(endDate).toLocaleDateString()}`, pageWidth - 15, 54, { align: "right" });
 
-                // Title
-                doc.setFont("times", "bold");
-                doc.setFontSize(14);
-                doc.text("Attendance Report", pageWidth / 2, 65, { align: "center" });
+                    // Title
+                    doc.setFont("times", "bold");
+                    doc.setFontSize(14);
+                    doc.text("Attendance Report", pageWidth / 2, 65, { align: "center" });
 
-                // --- Table ---
-                const tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
-                const tableRows: any[] = [];
+                    // --- Table ---
+                    const tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
+                    const tableRows: any[] = [];
 
-                consolidatedData.forEach(student => {
-                    const percentage = student["Percentage"] ? student["Percentage"].replace("%", "") : "0";
-                    const rowData = [
-                        student["Roll Number"],
-                        student["Name"],
-                        student["Total Classes"],
-                        student["Present"],
-                        student["Absent"],
-                        student["Percentage"]
-                    ];
-                    tableRows.push(rowData);
-                });
+                    consolidatedData.forEach(student => {
+                        const percentage = student["Percentage"] ? student["Percentage"].replace("%", "") : "0";
+                        const rowData = [
+                            student["Roll Number"],
+                            student["Name"],
+                            student["Total Classes"],
+                            student["Present"],
+                            student["Absent"],
+                            student["Percentage"]
+                        ];
+                        tableRows.push(rowData);
+                    });
 
-                (doc as any).autoTable({
-                    head: [tableColumn],
-                    body: tableRows,
-                    startY: 70,
-                    theme: "plain", // Minimalist for print
-                    styles: {
-                        font: "times",
-                        fontSize: 10,
-                        cellPadding: 3,
-                        lineColor: [0, 0, 0],
-                        lineWidth: 0.1,
-                    },
-                    headStyles: {
-                        fillColor: [240, 240, 240], // Light gray header
-                        textColor: [0, 0, 0],
-                        fontStyle: "bold",
-                        lineWidth: 0.1,
-                        lineColor: [0, 0, 0]
-                    },
-                    columnStyles: {
-                        0: { cellWidth: 30 }, // Roll No
-                        1: { cellWidth: 60 }, // Name
-                        2: { cellWidth: 20, halign: 'center' },
-                        3: { cellWidth: 20, halign: 'center' },
-                        4: { cellWidth: 20, halign: 'center' },
-                        5: { cellWidth: 20, halign: 'center' },
+                    console.log("PDF: Drawing table...", tableRows.length);
+                    // Try different autoTable invocations
+                    if ((doc as any).autoTable) {
+                        (doc as any).autoTable({
+                            head: [tableColumn],
+                            body: tableRows,
+                            startY: 70,
+                            theme: "plain",
+                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.1 },
+                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.1, lineColor: [0, 0, 0] },
+                            columnStyles: {
+                                0: { cellWidth: 30 },
+                                1: { cellWidth: 60 },
+                                2: { cellWidth: 20, halign: 'center' },
+                                3: { cellWidth: 20, halign: 'center' },
+                                4: { cellWidth: 20, halign: 'center' },
+                                5: { cellWidth: 20, halign: 'center' },
+                            }
+                        });
+                    } else if (typeof autoTable === 'function') {
+                        console.log("PDF: Using autoTable function directly");
+                        autoTable(doc, {
+                            head: [tableColumn],
+                            body: tableRows,
+                            startY: 70,
+                            theme: "plain",
+                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.1 },
+                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.1, lineColor: [0, 0, 0] },
+                            columnStyles: {
+                                0: { cellWidth: 30 },
+                                1: { cellWidth: 60 },
+                                2: { cellWidth: 20, halign: 'center' },
+                                3: { cellWidth: 20, halign: 'center' },
+                                4: { cellWidth: 20, halign: 'center' },
+                                5: { cellWidth: 20, halign: 'center' },
+                            }
+                        });
+                    } else {
+                        console.error("PDF: autoTable plugin not found");
+                        alert("PDF Plugin Error: autoTable not found");
+                        setStatus({ type: "error", message: "PDF Plugin Error" });
+                        return;
                     }
-                });
 
-                // Footer
-                const pageCount = (doc as any).internal.getNumberOfPages();
-                for (let i = 1; i <= pageCount; i++) {
-                    doc.setPage(i);
-                    doc.setFontSize(8);
-                    doc.text(`Page ${i} of ${pageCount}`, pageWidth - 20, doc.internal.pageSize.height - 10, { align: "right" });
-                    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 15, doc.internal.pageSize.height - 10);
+                    // Footer
+                    const pageCount = (doc as any).internal.getNumberOfPages();
+                    for (let i = 1; i <= pageCount; i++) {
+                        doc.setPage(i);
+                        doc.setFontSize(8);
+                        doc.text(`Page ${i} of ${pageCount}`, pageWidth - 20, doc.internal.pageSize.height - 10, { align: "right" });
+                        doc.text(`Generated on ${new Date().toLocaleDateString()}`, 15, doc.internal.pageSize.height - 10);
+                    }
+
+                    console.log("PDF: Saving file...");
+                    doc.save(`Consolidated_Report_${startDate}_${endDate}.pdf`);
+                    setStatus({ type: "success", message: "PDF Downloaded!" });
+
+                } catch (err: any) {
+                    console.error("PDF Generation Internal Error:", err);
+                    alert("Failed to generate PDF content: " + err.message);
+                    setStatus({ type: "error", message: "PDF Logic Error" });
                 }
-
-                doc.save(`Consolidated_Report_${startDate}_${endDate}.pdf`);
             };
 
-            img.onload = () => {
-                const logoWidth = 20;
-                const logoHeight = (img.height / img.width) * logoWidth;
-                doc.addImage(img, 'PNG', 15, 10, logoWidth, logoHeight);
+            let imageLoaded = false;
+
+            const onImageComplete = () => {
+                if (imageLoaded) return;
+                imageLoaded = true;
+
+                try {
+                    if (img.complete && img.naturalHeight !== 0) {
+                        const logoWidth = 20;
+                        const logoHeight = (img.height / img.width) * logoWidth;
+                        doc.addImage(img, 'PNG', 15, 10, logoWidth, logoHeight);
+                    }
+                } catch (e) {
+                    console.warn("PDF: Logo load failed", e);
+                }
                 generate();
             };
 
+            img.onload = onImageComplete;
             img.onerror = () => {
-                generate();
+                console.warn("PDF: Logo failed to load (onerror)");
+                onImageComplete();
             };
 
+            // Fallback watchdog
             setTimeout(() => {
-                if (img.complete) return;
-                generate();
-            }, 1000);
+                if (!imageLoaded) {
+                    console.warn("PDF: Image load timeout");
+                    onImageComplete();
+                }
+            }, 800);
+
         } catch (e: any) {
-            console.error(e);
-            alert("An unexpected error occurred: " + e.message);
-            setStatus({ type: "error", message: "PDF Error: " + e.message });
+            console.error("PDF Outer Error:", e);
+            alert("An unexpected error occurred while starting PDF: " + e.message);
         }
     };
 
