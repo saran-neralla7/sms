@@ -252,14 +252,19 @@ export default function ReportsPage() {
                     {/* Filters */}
                     <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
                         {session?.user.role === "ADMIN" && (
-                            <select
-                                value={departmentId}
-                                onChange={(e) => setDepartmentId(e.target.value)}
-                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            >
-                                <option value="">All Departments</option>
-                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-slate-700">Department</label>
+                                <select
+                                    value={departmentId}
+                                    onChange={(e) => setDepartmentId(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10"
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map((dept) => (
+                                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                    ))}
+                                </select>
+                            </div>
                         )}
                         <select
                             value={year}

@@ -126,6 +126,18 @@ export default function Navbar() {
                                     {link.label}
                                 </Link>
                             ))}
+                            {(session?.user.role === "ADMIN" || session?.user.role === "HOD" || session?.user.role === "USER") && (
+                                <Link
+                                    href="/reports"
+                                    onClick={() => setIsOpen(false)}
+                                    className={`rounded-lg px-4 py-3 text-sm font-medium transition-colors ${pathname === "/reports"
+                                        ? "bg-blue-600 text-white"
+                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        }`}
+                                >
+                                    Reports
+                                </Link>
+                            )}
                             <div className="my-2 h-px bg-slate-100" />
                             <button
                                 onClick={() => signOut()}

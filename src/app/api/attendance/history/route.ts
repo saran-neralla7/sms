@@ -14,34 +14,37 @@ export async function GET(request: Request) {
         const year = searchParams.get("year");
         const semester = searchParams.get("semester");
         const sectionId = searchParams.get("sectionId");
-        const filterDeptId = searchParams.get("departmentId");
+        const departmentId = searchParams.get("departmentId");
 
-        const whereClause: any = {};
-        const { role, departmentId } = session.user as any;
+        let whereClause: any = {
+            year: year || undefined,
+            semester: semester || undefined,
+            sectionId: sectionId || undefined,
+            departmentId: departmentId || undefined,
+        };
 
-        // Role-based Department Filter
-        if (role === "HOD") {
-            // HOD can only see their own department
-            if (departmentId) whereClause.departmentId = departmentId;
-        } else if (role === "ADMIN") {
-            // Admin can filter by any department
-            if (filterDeptId) whereClause.departmentId = filterDeptId;
+        if (session.user.role === "HOD") {
+            // HOD: Restricted to their department assigned in User profile
+            const userProfile = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: { departmentId: true }
+            });
+            if (userProfile?.departmentId) {
+                whereClause.departmentId = userProfile.departmentId;
+            }
+        } else if (session.user.role === "USER") {
+            // USER: Restricted to records THEY downloaded/saved
+            whereClause.downloadedBy = session.user.id;
         }
-
-        // Other Filters
-        if (year) whereClause.year = year;
-        if (semester) whereClause.semester = semester;
-        if (sectionId) whereClause.sectionId = sectionId;
+        // ADMIN: Can see all, filters applied above (departmentId from searchParams)
 
         const history = await prisma.attendanceHistory.findMany({
             where: whereClause,
-            orderBy: { date: "desc" },
             include: {
-                user: {
-                    select: { username: true },
-                },
                 section: true,
+                user: { select: { username: true } } // Show who downloaded it
             },
+            orderBy: { date: 'desc' }
         });
         return NextResponse.json(history);
     } catch (error) {

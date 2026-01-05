@@ -40,7 +40,8 @@ export async function GET(request: Request) {
             },
             select: {
                 details: true,
-                date: true
+                date: true,
+                status: true
             }
         });
 
@@ -83,30 +84,49 @@ export async function GET(request: Request) {
         history.forEach(record => {
             try {
                 const details = JSON.parse(record.details);
-                // "details" is an array of students with "Status": "Present" | "Absent"
-                // We increment totalClasses for *everyone in the class* (or everyone in the record)
-                // If a student is in the record, they were part of that class.
-
+                // details is either Full List (Manual Save) or Partial List (Marked Absent)
+                // We must map it for quick lookup
+                const recordStatusMap = new Map<string, string>();
                 details.forEach((s: any) => {
-                    const roll = s["Roll Number"];
-                    // If student exists in our master list (or new one encountered in history)
-                    if (!studentStats[roll]) {
-                        studentStats[roll] = {
-                            name: s["Name"],
-                            rollNumber: roll,
-                            totalClasses: 0,
-                            present: 0,
-                            absent: 0
-                        };
-                    }
+                    recordStatusMap.set(s["Roll Number"], s["Status"]);
+                });
 
-                    studentStats[roll].totalClasses += 1;
-                    if (s["Status"] === "Present") {
-                        studentStats[roll].present += 1;
+                // Iterate over ALL students in the section to update their stats for this record
+                Object.values(studentStats).forEach(stat => {
+                    const roll = stat.rollNumber;
+
+                    // Increment total classes for everyone since the class happened for the section
+                    stat.totalClasses += 1;
+
+                    if (recordStatusMap.has(roll)) {
+                        // Explicit status found
+                        const status = recordStatusMap.get(roll);
+                        if (status === "Present") {
+                            stat.present += 1;
+                        } else {
+                            stat.absent += 1;
+                        }
                     } else {
-                        studentStats[roll].absent += 1;
+                        // Status NOT found in this record.
+                        // Infer based on record.status
+                        // If record was "Marked Absent", it means this list ONLY contains absentees. 
+                        // So if you are not in it, you are Present.
+                        if (record.status === "Marked Absent") {
+                            stat.present += 1;
+                        } else {
+                            // For "Manual Save" or "Marked Present", missing might mean they weren't in the list then?
+                            // Or imply Absent? 
+                            // Creating consistency: "Manual Save" saves ALL students. If missing, student didn't exist then.
+                            // If student didn't exist then, we technically shouldn't count this class for them?
+                            // But we just incremented totalClasses.
+                            // To be accurate: if not in details of a FULL report, decrement totalClasses back?
+                            // For now, let's assume if it's not "Marked Absent", and missing, we ignore this class for this student.
+
+                            stat.totalClasses -= 1;
+                        }
                     }
                 });
+
             } catch (e) {
                 console.error("Error parsing details for record", record);
             }

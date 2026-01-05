@@ -6,12 +6,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave } from "react-icons/fa";
+import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes } from "react-icons/fa";
+import Modal from "@/components/Modal";
 
 export default function Home() {
   const [year, setYear] = useState("");
   const [semester, setSemester] = useState("");
-  const [section, setSection] = useState("");
+  const [section, setSection] = useState(""); // Kept for potential future use or verify if unused
   const [sectionId, setSectionId] = useState("");
   // Admin specific
   const [departmentId, setDepartmentId] = useState("");
@@ -24,6 +25,12 @@ export default function Home() {
   const [mode, setMode] = useState<"mark_absent" | "mark_present">("mark_absent");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+
+  // Save Modal State
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveStep, setSaveStep] = useState<"verify" | "success">("verify");
+  const [saveStats, setSaveStats] = useState({ present: 0, absent: 0, total: 0 });
+
   const { data: session } = useSession();
   const router = useRouter();
 
@@ -125,13 +132,35 @@ export default function Home() {
     }
   };
 
-  const handleManualSave = async () => {
+  const onSaveClick = () => {
     if (!year || !semester || !sectionId) {
       alert("Please select Year, Semester, and Section first.");
       return;
     }
 
-    // Construct details similar to Full Report
+    // Calculate stats upon clicking save
+    let present = 0;
+    let absent = 0;
+
+    students.forEach(s => {
+      const isSelected = selectedIds.has(s.id);
+      let status = "Present";
+      if (mode === "mark_absent") {
+        status = isSelected ? "Absent" : "Present";
+      } else {
+        status = isSelected ? "Present" : "Absent";
+      }
+
+      if (status === "Present") present++;
+      else absent++;
+    });
+
+    setSaveStats({ present, absent, total: students.length });
+    setSaveStep("verify");
+    setIsSaveModalOpen(true);
+  };
+
+  const executeSave = async () => {
     const fullData = students.map((s) => {
       const isSelected = selectedIds.has(s.id);
       let status = "Present";
@@ -163,16 +192,17 @@ export default function Home() {
           semester,
           sectionId,
           departmentId: derivedDepartmentId,
-          status: "Manual Save", // Or "Saved Draft"
-          fileName: "Manual Save",
+          status: "Saved",
+          fileName: "Attendance Report",
           date: new Date().toISOString(),
           details: JSON.stringify(fullData)
         }),
       });
-      alert("Attendance Saved Successfully!");
+      setSaveStep("success");
     } catch (e) {
       console.error(e);
       alert("Failed to save attendance.");
+      setIsSaveModalOpen(false);
     }
   };
 
@@ -206,17 +236,11 @@ export default function Home() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Absentees");
     XLSX.writeFile(wb, filename);
-
-    // Save history also for absentees (usually what's expected)
-    const derivedDepartmentId = (session?.user as any).departmentId || departmentId || students[0]?.departmentId || "";
-    await saveHistory(derivedDepartmentId, filename, "Marked Absent", absenteeData);
   };
 
   const handleDownloadFullReport = async () => {
     const fullData = students.map((s) => {
       const isSelected = selectedIds.has(s.id);
-      // If in 'mark_absent' mode: Selected = Absent, Unselected = Present
-      // If in 'mark_present' mode: Selected = Present, Unselected = Absent
       let status = "Present";
       if (mode === "mark_absent") {
         status = isSelected ? "Absent" : "Present";
@@ -248,24 +272,6 @@ export default function Home() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Attendance");
     XLSX.writeFile(wb, filename);
-  };
-
-  const saveHistory = async (deptId: string, filename: string, statusLabel: string, details: any[]) => {
-    if (!deptId) return;
-    await fetch("/api/attendance/history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        year,
-        semester,
-        sectionId,
-        departmentId: deptId,
-        status: statusLabel,
-        fileName: filename,
-        date: new Date().toISOString(),
-        details: JSON.stringify(details)
-      }),
-    });
   };
 
   const filteredStudents = students.filter(s =>
@@ -397,7 +403,7 @@ export default function Home() {
 
               {/* Save Button (Top) */}
               <button
-                onClick={handleManualSave}
+                onClick={onSaveClick}
                 className="flex items-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-slate-900 hover:shadow-lg active:scale-95"
               >
                 <FaSave /> Save
@@ -417,22 +423,10 @@ export default function Home() {
               <div className="flex gap-2">
                 {/* Save Button (Bottom) */}
                 <button
-                  onClick={handleManualSave}
+                  onClick={onSaveClick}
                   className="flex items-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-slate-900 hover:shadow-lg active:scale-95"
                 >
                   <FaSave /> Save
-                </button>
-                <button
-                  onClick={handleDownloadFullReport}
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900 active:scale-95"
-                >
-                  <FaDownload /> Full Report
-                </button>
-                <button
-                  onClick={handleDownloadAbsentees}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-95"
-                >
-                  <FaDownload /> Download Absentees
                 </button>
               </div>
             </div>
@@ -504,6 +498,75 @@ export default function Home() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
         </div>
       )}
+
+      {/* Save Confirmation Modal */}
+      <Modal isOpen={isSaveModalOpen} onClose={() => setIsSaveModalOpen(false)} title="Save Attendance">
+        <div className="p-4">
+          {saveStep === "verify" ? (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-slate-50 p-4 border border-slate-100">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
+                    <span className="font-medium text-slate-900">Year {year} - Sem {semester} - Sec {sections.find(s => s.id === sectionId)?.name}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 text-xs uppercase font-bold">Total Students</span>
+                    <span className="font-medium text-slate-900">{saveStats.total}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 text-xs uppercase font-bold">Present</span>
+                    <span className="font-bold text-green-600">{saveStats.present}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 text-xs uppercase font-bold">Absent</span>
+                    <span className="font-bold text-red-600">{saveStats.absent}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button onClick={() => setIsSaveModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">
+                  Cancel
+                </button>
+                <button onClick={executeSave} className="flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                  Confirm Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6 text-center py-4">
+              <div className="flex justify-center">
+                <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                  <FaCheck size={24} />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Attendance Saved!</h3>
+                <p className="text-sm text-slate-500">The attendance record has been successfully saved.</p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={handleDownloadFullReport}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  <FaDownload /> Download Full Report
+                </button>
+                <button
+                  onClick={handleDownloadAbsentees}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
+                >
+                  <FaDownload /> Download Absentees
+                </button>
+              </div>
+
+              <button onClick={() => setIsSaveModalOpen(false)} className="mt-2 text-xs text-slate-400 hover:text-slate-600 underline">
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
