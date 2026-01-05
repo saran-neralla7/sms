@@ -13,11 +13,19 @@ export default function ReportsPage() {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Tab State
+    const [activeTab, setActiveTab] = useState<"daily" | "consolidated">("daily");
+
     // Filters
     const [departmentId, setDepartmentId] = useState("");
     const [year, setYear] = useState("");
     const [semester, setSemester] = useState("");
     const [sectionId, setSectionId] = useState("");
+
+    // Consolidated Dates
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [consolidatedData, setConsolidatedData] = useState<any[]>([]);
 
     // Metadata for dropdowns
     const [departments, setDepartments] = useState<any[]>([]);
@@ -36,8 +44,10 @@ export default function ReportsPage() {
 
     useEffect(() => {
         if (session?.user.role === "ADMIN") fetchDepartments();
-        // Initial fetch
-        fetchHistory();
+        // Initial fetch based on tab
+        if (activeTab === "daily") {
+            fetchHistory();
+        }
     }, [session]);
 
     useEffect(() => {
@@ -45,10 +55,12 @@ export default function ReportsPage() {
         if (effectiveDeptId) fetchSections(effectiveDeptId);
     }, [departmentId, session]);
 
-    // Refetch when filters change
+    // Refetch when filters change (Daily Only)
     useEffect(() => {
-        fetchHistory();
-    }, [year, semester, sectionId, departmentId]);
+        if (activeTab === "daily") {
+            fetchHistory();
+        }
+    }, [year, semester, sectionId, departmentId, activeTab]);
 
     const fetchDepartments = async () => {
         const res = await fetch("/api/departments");
@@ -79,6 +91,51 @@ export default function ReportsPage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const fetchConsolidated = async () => {
+        if (!startDate || !endDate) return;
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (year) params.append("year", year);
+            if (semester) params.append("semester", semester);
+            if (sectionId) params.append("sectionId", sectionId);
+            if (departmentId) params.append("departmentId", departmentId);
+            params.append("startDate", startDate);
+            params.append("endDate", endDate);
+
+            const res = await fetch(`/api/reports/consolidated?${params.toString()}`);
+            if (res.ok) {
+                const data = await res.json();
+                setConsolidatedData(data);
+            } else {
+                const err = await res.json();
+                setStatus({ type: "error", message: err.error || "Failed to fetch report" });
+            }
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Error fetching consolidated report" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDownloadConsolidated = () => {
+        if (consolidatedData.length === 0) return;
+
+        const ws = XLSX.utils.json_to_sheet(consolidatedData.map(s => ({
+            "Roll Number": s.rollNumber,
+            "Name": s.name,
+            "Total Classes": s.totalClasses,
+            "Present": s.present,
+            "Absent": s.absent,
+            "Percentage": s.percentage + "%"
+        })));
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Consolidated Report");
+        XLSX.writeFile(wb, `Consolidated_Report_${startDate}_to_${endDate}.xlsx`);
     };
 
     const handleDownload = (record: any) => {
@@ -169,106 +226,243 @@ export default function ReportsPage() {
                 <p className="text-sm text-slate-500">View, edit, and manage attendance reports.</p>
             </div>
 
-            {/* Daily Attendance Reports Section */}
-            <div className="mb-8">
-                <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Daily Attendance Reports</h2>
+            {/* Tabs */}
+            <div className="mb-6 flex space-x-1 rounded-xl bg-slate-100 p-1 sm:w-fit">
+                <button
+                    onClick={() => setActiveTab("daily")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "daily" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                        }`}
+                >
+                    Daily Reports
+                </button>
+                <button
+                    onClick={() => setActiveTab("consolidated")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "consolidated" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                        }`}
+                >
+                    Consolidated Reports
+                </button>
+            </div>
 
-                {/* Filters */}
-                <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
-                    {session?.user.role === "ADMIN" && (
+            {/* Daily Attendance Reports Section */}
+            {activeTab === "daily" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Daily Attendance Reports</h2>
+
+                    {/* Filters */}
+                    <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
+                        {session?.user.role === "ADMIN" && (
+                            <select
+                                value={departmentId}
+                                onChange={(e) => setDepartmentId(e.target.value)}
+                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                            >
+                                <option value="">All Departments</option>
+                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        )}
                         <select
-                            value={departmentId}
-                            onChange={(e) => setDepartmentId(e.target.value)}
+                            value={year}
+                            onChange={(e) => setYear(e.target.value)}
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                         >
-                            <option value="">All Departments</option>
-                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            <option value="">All Years</option>
+                            <option value="1">1st Year</option>
+                            <option value="2">2nd Year</option>
+                            <option value="3">3rd Year</option>
+                            <option value="4">4th Year</option>
                         </select>
-                    )}
-                    <select
-                        value={year}
-                        onChange={(e) => setYear(e.target.value)}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    >
-                        <option value="">All Years</option>
-                        <option value="1">1st Year</option>
-                        <option value="2">2nd Year</option>
-                        <option value="3">3rd Year</option>
-                        <option value="4">4th Year</option>
-                    </select>
-                    <select
-                        value={semester}
-                        onChange={(e) => setSemester(e.target.value)}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    >
-                        <option value="">All Semesters</option>
-                        <option value="1">1st Sem</option>
-                        <option value="2">2nd Sem</option>
-                    </select>
-                    <select
-                        value={sectionId}
-                        onChange={(e) => setSectionId(e.target.value)}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    >
-                        <option value="">All Sections</option>
-                        {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                </div>
+                        <select
+                            value={semester}
+                            onChange={(e) => setSemester(e.target.value)}
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                            <option value="">All Semesters</option>
+                            <option value="1">1st Sem</option>
+                            <option value="2">2nd Sem</option>
+                        </select>
+                        <select
+                            value={sectionId}
+                            onChange={(e) => setSectionId(e.target.value)}
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                            <option value="">All Sections</option>
+                            {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    </div>
 
-                {/* Table */}
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50">
-                                <tr>
-                                    <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">Date</th>
-                                    <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">Class</th>
-                                    <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">Status</th>
-                                    <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">File</th>
-                                    <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
-                                    history.length === 0 ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No reports found.</td></tr> :
-                                        history.map((record) => (
-                                            <tr key={record.id} className="hover:bg-slate-50/80">
-                                                <td className="px-6 py-4 text-sm text-slate-600">
-                                                    {new Date(record.date).toLocaleDateString("en-IN", {
-                                                        day: 'numeric', month: 'short', year: 'numeric',
-                                                        hour: '2-digit', minute: '2-digit'
-                                                    })}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm font-medium text-slate-900">Year {record.year} - Sem {record.semester}</div>
-                                                    <div className="text-xs text-slate-500">Sec {record.section?.name}</div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${record.status?.includes("Absent") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
-                                                        }`}>
-                                                        {record.status}
+                    {/* Table */}
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50">
+                                    <tr>
+                                        <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">Date</th>
+                                        <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">Class</th>
+                                        <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">Status</th>
+                                        <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500">File</th>
+                                        <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
+                                        history.length === 0 ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No reports found.</td></tr> :
+                                            history.map((record) => (
+                                                <tr key={record.id} className="hover:bg-slate-50/80">
+                                                    <td className="px-6 py-4 text-sm text-slate-600">
+                                                        {new Date(record.date).toLocaleDateString("en-IN", {
+                                                            day: 'numeric', month: 'short', year: 'numeric',
+                                                            hour: '2-digit', minute: '2-digit'
+                                                        })}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm font-medium text-slate-900">Year {record.year} - Sem {record.semester}</div>
+                                                        <div className="text-xs text-slate-500">Sec {record.section?.name}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${record.status?.includes("Absent") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+                                                            }`}>
+                                                            {record.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <button onClick={() => handleDownload(record)} className="text-blue-600 hover:underline text-sm flex items-center gap-1">
+                                                            <FaFileExcel /> {record.fileName}
+                                                        </button>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button onClick={() => openEditModal(record)} className="mr-3 text-blue-600 hover:text-blue-800" title="Edit">
+                                                            <FaEdit />
+                                                        </button>
+                                                        <button onClick={() => { setRecordToDelete(record); setIsDeleteModalOpen(true); }} className="text-red-600 hover:text-red-800" title="Delete">
+                                                            <FaTrash />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Consolidated Reports Section */}
+            {activeTab === "consolidated" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Consolidated Attendance</h2>
+
+                    {/* Filters & Actions */}
+                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-end">
+                        <div className="grid grid-cols-2 gap-4 flex-grow md:grid-cols-4">
+                            {session?.user.role === "ADMIN" && (
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Department</label>
+                                    <select
+                                        value={departmentId}
+                                        onChange={(e) => setDepartmentId(e.target.value)}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value="">Select Dept</option>
+                                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Year</label>
+                                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Year</option>
+                                    <option value="1">1st Year</option>
+                                    <option value="2">2nd Year</option>
+                                    <option value="3">3rd Year</option>
+                                    <option value="4">4th Year</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Semester</label>
+                                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Sem</option>
+                                    <option value="1">1st Sem</option>
+                                    <option value="2">2nd Sem</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Section</label>
+                                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Section</option>
+                                    {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Start Date</label>
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">End Date</label>
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={fetchConsolidated}
+                            disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Generate
+                        </button>
+                    </div>
+
+                    {/* Consolidated Table */}
+                    {consolidatedData.length > 0 && (
+                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
+                                <h3 className="font-semibold text-slate-700">Report Summary</h3>
+                                <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 text-sm font-semibold text-green-600 hover:text-green-800">
+                                    <FaFileExcel /> Download Excel
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Roll No</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Name</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Total Classes</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {consolidatedData.map((s) => (
+                                            <tr key={s.rollNumber} className="hover:bg-slate-50">
+                                                <td className="px-6 py-3 text-sm font-mono text-slate-600">{s.rollNumber}</td>
+                                                <td className="px-6 py-3 text-sm font-medium text-slate-900">{s.name}</td>
+                                                <td className="px-6 py-3 text-sm text-center text-slate-600">{s.totalClasses}</td>
+                                                <td className="px-6 py-3 text-sm text-center text-green-600 font-semibold">{s.present}</td>
+                                                <td className="px-6 py-3 text-sm text-center text-red-600 font-semibold">{s.absent}</td>
+                                                <td className="px-6 py-3 text-sm text-center font-bold">
+                                                    <span className={parseFloat(s.percentage) < 75 ? "text-red-600" : "text-green-600"}>
+                                                        {s.percentage}%
                                                     </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <button onClick={() => handleDownload(record)} className="text-blue-600 hover:underline text-sm flex items-center gap-1">
-                                                        <FaFileExcel /> {record.fileName}
-                                                    </button>
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <button onClick={() => openEditModal(record)} className="mr-3 text-blue-600 hover:text-blue-800" title="Edit">
-                                                        <FaEdit />
-                                                    </button>
-                                                    <button onClick={() => { setRecordToDelete(record); setIsDeleteModalOpen(true); }} className="text-red-600 hover:text-red-800" title="Delete">
-                                                        <FaTrash />
-                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                    {consolidatedData.length === 0 && !loading && (
+                        <div className="text-center py-12 text-slate-400">
+                            Select filters and date range to generate report.
+                        </div>
+                    )}
                 </div>
-            </div>
+            )}
 
             {/* Edit Modal */}
             <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Attendance">
@@ -292,8 +486,8 @@ export default function ReportsPage() {
                                             <button
                                                 onClick={() => toggleAttendance(idx)}
                                                 className={`px-3 py-1 rounded text-xs font-bold ${student["Status"] === "Absent"
-                                                        ? "bg-red-200 text-red-800"
-                                                        : "bg-green-200 text-green-800"
+                                                    ? "bg-red-200 text-red-800"
+                                                    : "bg-green-200 text-green-800"
                                                     }`}
                                             >
                                                 {student["Status"]}
