@@ -13,7 +13,8 @@ export default function Home() {
   const [year, setYear] = useState("");
   const [semester, setSemester] = useState("");
   const [section, setSection] = useState(""); // Kept for potential future use or verify if unused
-  const [sectionId, setSectionId] = useState("");
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set());
+  const [sectionId, setSectionId] = useState(""); // Kept for backward compatibility if needed, but unused generally
   // Admin specific
   const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState<any[]>([]);
@@ -83,7 +84,7 @@ export default function Home() {
     // Only fetch if required fields are selected
     const isAdmin = session?.user.role === "ADMIN";
 
-    if (year && semester && sectionId) {
+    if (year && semester && selectedSectionIds.size > 0) {
       if (isAdmin && !departmentId) {
         return;
       }
@@ -91,12 +92,13 @@ export default function Home() {
     } else {
       setStudents([]);
     }
-  }, [year, semester, sectionId, departmentId, session]);
+  }, [year, semester, selectedSectionIds, departmentId, session]);
 
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      let url = `/api/students?year=${year}&semester=${semester}&sectionId=${sectionId}`;
+      const sectionIdsStr = Array.from(selectedSectionIds).join(",");
+      let url = `/api/students?year=${year}&semester=${semester}&sectionIds=${sectionIdsStr}`;
       if (departmentId) {
         url += `&departmentId=${departmentId}`;
       }
@@ -133,8 +135,8 @@ export default function Home() {
   };
 
   const onSaveClick = () => {
-    if (!year || !semester || !sectionId) {
-      alert("Please select Year, Semester, and Section first.");
+    if (!year || !semester || selectedSectionIds.size === 0) {
+      alert("Please select Year, Semester, and at least one Section.");
       return;
     }
 
@@ -161,43 +163,59 @@ export default function Home() {
   };
 
   const executeSave = async () => {
-    const fullData = students.map((s) => {
-      const isSelected = selectedIds.has(s.id);
-      let status = "Present";
-      if (mode === "mark_absent") {
-        status = isSelected ? "Absent" : "Present";
-      } else {
-        status = isSelected ? "Present" : "Absent";
-      }
-      return {
-        "Roll Number": s.rollNumber,
-        "Name": s.name,
-        "Mobile": s.mobile,
-        "Status": status
-      };
-    });
-
-    const derivedDepartmentId = (session?.user as any).departmentId || departmentId || students[0]?.departmentId || "";
-    if (!derivedDepartmentId) {
-      alert("Error: Department not found.");
-      return;
-    }
-
     try {
-      await fetch("/api/attendance/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year,
-          semester,
-          sectionId,
-          departmentId: derivedDepartmentId,
-          status: "Attendance Report",
-          fileName: "Attendance Report",
-          date: new Date().toISOString(),
-          details: JSON.stringify(fullData)
-        }),
+      const derivedDepartmentId = (session?.user as any).departmentId || departmentId || students[0]?.departmentId || "";
+      if (!derivedDepartmentId) {
+        alert("Error: Department not found.");
+        return;
+      }
+
+      // Group students by sectionId
+      const studentsBySection: Record<string, Student[]> = {};
+      Array.from(selectedSectionIds).forEach(id => studentsBySection[id] = []);
+
+      students.forEach(s => {
+        if (selectedSectionIds.has(s.sectionId)) {
+          studentsBySection[s.sectionId].push(s);
+        }
       });
+
+      // Loop through each section and save independently
+      for (const secId of Array.from(selectedSectionIds)) {
+        const sectionStudents = studentsBySection[secId] || [];
+        if (sectionStudents.length === 0) continue;
+
+        const fullData = sectionStudents.map((s) => {
+          const isSelected = selectedIds.has(s.id);
+          let status = "Present";
+          if (mode === "mark_absent") {
+            status = isSelected ? "Absent" : "Present";
+          } else {
+            status = isSelected ? "Present" : "Absent";
+          }
+          return {
+            "Roll Number": s.rollNumber,
+            "Name": s.name,
+            "Mobile": s.mobile,
+            "Status": status
+          };
+        });
+
+        await fetch("/api/attendance/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            year,
+            semester,
+            sectionId: secId,
+            departmentId: derivedDepartmentId,
+            status: "Attendance Report",
+            fileName: "Attendance Report",
+            date: new Date().toISOString(),
+            details: JSON.stringify(fullData)
+          }),
+        });
+      }
       setSaveStep("success");
     } catch (e) {
       console.error(e);
@@ -229,8 +247,8 @@ export default function Home() {
       hour12: false
     }).replace(/[\/\,\s\:]/g, "-").replace(/--/g, "_");
 
-    const sectionName = sections.find(s => s.id === sectionId)?.name || "Unknown";
-    const filename = `${date}_${year}_${sectionName}_Absentees.xlsx`;
+    const sectionNames = Array.from(selectedSectionIds).map(id => sections.find(s => s.id === id)?.name).join("-");
+    const filename = `${date}_${year}_${sectionNames}_Absentees.xlsx`;
 
     const ws = XLSX.utils.json_to_sheet(absenteeData);
     const wb = XLSX.utils.book_new();
@@ -265,8 +283,8 @@ export default function Home() {
       hour12: false
     }).replace(/[\/\,\s\:]/g, "-").replace(/--/g, "_");
 
-    const sectionName = sections.find(s => s.id === sectionId)?.name || "Unknown";
-    const filename = `${date}_${year}_${sectionName}_FullReport.xlsx`;
+    const sectionNames = Array.from(selectedSectionIds).map(id => sections.find(s => s.id === id)?.name).join("-");
+    const filename = `${date}_${year}_${sectionNames}_FullReport.xlsx`;
 
     const ws = XLSX.utils.json_to_sheet(fullData);
     const wb = XLSX.utils.book_new();
@@ -343,17 +361,28 @@ export default function Home() {
             </select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700">Section</label>
-            <select
-              value={sectionId}
-              onChange={(e) => setSectionId(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-            >
-              <option value="">Select Section</option>
-              {sections.map((sec) => (
-                <option key={sec.id} value={sec.id}>Section {sec.name}</option>
-              ))}
-            </select>
+            <label className="text-sm font-semibold text-slate-700">Sections</label>
+            <div className="flex flex-wrap gap-2">
+              {sections.map((sec) => {
+                const isSelected = selectedSectionIds.has(sec.id);
+                return (
+                  <button
+                    key={sec.id}
+                    onClick={() => {
+                      const newSet = new Set(selectedSectionIds);
+                      if (newSet.has(sec.id)) newSet.delete(sec.id);
+                      else newSet.add(sec.id);
+                      setSelectedSectionIds(newSet);
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                  >
+                    {sec.name}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedSectionIds.size === 0 && <p className="text-xs text-slate-400">Select at least one</p>}
           </div>
         </div>
       </motion.div>
@@ -508,7 +537,9 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
-                    <span className="font-medium text-slate-900">Year {year} - Sem {semester} - Sec {sections.find(s => s.id === sectionId)?.name}</span>
+                    <span className="font-medium text-slate-900">
+                      Year {year} - Sem {semester} - Sec {Array.from(selectedSectionIds).map(id => sections.find(s => s.id === id)?.name).join(", ")}
+                    </span>
                   </div>
                   <div>
                     <span className="block text-slate-500 text-xs uppercase font-bold">Total Students</span>

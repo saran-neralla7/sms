@@ -19,11 +19,17 @@ export async function GET(request: Request) {
     // Given the major UI refactor, let's switch to 'sectionId'.
 
     const sectionId = searchParams.get("sectionId");
+    const sectionIds = searchParams.get("sectionIds"); // Comma separated
 
     const where: any = {};
     if (year) where.year = year;
     if (semester) where.semester = semester;
-    if (sectionId) where.sectionId = sectionId;
+
+    if (sectionIds) {
+        where.sectionId = { in: sectionIds.split(",") };
+    } else if (sectionId) {
+        where.sectionId = sectionId;
+    }
 
     // Scoping
     const userRole = (session.user as any).role;
