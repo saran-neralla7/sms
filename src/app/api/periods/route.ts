@@ -33,7 +33,8 @@ export async function POST(request: Request) {
             }
         });
         return NextResponse.json(period);
-    } catch (error) {
-        return NextResponse.json({ error: "Failed to create period" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Error creating period:", error);
+        return NextResponse.json({ error: error.message || "Failed to create period" }, { status: 500 });
     }
 }

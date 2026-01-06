@@ -24,8 +24,9 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
             }
         });
         return NextResponse.json(period);
-    } catch (error) {
-        return NextResponse.json({ error: "Failed to update period" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Error updating period:", error);
+        return NextResponse.json({ error: error.message || "Failed to update period" }, { status: 500 });
     }
 }
 
@@ -37,12 +38,12 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
     }
 
     try {
-        // Optional: Check if used in history (but history deletion cascade might be handled or blocked)
         await prisma.period.delete({
             where: { id: params.id }
         });
         return NextResponse.json({ success: true });
-    } catch (error) {
-        return NextResponse.json({ error: "Failed to delete period" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Error deleting period:", error);
+        return NextResponse.json({ error: error.message || "Failed to delete period" }, { status: 500 });
     }
 }

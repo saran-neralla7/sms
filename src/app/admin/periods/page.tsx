@@ -69,10 +69,12 @@ export default function PeriodsPage() {
                 setIsAddModalOpen(false);
                 resetForm();
             } else {
-                alert("Failed to create period");
+                const data = await res.json();
+                alert(data.error || "Failed to create period");
             }
         } catch (error) {
-            alert("Error creating period");
+            alert("Error creating period. Please check console.");
+            console.error(error);
         }
     };
 
@@ -98,10 +100,12 @@ export default function PeriodsPage() {
                 setIsEditModalOpen(false);
                 resetForm();
             } else {
-                alert("Failed to update period");
+                const data = await res.json();
+                alert(data.error || "Failed to update period");
             }
         } catch (error) {
-            alert("Error updating period");
+            alert("Error updating period. Please check console.");
+            console.error(error);
         }
     };
 
