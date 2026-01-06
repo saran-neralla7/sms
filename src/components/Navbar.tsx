@@ -45,6 +45,7 @@ export default function Navbar() {
             // USER
             return [
                 { href: "/", label: "Attendance" },
+                { href: "/attendance/history", label: "History" },
             ];
         }
     };
