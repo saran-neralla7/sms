@@ -11,8 +11,9 @@ export const metadata: Metadata = {
   description: "Manage student attendance and records",
   manifest: "/manifest.json",
   icons: {
-    icon: "/app-icon.jpg",
-    apple: "/app-icon.jpg",
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/apple-icon.png",
   },
 };
 
