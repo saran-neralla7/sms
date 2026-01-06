@@ -172,33 +172,42 @@ export default function ReportsPage() {
             if (!res.ok) throw new Error("Failed to fetch overall data");
 
             const data = await res.json();
-            // Data = { subjects: string[], students: { roll, name, subjects: { [sub]: {present, total} } }[] }
+            // Data = { subjects: {name: string, total: number}[], students: { roll, name, subjects: { [sub]: number } }[] }
 
-            // Build Excel Rows
-            // Header: Roll No, Name, ...[Subjects (Total)]
-            // We need to calculate Subject Total from somewhere.
-            // But the API returns per-student totals. We can infer max total from the data or the API can return it.
-            // My API currently returns subjects list names.
+            // 1. Build Rows for SheetJS
+            const rows: any[] = [];
 
-            // Let's format the rows.
-            const excelData = data.students.map((s: any) => {
-                const row: any = {
-                    "Roll Number": s.rollNumber,
-                    "Name": s.name
-                };
+            // A. Header Row: Roll No, Name, [Subject Names]
+            const headerRow = ["Roll Number", "Name", ...data.subjects.map((s: any) => s.name)];
+            rows.push(headerRow);
 
-                data.subjects.forEach((subName: string) => {
-                    const stats = s.subjects[subName];
-                    if (stats) {
-                        row[subName] = `${stats.present}/${stats.total}`;
-                    } else {
-                        row[subName] = "N/A";
-                    }
+            // B. Total Classes Row: "Total Classes", "", [Subject Totals]
+            const totalsRow = ["Total Classes", "", ...data.subjects.map((s: any) => s.total)];
+            rows.push(totalsRow);
+
+            // C. Student Data Rows
+            data.students.forEach((s: any) => {
+                const row = [s.rollNumber, s.name];
+                data.subjects.forEach((sub: any) => {
+                    // Check if student has data for this subject, else 0
+                    // API returns simple number now (present count)
+                    const presentCount = s.subjects[sub.name] !== undefined ? s.subjects[sub.name] : 0;
+                    row.push(presentCount);
                 });
-                return row;
+                rows.push(row);
             });
 
-            const ws = XLSX.utils.json_to_sheet(excelData);
+            // 2. Create Sheet
+            const ws = XLSX.utils.aoa_to_sheet(rows); // Array of Arrays to Sheet
+
+            // 3. Auto-width columns (Optional polish)
+            const wscols = [
+                { wch: 15 }, // Roll
+                { wch: 25 }, // Name
+                ...data.subjects.map(() => ({ wch: 10 })) // Subjects
+            ];
+            ws['!cols'] = wscols;
+
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Overall Summary");
             XLSX.writeFile(wb, `Overall_Subject_Summary_${startDate}_to_${endDate}.xlsx`);

@@ -64,16 +64,18 @@ export async function GET(request: Request) {
         // If "BDA" happened, it counts as a class for the SECTION, but only ENROLLED students should be penalized?
         // OR: Total Classes = Count of history records where subjectId = X.
         // Present = Count where student is marked present.
+        // OR: Total Classes = Count where student is marked present.
 
         // FOR ELECTIVES:
         // Ideally, we should check if the student is enrolled.
         // But for this report, simplicity is key.
         // Let's iterate history records.
 
-        const subjectStats: Record<string, { id: string, name: string, totalClasses: number }> = {};
-        subjects.forEach(s => {
-            subjectStats[s.id] = { id: s.id, name: s.name, totalClasses: 0 };
-        });
+        // Calculate Global Subject Totals (How many times was this subject taught?)
+        // And Per-Student Attendance
+
+        const subjectTotals: Record<string, number> = {};
+        subjects.forEach(s => subjectTotals[s.name] = 0);
 
         // Init Student Map
         const studentMap: Record<string, any> = {};
@@ -81,61 +83,50 @@ export async function GET(request: Request) {
             studentMap[s.rollNumber] = {
                 rollNumber: s.rollNumber,
                 name: s.name,
-                subjects: {} // will store { [subjectName]: { present: 0, total: 0 } }
+                subjects: {} // { [subjectName]: presentCount }
             };
-            // Init subjects for student
             subjects.forEach(sub => {
-                studentMap[s.rollNumber].subjects[sub.name] = { present: 0, total: 0 };
+                studentMap[s.rollNumber].subjects[sub.name] = 0;
             });
         });
 
-        // Process History
         history.forEach(record => {
-            if (!record.subjectId) return; // Skip records without subject
-            const subName = record.subject?.name;
-            if (!subName) return;
+            if (!record.subjectId || !record.subject) return;
+            const subName = record.subject.name;
 
-            // Increment global total for this subject (for this section)
-            // But wait, if it's an elective, does "total classes" mean simplified total?
-            // Yes, let's assume if the record exists, the class happened.
-            // Note: Parallel electives might mean BDA=20 classes, ML=18 classes. This is fine.
-
-            // We need to know which students were "supposed" to be there.
-            // If the record has a list of students (Manual Save), we can use that?
-            // Or just check if the student is in the JSON?
+            // Increment global total for this subject
+            if (subjectTotals[subName] !== undefined) {
+                subjectTotals[subName] += 1;
+            }
 
             try {
                 const details = JSON.parse(record.details);
-                // details is the list of students involved in this specific class.
-                // If it's an elective, only enrolled students are in `details` (usually).
-                // If it's core, everyone is in `details`.
-
-                // So, for every student in `details`, we increment their "Subject Total".
-                // And if status is Present, we increment "Subject Present".
-
                 details.forEach((s: any) => {
                     const roll = s["Roll Number"];
                     if (studentMap[roll]) {
-                        // Init if missing (e.g. subject name diff?)
-                        if (!studentMap[roll].subjects[subName]) {
-                            studentMap[roll].subjects[subName] = { present: 0, total: 0 };
+                        if (studentMap[roll].subjects[subName] === undefined) {
+                            studentMap[roll].subjects[subName] = 0;
                         }
 
-                        const stats = studentMap[roll].subjects[subName];
-                        stats.total += 1;
+                        // We only count PRESENT classes now
                         if (s["Status"] === "Present") {
-                            stats.present += 1;
+                            studentMap[roll].subjects[subName] += 1;
                         }
                     }
                 });
-
             } catch (e) {
                 console.error("Error parsing history details", e);
             }
         });
 
+        // Format subjects array to include total
+        const subjectResponse = subjects.map(s => ({
+            name: s.name,
+            total: subjectTotals[s.name] || 0
+        }));
+
         return NextResponse.json({
-            subjects: subjects.map(s => s.name),
+            subjects: subjectResponse,
             students: Object.values(studentMap)
         });
 
