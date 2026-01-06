@@ -19,6 +19,7 @@ model Department {
   alumni    Alumni[]
   
   sections  Section[] // Many-to-Many
+  subjects  Subject[]
 }
 
 model Section {
@@ -64,6 +65,40 @@ model Student {
   updatedAt  DateTime @updatedAt
 }
 
+
+
+model Subject {
+  id           String   @id @default(uuid())
+  name         String
+  code         String   // Unique per Dept theoretically, but keeping simple for now
+  year         String
+  semester     String
+  type         String   // "THEORY" | "LAB"
+  
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  
+  history      AttendanceHistory[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Period {
+  id        String   @id @default(uuid())
+  name      String   // "1st Hour", "2nd Hour"
+  startTime String   // "08:40 AM"
+  endTime   String   // "09:30 AM"
+  order     Int      // For sorting
+  
+  history   AttendanceHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Updated Attendance History
+// Note: We keep old fields valid, but new ones will use subjectId/periodId
 model AttendanceHistory {
   id           String   @id @default(uuid())
   date         DateTime @default(now())
@@ -75,6 +110,13 @@ model AttendanceHistory {
 
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id])
+
+  // New Relations (Optional for backward compatibility)
+  subjectId    String?
+  subject      Subject? @relation(fields: [subjectId], references: [id])
+
+  periodId     String?
+  period       Period?  @relation(fields: [periodId], references: [id])
 
   status       String   // "Marked Present" or "Marked Absent"
   fileName     String

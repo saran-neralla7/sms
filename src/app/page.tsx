@@ -18,8 +18,13 @@ export default function Home() {
   // Admin specific
   const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState<any[]>([]);
-
   const [sections, setSections] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+
+  const [selectedPeriodId, setSelectedPeriodId] = useState("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
+  const [attendanceStatus, setAttendanceStatus] = useState<{ checked: boolean; exists: boolean; message?: string }>({ checked: false, exists: false });
 
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,21 +44,63 @@ export default function Home() {
     if (session?.user.role === "ADMIN") {
       fetchDepartments();
     }
+    fetchPeriods();
   }, [session]);
 
   // Derived Department ID (Admin's selection OR HOD's assigned)
   const effectiveDepartmentId = session?.user.role === "ADMIN" ? departmentId : (session?.user as any)?.departmentId;
 
-  // Re-fetch sections whenever the effective department changes
+  // Re-fetch sections and subjects whenever the effective department changes
   useEffect(() => {
     if (session) {
       if (session.user.role === "ADMIN" && !departmentId) {
-        setSections([]); // Clear sections if no department selected
+        setSections([]);
+        setSubjects([]);
       } else {
         fetchSections(effectiveDepartmentId);
       }
     }
   }, [effectiveDepartmentId, session]);
+
+  useEffect(() => {
+    if (effectiveDepartmentId && year && semester) {
+      fetchSubjects();
+    }
+  }, [effectiveDepartmentId, year, semester]);
+
+  // Check Attendance Status when Period or Section changes
+  useEffect(() => {
+    checkAttendanceStatus();
+  }, [selectedPeriodId, selectedSectionIds]);
+
+  const checkAttendanceStatus = async () => {
+    if (!selectedPeriodId || selectedSectionIds.size === 0) {
+      setAttendanceStatus({ checked: false, exists: false });
+      return;
+    }
+
+    // Check for the first selected section (Simplicity for V1)
+    const secId = Array.from(selectedSectionIds)[0];
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+      const res = await fetch(`/api/attendance/check?date=${today}&sectionId=${secId}&periodId=${selectedPeriodId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.exists) {
+          setAttendanceStatus({
+            checked: true,
+            exists: true,
+            message: `Attendance already marked for ${data.subjectName} by ${data.markedBy}`
+          });
+        } else {
+          setAttendanceStatus({ checked: true, exists: false });
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchSections = async (deptId?: string) => {
     let url = "/api/sections";
@@ -67,6 +114,22 @@ export default function Home() {
   const fetchDepartments = async () => {
     const res = await fetch("/api/departments");
     if (res.ok) setDepartments(await res.json());
+  };
+
+  const fetchPeriods = async () => {
+    try {
+      const res = await fetch("/api/periods");
+      if (res.ok) setPeriods(await res.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchSubjects = async () => {
+    if (!effectiveDepartmentId && !departmentId) return;
+    const dept = effectiveDepartmentId || departmentId;
+    try {
+      const res = await fetch(`/api/subjects?departmentId=${dept}&year=${year}&semester=${semester}`);
+      if (res.ok) setSubjects(await res.json());
+    } catch (e) { console.error(e); }
   };
 
   useEffect(() => {
@@ -137,6 +200,16 @@ export default function Home() {
   const onSaveClick = () => {
     if (!year || !semester || selectedSectionIds.size === 0) {
       alert("Please select Year, Semester, and at least one Section.");
+      return;
+    }
+
+    if (attendanceStatus.exists) {
+      alert("Attendance is already marked for this period. You cannot overwrite it.");
+      return;
+    }
+
+    if (selectedPeriodId && !selectedSubjectId) {
+      alert("Please select a Subject.");
       return;
     }
 
@@ -212,7 +285,11 @@ export default function Home() {
             status: "Attendance Report",
             fileName: "Attendance Report",
             date: new Date().toISOString(),
-            details: JSON.stringify(fullData)
+            details: JSON.stringify(fullData),
+
+            // New Fields
+            subjectId: selectedSubjectId || undefined,
+            periodId: selectedPeriodId || undefined
           }),
         });
       }
@@ -384,7 +461,47 @@ export default function Home() {
             </div>
             {selectedSectionIds.size === 0 && <p className="text-xs text-slate-400">Select at least one</p>}
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Period / Hour</label>
+            <select
+              value={selectedPeriodId}
+              onChange={(e) => setSelectedPeriodId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+            >
+              <option value="">Select Period</option>
+              {periods.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.startTime} - {p.endTime})</option>
+              ))}
+            </select>
+          </div>
+
+          {!attendanceStatus.exists && selectedPeriodId && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Subject</label>
+              <select
+                value={selectedSubjectId}
+                onChange={(e) => setSelectedSubjectId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+              >
+                <option value="">Select Subject</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.code}) - {s.type}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
+
+        {attendanceStatus.exists && (
+          <div className="mx-6 mb-6 rounded-lg bg-orange-50 p-4 border border-orange-200 text-orange-800 flex items-start gap-3">
+            <FaTimes className="mt-1" />
+            <div>
+              <p className="font-bold">Attendance Locked</p>
+              <p className="text-sm">{attendanceStatus.message}</p>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       <AnimatePresence>

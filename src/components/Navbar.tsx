@@ -25,6 +25,8 @@ export default function Navbar() {
                 { href: "/admin/alumni", label: "Alumni" },
                 { href: "/admin/departments", label: "Depts" },
                 { href: "/admin/sections", label: "Sections" },
+                { href: "/admin/periods", label: "Periods" },
+                { href: "/admin/subjects", label: "Subjects" },
                 { href: "/reports", label: "Reports" },
                 { href: "/attendance/history", label: "History" },
             ];
@@ -33,6 +35,11 @@ export default function Navbar() {
                 { href: "/reports", label: "Reports" },
                 { href: "/attendance/history", label: "History" },
                 { href: "/admin/students", label: "Students" },
+            ];
+        } else if (session.user.role === "FACULTY") {
+            return [
+                { href: "/", label: "Mark Attendance" },
+                { href: "/attendance/history", label: "History" },
             ];
         } else {
             // USER

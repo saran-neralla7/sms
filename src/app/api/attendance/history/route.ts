@@ -71,6 +71,10 @@ export async function POST(request: Request) {
                 date: body.date,
                 details: body.details || "[]",
                 downloadedBy: session.user.id,
+
+                // New Fields (Optional)
+                subjectId: body.subjectId || undefined,
+                periodId: body.periodId || undefined,
             },
         });
         return NextResponse.json(history);
