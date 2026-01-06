@@ -29,10 +29,10 @@ export async function GET(request: Request) {
         // 1. Fetch History Records for the range
         const history = await prisma.attendanceHistory.findMany({
             where: {
-                year,
                 semester,
                 sectionId,
                 departmentId: departmentId || undefined,
+                ...(searchParams.get("subjectId") ? { subjectId: searchParams.get("subjectId") ?? undefined } : {}),
                 date: {
                     gte: start,
                     lte: end

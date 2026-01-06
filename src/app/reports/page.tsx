@@ -23,6 +23,7 @@ export default function ReportsPage() {
     const [year, setYear] = useState("");
     const [semester, setSemester] = useState("");
     const [sectionId, setSectionId] = useState("");
+    const [subjectId, setSubjectId] = useState("");
 
     // Consolidated Dates
     const [startDate, setStartDate] = useState("");
@@ -32,6 +33,7 @@ export default function ReportsPage() {
     // Metadata for dropdowns
     const [departments, setDepartments] = useState<any[]>([]);
     const [sections, setSections] = useState<any[]>([]);
+    const [subjects, setSubjects] = useState<any[]>([]);
 
     // Edit Modal State
     const [editingRecord, setEditingRecord] = useState<any | null>(null);
@@ -60,7 +62,8 @@ export default function ReportsPage() {
     useEffect(() => {
         const effectiveDeptId = session?.user.role === "ADMIN" ? departmentId : (session?.user as any)?.departmentId;
         if (effectiveDeptId) fetchSections(effectiveDeptId);
-    }, [departmentId, session]);
+        if (effectiveDeptId && year && semester) fetchSubjects(effectiveDeptId);
+    }, [departmentId, session, year, semester]);
 
     // Refetch when filters change (Daily Only)
     useEffect(() => {
@@ -77,6 +80,12 @@ export default function ReportsPage() {
     const fetchSections = async (deptId: string) => {
         const res = await fetch(`/api/sections?departmentId=${deptId}`);
         if (res.ok) setSections(await res.json());
+    };
+
+    const fetchSubjects = async (deptId: string) => {
+        const params = new URLSearchParams({ departmentId: deptId, year, semester });
+        const res = await fetch(`/api/subjects?${params}`);
+        if (res.ok) setSubjects(await res.json());
     };
 
     const fetchHistory = async () => {
@@ -109,6 +118,7 @@ export default function ReportsPage() {
             if (semester) params.append("semester", semester);
             if (sectionId) params.append("sectionId", sectionId);
             if (departmentId) params.append("departmentId", departmentId);
+            if (subjectId) params.append("subjectId", subjectId);
             params.append("startDate", startDate);
             params.append("endDate", endDate);
 
@@ -143,6 +153,61 @@ export default function ReportsPage() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Consolidated Report");
         XLSX.writeFile(wb, `Consolidated_Report_${startDate}_to_${endDate}.xlsx`);
+    };
+
+    const handleDownloadOverall = async () => {
+        if (!startDate || !endDate) return;
+        setStatus({ type: "success", message: "Generating Overall Matrix..." });
+
+        try {
+            const params = new URLSearchParams();
+            if (year) params.append("year", year);
+            if (semester) params.append("semester", semester);
+            if (sectionId) params.append("sectionId", sectionId);
+            if (departmentId) params.append("departmentId", departmentId);
+            params.append("startDate", startDate);
+            params.append("endDate", endDate);
+
+            const res = await fetch(`/api/reports/overall?${params}`);
+            if (!res.ok) throw new Error("Failed to fetch overall data");
+
+            const data = await res.json();
+            // Data = { subjects: string[], students: { roll, name, subjects: { [sub]: {present, total} } }[] }
+
+            // Build Excel Rows
+            // Header: Roll No, Name, ...[Subjects (Total)]
+            // We need to calculate Subject Total from somewhere.
+            // But the API returns per-student totals. We can infer max total from the data or the API can return it.
+            // My API currently returns subjects list names.
+
+            // Let's format the rows.
+            const excelData = data.students.map((s: any) => {
+                const row: any = {
+                    "Roll Number": s.rollNumber,
+                    "Name": s.name
+                };
+
+                data.subjects.forEach((subName: string) => {
+                    const stats = s.subjects[subName];
+                    if (stats) {
+                        row[subName] = `${stats.present}/${stats.total}`;
+                    } else {
+                        row[subName] = "N/A";
+                    }
+                });
+                return row;
+            });
+
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Overall Summary");
+            XLSX.writeFile(wb, `Overall_Subject_Summary_${startDate}_to_${endDate}.xlsx`);
+            setStatus({ type: "success", message: "Overall Report Downloaded!" });
+
+        } catch (e: any) {
+            console.error(e);
+            setStatus({ type: "error", message: "Failed to generate Overall Report" });
+        }
     };
 
     const handleDownloadPDF = () => {
@@ -192,11 +257,12 @@ export default function ReportsPage() {
 
                     const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
                     const secName = sections.find(s => s.id === sectionId)?.name || "All";
+                    const subName = subjects.find(s => s.id === subjectId)?.name;
 
                     // Left Side Details
                     doc.text(`Department: ${deptName}`, 15, 42);
                     doc.text(`Year: ${year}   Semester: ${semester}`, 15, 48);
-                    doc.text(`Section: ${secName}`, 15, 54);
+                    doc.text(`Section: ${secName} ${subName ? `   Subject: ${subName}` : ""}`, 15, 54);
 
                     // Right Side Details
                     doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
@@ -629,24 +695,42 @@ export default function ReportsPage() {
                             </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="mt-4 grid grid-cols-2 gap-4 md:mt-0 md:w-full md:grid-cols-4">
+                            <div className="space-y-1 col-span-2 md:col-span-1">
+                                <label className="text-xs font-semibold text-slate-500">Subject (Optional)</label>
+                                <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">All Subjects</option>
+                                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                                </select>
+                            </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500">Start Date</label>
-                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500">End Date</label>
-                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
+                            </div>
+                            <div className="flex flex-col justify-end gap-2">
+                                <button
+                                    onClick={fetchConsolidated}
+                                    disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Generate
+                                </button>
                             </div>
                         </div>
 
-                        <button
-                            onClick={fetchConsolidated}
-                            disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Generate
-                        </button>
+                        <div className="mt-4 flex w-full justify-end border-t border-slate-100 pt-4">
+                            <button
+                                onClick={handleDownloadOverall}
+                                disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                            >
+                                <FaFileExcel /> Download Overall Subject Summary (Excel)
+                            </button>
+                        </div>
                     </div>
 
                     {/* Consolidated Table */}
