@@ -16,7 +16,7 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true);
 
     // Tab State
-    const [activeTab, setActiveTab] = useState<"daily" | "consolidated">("daily");
+    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject">("daily");
 
     // Filters
     const [departmentId, setDepartmentId] = useState("");
@@ -118,7 +118,7 @@ export default function ReportsPage() {
             if (semester) params.append("semester", semester);
             if (sectionId) params.append("sectionId", sectionId);
             if (departmentId) params.append("departmentId", departmentId);
-            if (subjectId) params.append("subjectId", subjectId);
+            if (activeTab === "subject" && subjectId) params.append("subjectId", subjectId);
             params.append("startDate", startDate);
             params.append("endDate", endDate);
 
@@ -537,6 +537,13 @@ export default function ReportsPage() {
                 >
                     Consolidated Reports
                 </button>
+                <button
+                    onClick={() => setActiveTab("subject")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "subject" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                        }`}
+                >
+                    Subject Reports
+                </button>
             </div>
 
             {/* Daily Attendance Reports Section */}
@@ -651,6 +658,7 @@ export default function ReportsPage() {
             {activeTab === "consolidated" && (
                 <div className="mb-8">
                     <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Consolidated Attendance</h2>
+                    <p className="mb-4 text-sm text-slate-500">View attendance percentage for the entire class across all subjects.</p>
 
                     {/* Filters & Actions */}
                     <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-end">
@@ -695,9 +703,80 @@ export default function ReportsPage() {
                             </div>
                         </div>
 
+                        <div className="flex gap-2">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Start Date</label>
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">End Date</label>
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={fetchConsolidated}
+                            disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Generate
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Subject Reports Section */}
+            {activeTab === "subject" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Subject-wise Reports</h2>
+                    <p className="mb-4 text-sm text-slate-500">View attendance for specific subjects or generate an overall summary matrix.</p>
+
+                    {/* Filters & Actions */}
+                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                            {session?.user.role === "ADMIN" && (
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Department</label>
+                                    <select
+                                        value={departmentId}
+                                        onChange={(e) => setDepartmentId(e.target.value)}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value="">Select Dept</option>
+                                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Year</label>
+                                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Year</option>
+                                    <option value="1">1st Year</option>
+                                    <option value="2">2nd Year</option>
+                                    <option value="3">3rd Year</option>
+                                    <option value="4">4th Year</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Semester</label>
+                                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Sem</option>
+                                    <option value="1">1st Sem</option>
+                                    <option value="2">2nd Sem</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Section</label>
+                                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Section</option>
+                                    {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
                         <div className="mt-4 grid grid-cols-2 gap-4 md:mt-0 md:w-full md:grid-cols-4">
                             <div className="space-y-1 col-span-2 md:col-span-1">
-                                <label className="text-xs font-semibold text-slate-500">Subject (Optional)</label>
+                                <label className="text-xs font-semibold text-slate-500">Subject</label>
                                 <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                                     <option value="">All Subjects</option>
                                     {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
@@ -732,8 +811,12 @@ export default function ReportsPage() {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
 
-                    {/* Consolidated Table */}
+            {/* Shared Table for Consolidated & Subject Tabs */}
+            {(activeTab === "consolidated" || activeTab === "subject") && (
+                <>
                     {consolidatedData.length > 0 && (
                         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                             <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
@@ -784,7 +867,7 @@ export default function ReportsPage() {
                             Select filters and date range to generate report.
                         </div>
                     )}
-                </div>
+                </>
             )}
 
             {/* Edit Modal */}
