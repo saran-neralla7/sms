@@ -38,13 +38,31 @@ export default function PeriodsPage() {
         }
     };
 
+    const formatTimeForDisplay = (time24: string) => {
+        if (!time24) return "";
+        const [hours, minutes] = time24.split(":");
+        let h = parseInt(hours);
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${h.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+    };
+
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const formattedStart = formatTimeForDisplay(startTime);
+            const formattedEnd = formatTimeForDisplay(endTime);
+
             const res = await fetch("/api/periods", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, startTime, endTime, order })
+                body: JSON.stringify({
+                    name,
+                    startTime: formattedStart,
+                    endTime: formattedEnd,
+                    order
+                })
             });
             if (res.ok) {
                 fetchPeriods();
@@ -62,10 +80,18 @@ export default function PeriodsPage() {
         e.preventDefault();
         if (!selectedPeriod) return;
         try {
+            const formattedStart = startTime.includes("M") ? startTime : formatTimeForDisplay(startTime);
+            const formattedEnd = endTime.includes("M") ? endTime : formatTimeForDisplay(endTime);
+
             const res = await fetch(`/api/periods/${selectedPeriod.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, startTime, endTime, order })
+                body: JSON.stringify({
+                    name,
+                    startTime: formattedStart,
+                    endTime: formattedEnd,
+                    order
+                })
             });
             if (res.ok) {
                 fetchPeriods();
@@ -95,14 +121,31 @@ export default function PeriodsPage() {
         }
     };
 
+    // Helper to convert "08:30 AM" back to "08:30" (24h) for the input value
+    const convertTo24Hour = (time12: string) => {
+        if (!time12) return "";
+        if (!time12.includes("M")) return time12; // Already 24h or invalid
+        const [time, modifier] = time12.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') {
+            hours = '00';
+        }
+        if (modifier === 'PM') {
+            hours = (parseInt(hours, 10) + 12).toString();
+        }
+        return `${hours.padStart(2, '0')}:${minutes}`;
+    };
+
     const openEditModal = (period: any) => {
         setSelectedPeriod(period);
         setName(period.name);
-        setStartTime(period.startTime);
-        setEndTime(period.endTime);
+        setStartTime(convertTo24Hour(period.startTime)); // Convert for input
+        setEndTime(convertTo24Hour(period.endTime));     // Convert for input
         setOrder(period.order);
         setIsEditModalOpen(true);
     };
+
+
 
     const resetForm = () => {
         setName("");
@@ -112,22 +155,7 @@ export default function PeriodsPage() {
         setSelectedPeriod(null);
     };
 
-    const generateTimeSlots = () => {
-        const times = [];
-        const startHour = 7; // 7 AM
-        const endHour = 19; // 7 PM
-        for (let hour = startHour; hour <= endHour; hour++) {
-            for (let minute = 0; minute < 60; minute += 10) {
-                const period = hour >= 12 ? 'PM' : 'AM';
-                let displayHour = hour % 12;
-                if (displayHour === 0) displayHour = 12;
 
-                const displayMinute = minute.toString().padStart(2, '0');
-                times.push(`${displayHour.toString().padStart(2, '0')}:${displayMinute} ${period}`);
-            }
-        }
-        return times;
-    };
 
     return (
         <div className="mx-auto max-w-5xl p-6">
@@ -200,31 +228,23 @@ export default function PeriodsPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="mb-1 block text-sm font-semibold text-slate-700">Start Time</label>
-                                <select
+                                <input
+                                    type="time"
                                     value={startTime}
                                     onChange={(e) => setStartTime(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                     required
-                                >
-                                    <option value="">Select Start Time</option>
-                                    {generateTimeSlots().map((time) => (
-                                        <option key={`start-${time}`} value={time}>{time}</option>
-                                    ))}
-                                </select>
+                                />
                             </div>
                             <div>
                                 <label className="mb-1 block text-sm font-semibold text-slate-700">End Time</label>
-                                <select
+                                <input
+                                    type="time"
                                     value={endTime}
                                     onChange={(e) => setEndTime(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                     required
-                                >
-                                    <option value="">Select End Time</option>
-                                    {generateTimeSlots().map((time) => (
-                                        <option key={`end-${time}`} value={time}>{time}</option>
-                                    ))}
-                                </select>
+                                />
                             </div>
                         </div>
                         <div>
