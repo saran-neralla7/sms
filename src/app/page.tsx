@@ -376,6 +376,15 @@ export default function Home() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 pb-32 sm:px-6 lg:px-8">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-lg"
+      >
+        <h1 className="text-2xl font-bold">Welcome, {session?.user?.username || "Guest"}!</h1>
+        <p className="mt-1 text-blue-100">Ready to mark attendance? Select your class details below.</p>
+      </motion.div>
+
       {/* Class Selection Card */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}

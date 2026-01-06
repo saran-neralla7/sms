@@ -32,8 +32,8 @@ export async function GET(request: Request) {
             if (userProfile?.departmentId) {
                 whereClause.departmentId = userProfile.departmentId;
             }
-        } else if (session.user.role === "USER") {
-            // USER: Restricted to records THEY downloaded/saved
+        } else if (session.user.role === "USER" || session.user.role === "FACULTY") {
+            // USER/FACULTY: Restricted to records THEY downloaded/saved
             whereClause.downloadedBy = session.user.id;
         }
         // ADMIN: Can see all, filters applied above (departmentId from searchParams)
