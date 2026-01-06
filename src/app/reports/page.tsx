@@ -16,7 +16,7 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true);
 
     // Tab State
-    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject">("daily");
+    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject" | "weekly">("daily");
 
     // Filters
     const [departmentId, setDepartmentId] = useState("");
@@ -34,6 +34,12 @@ export default function ReportsPage() {
     const [departments, setDepartments] = useState<any[]>([]);
     const [sections, setSections] = useState<any[]>([]);
     const [subjects, setSubjects] = useState<any[]>([]);
+    const [periods, setPeriods] = useState<any[]>([]);
+
+    // Weekly View State
+    const [weekDate, setWeekDate] = useState("");
+    const [weeklyData, setWeeklyData] = useState<Record<string, Record<string, any>>>({}); // { [date]: { [periodId]: record } }
+    const [weekDays, setWeekDays] = useState<Date[]>([]);
 
     // Edit Modal State
     const [editingRecord, setEditingRecord] = useState<any | null>(null);
@@ -57,6 +63,7 @@ export default function ReportsPage() {
         if (activeTab === "daily") {
             fetchHistory();
         }
+        fetchPeriods();
     }, [session]);
 
     useEffect(() => {
@@ -86,6 +93,71 @@ export default function ReportsPage() {
         const params = new URLSearchParams({ departmentId: deptId, year, semester });
         const res = await fetch(`/api/subjects?${params}`);
         if (res.ok) setSubjects(await res.json());
+    };
+
+    const fetchPeriods = async () => {
+        const res = await fetch("/api/periods");
+        if (res.ok) setPeriods(await res.json());
+    };
+
+    const getWeekDays = (dateStr: string) => {
+        const d = new Date(dateStr);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+        const monday = new Date(d.setDate(diff));
+
+        const days = [];
+        for (let i = 0; i < 6; i++) {
+            const nextDay = new Date(monday);
+            nextDay.setDate(monday.getDate() + i);
+            days.push(nextDay);
+        }
+        return days;
+    };
+
+    const fetchWeeklyData = async () => {
+        if (!weekDate || !departmentId || !year || !semester || !sectionId) return;
+        setLoading(true);
+
+        const days = getWeekDays(weekDate);
+        setWeekDays(days);
+        const start = days[0].toISOString().split('T')[0];
+        const end = days[5].toISOString().split('T')[0];
+
+        try {
+            const params = new URLSearchParams();
+            params.append("departmentId", departmentId);
+            params.append("year", year);
+            params.append("semester", semester);
+            params.append("sectionId", sectionId);
+            params.append("startDate", start);
+            params.append("endDate", end);
+
+            const res = await fetch(`/api/attendance/history?${params}`);
+            if (res.ok) {
+                const data = await res.json();
+                // Transform to Map
+                const map: Record<string, Record<string, any>> = {};
+
+                // Initialize map structure
+                days.forEach(d => {
+                    const dateKey = d.toISOString().split('T')[0];
+                    map[dateKey] = {};
+                });
+
+                data.forEach((rec: any) => {
+                    const d = new Date(rec.date).toISOString().split('T')[0];
+                    if (map[d] && rec.periodId) {
+                        map[d][rec.periodId] = rec;
+                    }
+                });
+                setWeeklyData(map);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const fetchHistory = async () => {
@@ -553,6 +625,13 @@ export default function ReportsPage() {
                 >
                     Subject Reports
                 </button>
+                <button
+                    onClick={() => setActiveTab("weekly")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "weekly" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                        }`}
+                >
+                    Weekly View
+                </button>
             </div>
 
             {/* Daily Attendance Reports Section */}
@@ -823,61 +902,226 @@ export default function ReportsPage() {
                 </div>
             )}
 
-            {/* Shared Table for Consolidated & Subject Tabs */}
-            {(activeTab === "consolidated" || activeTab === "subject") && (
-                <>
-                    {consolidatedData.length > 0 && (
-                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
-                                <h3 className="font-semibold text-slate-700">Report Summary</h3>
-                                <div className="flex items-center">
-                                    <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 hover:border-green-300">
-                                        <FaFileExcel className="text-green-600" /> Excel
-                                    </button>
-                                    <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
-                                        <FaFilePdf className="text-red-600" /> PDF
-                                    </button>
+            {/* Weekly Timetable View */}
+            {
+                activeTab === "weekly" && (
+                    <div className="mb-8">
+                        <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Weekly Class Report</h2>
+                        <p className="mb-4 text-sm text-slate-500">Visual attendance grid for the selected week.</p>
+
+                        {/* Filters */}
+                        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                                {session?.user.role === "ADMIN" && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-slate-500">Department</label>
+                                        <select
+                                            value={departmentId}
+                                            onChange={(e) => setDepartmentId(e.target.value)}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        >
+                                            <option value="">Select Dept</option>
+                                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Year</label>
+                                    <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">Select Year</option>
+                                        <option value="1">1st Year</option>
+                                        <option value="2">2nd Year</option>
+                                        <option value="3">3rd Year</option>
+                                        <option value="4">4th Year</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Semester</label>
+                                    <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">Select Sem</option>
+                                        <option value="1">1st Sem</option>
+                                        <option value="2">2nd Sem</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Section</label>
+                                    <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">Select Section</option>
+                                        {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Select Week</label>
+                                    <input
+                                        type="date"
+                                        value={weekDate}
+                                        onChange={(e) => setWeekDate(e.target.value)}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    />
                                 </div>
                             </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-slate-50">
+                            <div className="mt-4 flex justify-end">
+                                <button
+                                    onClick={fetchWeeklyData}
+                                    disabled={!departmentId || !year || !semester || !sectionId || !weekDate}
+                                    className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    Load Timetable
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Weekly Grid */}
+                        {weekDays.length > 0 && (
+                            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                                <table className="w-full border-collapse">
+                                    <thead>
                                         <tr>
-                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Roll No</th>
-                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Name</th>
-                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Total Classes</th>
-                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
-                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
-                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">%</th>
+                                            <th className="border-b border-r bg-slate-50 px-4 py-3 text-left text-xs font-bold uppercase text-slate-500 w-32 sticky left-0 z-10">Day / Period</th>
+                                            {periods.map(p => (
+                                                <th key={p.id} className="min-w-[140px] border-b border-r bg-slate-50 px-4 py-3 text-center text-xs font-bold uppercase text-slate-500">
+                                                    {p.name}<br />
+                                                    <span className="text-[10px] text-slate-400 font-normal">
+                                                        {p.startTime} - {p.endTime}
+                                                    </span>
+                                                </th>
+                                            ))}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {consolidatedData.map((s) => (
-                                            <tr key={s.rollNumber} className="hover:bg-slate-50">
-                                                <td className="px-6 py-3 text-sm font-mono text-slate-600">{s.rollNumber}</td>
-                                                <td className="px-6 py-3 text-sm font-medium text-slate-900">{s.name}</td>
-                                                <td className="px-6 py-3 text-sm text-center text-slate-600">{s.totalClasses}</td>
-                                                <td className="px-6 py-3 text-sm text-center text-green-600 font-semibold">{s.present}</td>
-                                                <td className="px-6 py-3 text-sm text-center text-red-600 font-semibold">{s.absent}</td>
-                                                <td className="px-6 py-3 text-sm text-center font-bold">
-                                                    <span className={parseFloat(s.percentage) < 75 ? "text-red-600" : "text-green-600"}>
-                                                        {s.percentage}%
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                    <tbody>
+                                        {weekDays.map(day => {
+                                            const dateKey = day.toISOString().split('T')[0];
+                                            const dayData = weeklyData[dateKey] || {};
+                                            const dayName = day.toLocaleDateString("en-US", { weekday: 'long' });
+
+                                            return (
+                                                <tr key={dateKey} className="divide-x divide-slate-100 border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                                                    <td className="bg-slate-50/50 px-4 py-4 text-sm font-semibold text-slate-700 sticky left-0 z-10 border-r w-32">
+                                                        <div className="flex flex-col">
+                                                            <span>{dayName}</span>
+                                                            <span className="text-xs font-normal text-slate-400">{day.toLocaleDateString()}</span>
+                                                        </div>
+                                                    </td>
+                                                    {periods.map(p => {
+                                                        const record = dayData[p.id];
+                                                        let content = <span className="text-xs text-slate-300 italic">No Class</span>;
+                                                        let bgStyle = {};
+
+                                                        if (record) {
+                                                            // Calculate Stats
+                                                            let present = 0, total = 0;
+                                                            try {
+                                                                const details = JSON.parse(record.details);
+                                                                total = details.length;
+                                                                present = details.filter((s: any) => s.Status === "Present").length;
+                                                            } catch (e) { }
+
+                                                            const absent = total - present;
+                                                            const presentPct = total > 0 ? (present / total) * 100 : 0;
+                                                            const absentPct = 100 - presentPct;
+
+                                                            bgStyle = {
+                                                                background: `linear-gradient(to right, #dcfce7 ${presentPct}%, #fee2e2 ${presentPct}%)`
+                                                            };
+
+                                                            content = (
+                                                                <div className="group relative flex h-full w-full flex-col items-center justify-center py-2 cursor-pointer">
+                                                                    <span className="font-bold text-slate-800 text-sm">{record.subject?.name || "Subject"}</span>
+                                                                    <span className="text-xs text-slate-600 font-medium mt-1">{present}/{total} Present</span>
+
+                                                                    {/* Tooltip */}
+                                                                    <div className="absolute bottom-full mb-2 hidden w-48 flex-col rounded-lg bg-slate-800 p-2 text-xs text-white shadow-xl group-hover:flex z-50">
+                                                                        <div className="font-bold mb-1 border-b border-slate-600 pb-1">{record.subject?.name}</div>
+                                                                        <div className="flex justify-between"><span>Total:</span> <span>{total}</span></div>
+                                                                        <div className="flex justify-between text-green-300"><span>Present:</span> <span>{present} ({Math.round(presentPct)}%)</span></div>
+                                                                        <div className="flex justify-between text-red-300"><span>Absent:</span> <span>{absent}</span></div>
+                                                                        <div className="mt-1 text-[10px] text-slate-400 text-center">Click to View Details</div>
+                                                                        {/* Arrow */}
+                                                                        <div className="absolute top-full left-1/2 -ml-1 h-2 w-2 -translate-y-1 rotate-45 bg-slate-800"></div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <td
+                                                                key={p.id}
+                                                                className="h-24 p-0 align-middle transition-all relative"
+                                                                style={bgStyle}
+                                                                onClick={() => record && handleView(record)}
+                                                            >
+                                                                {content}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
-                    )}
-                    {consolidatedData.length === 0 && !loading && (
-                        <div className="text-center py-12 text-slate-400">
-                            Select filters and date range to generate report.
-                        </div>
-                    )}
-                </>
-            )}
+                        )}
+                    </div>
+                )
+            }
+
+            {/* Shared Table for Consolidated & Subject Tabs */}
+            {
+                (activeTab === "consolidated" || activeTab === "subject") && (
+                    <>
+                        {consolidatedData.length > 0 && (
+                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                                <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
+                                    <h3 className="font-semibold text-slate-700">Report Summary</h3>
+                                    <div className="flex items-center">
+                                        <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 hover:border-green-300">
+                                            <FaFileExcel className="text-green-600" /> Excel
+                                        </button>
+                                        <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
+                                            <FaFilePdf className="text-red-600" /> PDF
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Roll No</th>
+                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Name</th>
+                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Total Classes</th>
+                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
+                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
+                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {consolidatedData.map((s) => (
+                                                <tr key={s.rollNumber} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-3 text-sm font-mono text-slate-600">{s.rollNumber}</td>
+                                                    <td className="px-6 py-3 text-sm font-medium text-slate-900">{s.name}</td>
+                                                    <td className="px-6 py-3 text-sm text-center text-slate-600">{s.totalClasses}</td>
+                                                    <td className="px-6 py-3 text-sm text-center text-green-600 font-semibold">{s.present}</td>
+                                                    <td className="px-6 py-3 text-sm text-center text-red-600 font-semibold">{s.absent}</td>
+                                                    <td className="px-6 py-3 text-sm text-center font-bold">
+                                                        <span className={parseFloat(s.percentage) < 75 ? "text-red-600" : "text-green-600"}>
+                                                            {s.percentage}%
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                        {consolidatedData.length === 0 && !loading && (
+                            <div className="text-center py-12 text-slate-400">
+                                Select filters and date range to generate report.
+                            </div>
+                        )}
+                    </>
+                )
+            }
 
             {/* Edit Modal */}
             <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Attendance">
@@ -933,63 +1177,65 @@ export default function ReportsPage() {
             />
 
             {/* View Modal */}
-            {viewRecord && (
-                <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Attendance Report">
-                    <div className="p-4">
-                        <div className="space-y-4">
-                            <div className="rounded-lg bg-slate-50 p-4 border border-slate-100">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <span className="block text-slate-500 text-xs uppercase font-bold">Date</span>
-                                        <span className="font-medium text-slate-900">
-                                            {new Date(viewRecord.date).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
-                                        <span className="font-medium text-slate-900">
-                                            Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
-                                        </span>
-                                    </div>
-                                    <div className="col-span-2 my-2 border-t border-slate-200"></div>
-                                    <div>
-                                        <span className="block text-slate-500 text-xs uppercase font-bold">Total Students</span>
-                                        <span className="font-medium text-slate-900">{viewStats.total}</span>
-                                    </div>
-                                    <div></div>
-                                    <div>
-                                        <span className="block text-slate-500 text-xs uppercase font-bold">Present</span>
-                                        <span className="font-bold text-green-600">{viewStats.present}</span>
-                                    </div>
-                                    <div>
-                                        <span className="block text-slate-500 text-xs uppercase font-bold">Absent</span>
-                                        <span className="font-bold text-red-600">{viewStats.absent}</span>
+            {
+                viewRecord && (
+                    <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Attendance Report">
+                        <div className="p-4">
+                            <div className="space-y-4">
+                                <div className="rounded-lg bg-slate-50 p-4 border border-slate-100">
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Date</span>
+                                            <span className="font-medium text-slate-900">
+                                                {new Date(viewRecord.date).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
+                                            <span className="font-medium text-slate-900">
+                                                Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
+                                            </span>
+                                        </div>
+                                        <div className="col-span-2 my-2 border-t border-slate-200"></div>
+                                        <div>
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Total Students</span>
+                                            <span className="font-medium text-slate-900">{viewStats.total}</span>
+                                        </div>
+                                        <div></div>
+                                        <div>
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Present</span>
+                                            <span className="font-bold text-green-600">{viewStats.present}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Absent</span>
+                                            <span className="font-bold text-red-600">{viewStats.absent}</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="flex flex-col gap-3 mt-4">
-                                <button
-                                    onClick={handleDownloadFull}
-                                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                                >
-                                    <FaDownload /> Download Full Report
-                                </button>
-                                <button
-                                    onClick={handleDownloadAbsentees}
-                                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
-                                >
-                                    <FaDownload /> Download Absentees
+                                <div className="flex flex-col gap-3 mt-4">
+                                    <button
+                                        onClick={handleDownloadFull}
+                                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                                    >
+                                        <FaDownload /> Download Full Report
+                                    </button>
+                                    <button
+                                        onClick={handleDownloadAbsentees}
+                                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
+                                    >
+                                        <FaDownload /> Download Absentees
+                                    </button>
+                                </div>
+
+                                <button onClick={() => setIsViewModalOpen(false)} className="mt-2 w-full text-center text-xs text-slate-400 hover:text-slate-600 underline">
+                                    Close
                                 </button>
                             </div>
-
-                            <button onClick={() => setIsViewModalOpen(false)} className="mt-2 w-full text-center text-xs text-slate-400 hover:text-slate-600 underline">
-                                Close
-                            </button>
                         </div>
-                    </div>
-                </Modal>
-            )}
+                    </Modal>
+                )
+            }
         </div>
     );
 }
