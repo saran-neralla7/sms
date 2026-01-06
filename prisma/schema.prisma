@@ -61,6 +61,8 @@ model Student {
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id])
 
+  subjects     Subject[] // Many-to-Many for Electives
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -79,6 +81,7 @@ model Subject {
   department   Department @relation(fields: [departmentId], references: [id])
   
   history      AttendanceHistory[]
+  students     Student[] // Many-to-Many for Electives
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

@@ -27,6 +27,7 @@ export default function Navbar() {
                 { href: "/admin/sections", label: "Sections" },
                 { href: "/admin/periods", label: "Periods" },
                 { href: "/admin/subjects", label: "Subjects" },
+                { href: "/admin/electives", label: "Electives" },
                 { href: "/reports", label: "Reports" },
                 { href: "/attendance/history", label: "History" },
             ];

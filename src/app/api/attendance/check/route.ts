@@ -18,15 +18,46 @@ export async function GET(request: Request) {
         const startOfDay = new Date(checkDate.setHours(0, 0, 0, 0));
         const endOfDay = new Date(checkDate.setHours(23, 59, 59, 999));
 
+        const subjectId = searchParams.get("subjectId");
+
+        // Logic:
+        // If subjectId is provided (likely Elective), check for (Section + Period + Subject + Date)
+        // If subjectId is NOT provided (Core), check for (Section + Period + Date) -- Assuming generic lock
+        // BUT optimization: If an elective record exists, and we try to check without subject, should we block?
+        // Current requirement: Allow parallel electives.
+
+        // Simplest robust logic:
+        // Always check basic Section+Period collision first.
+        // IF collision found:
+        //    CHECK if the existing record has a subjectId.
+        //    IF existing record subject == current subject, then BLOCK.
+        //    IF existing record subject != current subject, 
+        //       AND (existing is ELECTIVE && current is ELECTIVE) -> ALLOW (Concurrent)
+        //       ELSE -> BLOCK (Core vs Core, or Core vs Elective Overlap)
+
+        // ACTUALLY, simpler:
+        // Just search for exact match.
+        // If User selects "BDA", we check if "BDA" is marked for this period.
+        // If User selects "Core Math", we check if "Core Math" is marked.
+        // The previous logic was "One Period = One Record per Section".
+        // We are changing it to "One Record per Section per Subject (if Elective)".
+
+        // Let's refine the query:
+        const whereClause: any = {
+            sectionId,
+            periodId,
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            }
+        };
+
+        if (subjectId) {
+            whereClause.subjectId = subjectId;
+        }
+
         const existingRecord = await prisma.attendanceHistory.findFirst({
-            where: {
-                sectionId,
-                periodId,
-                date: {
-                    gte: startOfDay,
-                    lte: endOfDay
-                }
-            },
+            where: whereClause,
             include: {
                 user: true,
                 subject: true

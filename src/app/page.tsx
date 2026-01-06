@@ -155,7 +155,7 @@ export default function Home() {
     } else {
       setStudents([]);
     }
-  }, [year, semester, selectedSectionIds, departmentId, session]);
+  }, [year, semester, selectedSectionIds, departmentId, session, selectedSubjectId]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -166,9 +166,23 @@ export default function Home() {
         url += `&departmentId=${departmentId}`;
       }
 
+      // If selected subject is ELECTIVE, we need to know student enrollments
+      const isElective = subjects.find(s => s.id === selectedSubjectId)?.type === "ELECTIVE";
+      if (isElective) {
+        url += "&includeSubjects=true";
+      }
+
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+
+        // Filter if Elective
+        if (isElective && selectedSubjectId) {
+          data = data.filter((student: any) =>
+            student.subjects?.some((sub: any) => sub.id === selectedSubjectId)
+          );
+        }
+
         setStudents(data);
         setSelectedIds(new Set());
       }

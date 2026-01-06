@@ -46,12 +46,15 @@ export async function GET(request: Request) {
         if (departmentId) where.departmentId = departmentId;
     }
 
+    const includeSubjects = searchParams.get("includeSubjects") === "true";
+
     try {
         const students = await prisma.student.findMany({
             where,
             include: {
                 section: true,
-                department: true
+                department: true,
+                subjects: includeSubjects ? { select: { id: true } } : false
             },
             orderBy: { rollNumber: "asc" },
         });
