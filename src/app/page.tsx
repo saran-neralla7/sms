@@ -167,7 +167,9 @@ export default function Home() {
       }
 
       // If selected subject is ELECTIVE, we need to know student enrollments
-      const isElective = subjects.find(s => s.id === selectedSubjectId)?.type === "ELECTIVE";
+      const selectedSubject = subjects.find(s => s.id === selectedSubjectId);
+      const isElective = selectedSubject ? ["ELECTIVE", "PROFESSIONAL_ELECTIVE", "OPEN_ELECTIVE"].includes(selectedSubject.type) : false;
+
       if (isElective) {
         url += "&includeSubjects=true";
       }

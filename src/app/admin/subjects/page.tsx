@@ -240,7 +240,8 @@ export default function SubjectsPage() {
                                 <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
                                     <option value="THEORY">Theory</option>
                                     <option value="LAB">Lab</option>
-                                    <option value="ELECTIVE">Elective</option>
+                                    <option value="PROFESSIONAL_ELECTIVE">Professional Elective</option>
+                                    <option value="OPEN_ELECTIVE">Open Elective</option>
                                 </select>
                             </div>
                         </div>

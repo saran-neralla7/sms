@@ -54,8 +54,10 @@ export default function ElectivesPage() {
         const res = await fetch(`/api/subjects?departmentId=${departmentId}&year=${year}&semester=${semester}`);
         if (res.ok) {
             const allSubjects = await res.json();
-            // Filter only ELECTIVE subjects
-            setSubjects(allSubjects.filter((s: any) => s.type === "ELECTIVE"));
+            // Filter all ELECTIVE types
+            setSubjects(allSubjects.filter((s: any) =>
+                ["ELECTIVE", "PROFESSIONAL_ELECTIVE", "OPEN_ELECTIVE"].includes(s.type)
+            ));
         }
     };
 
