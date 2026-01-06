@@ -1027,7 +1027,7 @@ export default function ReportsPage() {
                                                             content = (
                                                                 <div className="group relative flex h-full w-full flex-col items-center justify-center py-2 cursor-pointer">
                                                                     <span className="font-bold text-slate-800 text-sm">{record.subject?.name || "Subject"}</span>
-                                                                    <span className="text-xs text-slate-600 font-medium mt-1">{present}/{total} Present</span>
+
 
                                                                     {/* Tooltip */}
                                                                     <div className="absolute bottom-full mb-2 hidden w-48 flex-col rounded-lg bg-slate-800 p-2 text-xs text-white shadow-xl group-hover:flex z-50">
@@ -1195,6 +1195,10 @@ export default function ReportsPage() {
                                             <span className="font-medium text-slate-900">
                                                 Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
                                             </span>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Subject</span>
+                                            <span className="font-medium text-slate-900">{viewRecord.subject?.name || "N/A"}</span>
                                         </div>
                                         <div className="col-span-2 my-2 border-t border-slate-200"></div>
                                         <div>

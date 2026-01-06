@@ -42,6 +42,7 @@ export async function GET(request: Request) {
             where: whereClause,
             include: {
                 section: true,
+                subject: true,
                 user: { select: { username: true } } // Show who downloaded it
             },
             orderBy: { date: 'desc' }
