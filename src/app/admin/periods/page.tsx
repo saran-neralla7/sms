@@ -112,6 +112,23 @@ export default function PeriodsPage() {
         setSelectedPeriod(null);
     };
 
+    const generateTimeSlots = () => {
+        const times = [];
+        const startHour = 7; // 7 AM
+        const endHour = 19; // 7 PM
+        for (let hour = startHour; hour <= endHour; hour++) {
+            for (let minute = 0; minute < 60; minute += 10) {
+                const period = hour >= 12 ? 'PM' : 'AM';
+                let displayHour = hour % 12;
+                if (displayHour === 0) displayHour = 12;
+
+                const displayMinute = minute.toString().padStart(2, '0');
+                times.push(`${displayHour.toString().padStart(2, '0')}:${displayMinute} ${period}`);
+            }
+        }
+        return times;
+    };
+
     return (
         <div className="mx-auto max-w-5xl p-6">
             <div className="mb-8 flex items-center justify-between">
@@ -183,25 +200,31 @@ export default function PeriodsPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="mb-1 block text-sm font-semibold text-slate-700">Start Time</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. 08:40 AM"
+                                <select
                                     value={startTime}
                                     onChange={(e) => setStartTime(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                     required
-                                />
+                                >
+                                    <option value="">Select Start Time</option>
+                                    {generateTimeSlots().map((time) => (
+                                        <option key={`start-${time}`} value={time}>{time}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="mb-1 block text-sm font-semibold text-slate-700">End Time</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. 09:30 AM"
+                                <select
                                     value={endTime}
                                     onChange={(e) => setEndTime(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                     required
-                                />
+                                >
+                                    <option value="">Select End Time</option>
+                                    {generateTimeSlots().map((time) => (
+                                        <option key={`end-${time}`} value={time}>{time}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                         <div>
