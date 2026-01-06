@@ -130,10 +130,30 @@ export default function ElectivesPage() {
         setEnrolledStudentIds(newSet);
     };
 
-    const filteredStudents = students.filter(s =>
-        s.name.toLowerCase().includes(search.toLowerCase()) ||
-        s.rollNumber.toLowerCase().includes(search.toLowerCase())
-    );
+    const [showEnrolledOnly, setShowEnrolledOnly] = useState(false);
+
+    // ... (fetch logic)
+
+    const handleSelectAll = () => {
+        // Only select from the CURRENTLY filtered view (to avoid selecting hidden students if safe)
+        // Or select ALL visible? 
+        // Best UX: Select all displayed students.
+        const newSet = new Set(enrolledStudentIds);
+        filteredStudents.forEach(s => newSet.add(s.id));
+        setEnrolledStudentIds(newSet);
+    };
+
+    const handleClearAll = () => {
+        if (!confirm("Are you sure you want to clear/delete the list of enrolled students?")) return;
+        setEnrolledStudentIds(new Set());
+    };
+
+    const filteredStudents = students.filter(s => {
+        const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
+            s.rollNumber.toLowerCase().includes(search.toLowerCase());
+        const matchesEnrollment = showEnrolledOnly ? enrolledStudentIds.has(s.id) : true;
+        return matchesSearch && matchesEnrollment;
+    });
 
     return (
         <div className="mx-auto max-w-7xl p-6 pb-32">
@@ -197,8 +217,8 @@ export default function ElectivesPage() {
                 <div className="py-20 text-center text-slate-500">Loading students...</div>
             ) : students.length > 0 ? (
                 <>
-                    <div className="mb-4 flex items-center justify-between">
-                        <div className="relative w-72">
+                    <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="relative w-full sm:w-72">
                             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="text"
@@ -208,15 +228,45 @@ export default function ElectivesPage() {
                                 className="w-full rounded-full border border-slate-200 py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
                             />
                         </div>
+
+                        <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                                <input
+                                    type="checkbox"
+                                    checked={showEnrolledOnly}
+                                    onChange={(e) => setShowEnrolledOnly(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                Show Enrolled Only
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className="mb-4 flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleSelectAll}
+                                className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                            >
+                                Select All
+                            </button>
+                            <span className="text-slate-300">|</span>
+                            <button
+                                onClick={handleClearAll}
+                                className="text-xs font-semibold text-red-600 hover:text-red-800"
+                            >
+                                Clear All (Delete List)
+                            </button>
+                        </div>
                         <div className="flex items-center gap-4">
                             <p className="text-sm font-medium text-slate-600">
-                                {enrolledStudentIds.size} Enrolled
+                                <span className="font-bold text-slate-900">{enrolledStudentIds.size}</span> Enrolled
                             </p>
                             <button
                                 onClick={handleSave}
-                                className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-2 text-sm font-bold text-white hover:bg-green-700"
+                                className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-2 text-sm font-bold text-white hover:bg-green-700 shadow-sm"
                             >
-                                <FaSave /> Save Enrollment
+                                <FaSave /> Save Changes
                             </button>
                         </div>
                     </div>
@@ -229,8 +279,8 @@ export default function ElectivesPage() {
                                     key={student.id}
                                     onClick={() => toggleEnrollment(student.id)}
                                     className={`cursor-pointer rounded-xl border p-4 transition-all ${isEnrolled
-                                            ? "border-green-200 bg-green-50 ring-1 ring-green-500"
-                                            : "border-slate-200 bg-white hover:border-blue-300"
+                                        ? "border-green-200 bg-green-50 ring-1 ring-green-500"
+                                        : "border-slate-200 bg-white hover:border-blue-300"
                                         }`}
                                 >
                                     <div className="flex items-start justify-between">
