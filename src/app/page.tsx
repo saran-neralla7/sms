@@ -552,7 +552,7 @@ export default function Home() {
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                         }`}
                     >
-                      {p.name}
+                      {p.name} <span className="text-[10px] text-slate-500 block">({p.startTime} - {p.endTime})</span>
                     </button>
                   );
                 })}
