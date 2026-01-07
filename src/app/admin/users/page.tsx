@@ -16,6 +16,8 @@ export default function AdminUsersPage() {
     // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState<User | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isBulkDeleteMode, setIsBulkDeleteMode] = useState(false);
 
     const [formData, setFormData] = useState({
         username: "",
@@ -117,6 +119,48 @@ export default function AdminUsersPage() {
         }
     };
 
+    const handleBulkDelete = async () => {
+        setStatus({ type: null, message: "" });
+        try {
+            const idsToDelete = Array.from(selectedIds);
+            const res = await fetch(`/api/users`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids: idsToDelete }),
+            });
+
+            if (res.ok) {
+                setUsers(prev => prev.filter(u => !selectedIds.has(u.id)));
+                setSelectedIds(new Set());
+                setStatus({ type: "success", message: "Users deleted successfully" });
+                setTimeout(() => setStatus({ type: null, message: "" }), 3000);
+            } else {
+                const data = await res.json();
+                setStatus({ type: "error", message: data.error || "Failed to delete users" });
+            }
+        } catch (error) {
+            console.error(error);
+            setStatus({ type: "error", message: "An error occurred while deleting users" });
+        }
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === users.length) {
+            setSelectedIds(new Set());
+        } else {
+            const allIds = new Set(users.map(u => u.id));
+            if (session?.user?.id) allIds.delete(session.user.id); // Exclude self
+            setSelectedIds(allIds);
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
     const openAddModal = () => {
         setEditingUser(null);
         setFormData({ username: "", password: "", role: "USER", departmentId: "" });
@@ -146,12 +190,25 @@ export default function AdminUsersPage() {
                         <p className="text-sm text-slate-500">Manage system access and roles.</p>
                     </div>
                 </div>
-                <button
-                    onClick={openAddModal}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
-                >
-                    <FaUserPlus /> Add User
-                </button>
+                <div className="flex items-center gap-2">
+                    {selectedIds.size > 0 && (
+                        <button
+                            onClick={() => {
+                                setIsBulkDeleteMode(true);
+                                setIsDeleteModalOpen(true);
+                            }}
+                            className="flex items-center gap-2 rounded-lg bg-red-50 text-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-100 transition-colors border border-red-200"
+                        >
+                            <FaTrash /> Delete Selected ({selectedIds.size})
+                        </button>
+                    )}
+                    <button
+                        onClick={openAddModal}
+                        className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                    >
+                        <FaUserPlus /> Add User
+                    </button>
+                </div>
             </div>
 
             {status.message && !isModalOpen && !isDeleteModalOpen && (
@@ -166,6 +223,14 @@ export default function AdminUsersPage() {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/50">
+                                <th className="px-6 py-4 w-4">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.size > 0 && selectedIds.size === users.filter(u => u.id !== session?.user?.id).length}
+                                        onChange={toggleSelectAll}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                </th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Username</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Role</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>
@@ -174,6 +239,15 @@ export default function AdminUsersPage() {
                         <tbody className="divide-y divide-slate-100">
                             {users.map((user) => (
                                 <tr key={user.id} className="group hover:bg-slate-50/80 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(user.id)}
+                                            onChange={() => toggleSelect(user.id)}
+                                            disabled={user.id === session?.user?.id}
+                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                        />
+                                    </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
                                         {user.username}
                                     </td>
@@ -308,13 +382,19 @@ export default function AdminUsersPage() {
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={() => {
-                    if (userToDelete) {
+                    if (isBulkDeleteMode) {
+                        handleBulkDelete();
+                        setIsBulkDeleteMode(false);
+                        setIsDeleteModalOpen(false);
+                    } else if (userToDelete) {
                         handleDelete(userToDelete.id, userToDelete.username);
                         setIsDeleteModalOpen(false);
                     }
                 }}
-                title="Delete User"
-                message={`Are you sure you want to delete ${userToDelete?.username}?`}
+                title={isBulkDeleteMode ? "Delete Users" : "Delete User"}
+                message={isBulkDeleteMode
+                    ? `Are you sure you want to delete ${selectedIds.size} users? This action cannot be undone.`
+                    : `Are you sure you want to delete ${userToDelete?.username}?`}
                 confirmText="Delete"
                 isDangerous={true}
             />
