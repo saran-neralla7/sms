@@ -23,6 +23,8 @@ export default function Home() {
   const [subjects, setSubjects] = useState<any[]>([]);
 
   const [selectedPeriodId, setSelectedPeriodId] = useState("");
+  const [selectedPeriodIds, setSelectedPeriodIds] = useState<Set<string>>(new Set());
+  const [isMultiHour, setIsMultiHour] = useState(false);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [attendanceStatus, setAttendanceStatus] = useState<{ checked: boolean; exists: boolean; message?: string }>({ checked: false, exists: false });
 
@@ -224,7 +226,16 @@ export default function Home() {
       return;
     }
 
-    if (selectedPeriodId && !selectedSubjectId) {
+    // Logic for Single vs Multi Period Validation
+    if (!isMultiHour && selectedPeriodId && !selectedSubjectId) {
+      alert("Please select a Subject.");
+      return;
+    }
+    if (isMultiHour && selectedPeriodIds.size === 0) {
+      alert("Please select at least one period for multi-hour session.");
+      return;
+    }
+    if (isMultiHour && !selectedSubjectId) {
       alert("Please select a Subject.");
       return;
     }
@@ -290,6 +301,12 @@ export default function Home() {
           };
         });
 
+
+        // Determine Period IDs to send
+        const periodIdsToSend = isMultiHour
+          ? Array.from(selectedPeriodIds)
+          : (selectedPeriodId ? [selectedPeriodId] : []);
+
         await fetch("/api/attendance/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -305,7 +322,7 @@ export default function Home() {
 
             // New Fields
             subjectId: selectedSubjectId || undefined,
-            periodId: selectedPeriodId || undefined
+            periodIds: periodIdsToSend
           }),
         });
       }
@@ -488,20 +505,65 @@ export default function Home() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700">Period / Hour</label>
-            <select
-              value={selectedPeriodId}
-              onChange={(e) => setSelectedPeriodId(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-            >
-              <option value="">Select Period</option>
-              {periods.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.startTime} - {p.endTime})</option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-slate-700">Period / Hour</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="multiHourToggle"
+                  checked={isMultiHour}
+                  onChange={(e) => {
+                    setIsMultiHour(e.target.checked);
+                    setSelectedPeriodId("");
+                    setSelectedPeriodIds(new Set());
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="multiHourToggle" className="text-xs text-slate-500 cursor-pointer select-none">Multi-Hour</label>
+              </div>
+            </div>
+
+            {!isMultiHour ? (
+              <select
+                value={selectedPeriodId}
+                onChange={(e) => setSelectedPeriodId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+              >
+                <option value="">Select Period</option>
+                {periods.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.startTime} - {p.endTime})</option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {periods.map((p) => {
+                  const isSelected = selectedPeriodIds.has(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        const newSet = new Set(selectedPeriodIds);
+                        if (newSet.has(p.id)) newSet.delete(p.id);
+                        else newSet.add(p.id);
+                        setSelectedPeriodIds(newSet);
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${isSelected
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                        }`}
+                    >
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {isMultiHour && selectedPeriodIds.size === 0 && <p className="text-xs text-slate-400">Select hours</p>}
           </div>
 
-          {!attendanceStatus.exists && selectedPeriodId && (
+          {/* Show Subject only if periods selected (logic handled below) */}
+
+          {!attendanceStatus.exists && (selectedPeriodId || selectedPeriodIds.size > 0) && (
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Subject</label>
               <select

@@ -1002,8 +1002,24 @@ export default function ReportsPage() {
                                                             <span className="text-xs font-normal text-slate-400">{day.toLocaleDateString()}</span>
                                                         </div>
                                                     </td>
-                                                    {periods.map(p => {
+                                                    {periods.map((p, index) => {
                                                         const record = dayData[p.id];
+
+                                                        // Helper: Check if previous period had SAME subject to decide if we hide this cell
+                                                        if (index > 0) {
+                                                            const prevRecord = dayData[periods[index - 1].id];
+                                                            if (record && prevRecord && record.subjectId === prevRecord.subjectId) return null;
+                                                        }
+
+                                                        // Helper: Calculate colSpan for lookahead
+                                                        let colSpan = 1;
+                                                        if (record) {
+                                                            for (let i = index + 1; i < periods.length; i++) {
+                                                                if (dayData[periods[i].id]?.subjectId === record.subjectId) colSpan++;
+                                                                else break;
+                                                            }
+                                                        }
+
                                                         let content = <span className="text-xs text-slate-300 italic">No Class</span>;
                                                         let bgStyle = {};
 
@@ -1032,6 +1048,7 @@ export default function ReportsPage() {
                                                                     {/* Tooltip */}
                                                                     <div className="absolute bottom-full mb-2 hidden w-48 flex-col rounded-lg bg-slate-800 p-2 text-xs text-white shadow-xl group-hover:flex z-50">
                                                                         <div className="font-bold mb-1 border-b border-slate-600 pb-1">{record.subject?.name}</div>
+                                                                        {colSpan > 1 && <div className="mb-1 text-[10px] text-green-400 font-bold uppercase tracking-wider">{colSpan}-Hour Session</div>}
                                                                         <div className="flex justify-between"><span>Total:</span> <span>{total}</span></div>
                                                                         <div className="flex justify-between text-green-300"><span>Present:</span> <span>{present} ({Math.round(presentPct)}%)</span></div>
                                                                         <div className="flex justify-between text-red-300"><span>Absent:</span> <span>{absent}</span></div>
@@ -1046,7 +1063,8 @@ export default function ReportsPage() {
                                                         return (
                                                             <td
                                                                 key={p.id}
-                                                                className="h-24 p-0 align-middle transition-all relative"
+                                                                colSpan={colSpan}
+                                                                className="h-24 p-0 align-middle transition-all relative border-r border-b"
                                                                 style={bgStyle}
                                                                 onClick={() => record && handleView(record)}
                                                             >

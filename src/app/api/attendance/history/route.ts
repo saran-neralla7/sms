@@ -61,24 +61,54 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const history = await prisma.attendanceHistory.create({
-            data: {
-                year: String(body.year),
-                semester: String(body.semester),
-                sectionId: String(body.sectionId || body.section),
-                departmentId: String(body.departmentId || body.department),
-                status: body.status,
-                fileName: body.fileName,
-                date: body.date,
-                details: body.details || "[]",
-                downloadedBy: session.user.id,
 
-                // New Fields (Optional)
-                subjectId: body.subjectId || undefined,
-                periodId: body.periodId || undefined,
-            },
-        });
-        return NextResponse.json(history);
+        // Normalize periodIds: Use array if provided, otherwise fallback to single periodId
+        const periodIds: string[] = body.periodIds && body.periodIds.length > 0
+            ? body.periodIds
+            : (body.periodId ? [body.periodId] : []);
+
+        if (periodIds.length === 0) {
+            // Fallback for cases where neither is provided (shouldn't happen with correct frontend) or non-period based attendance
+            const history = await prisma.attendanceHistory.create({
+                data: {
+                    year: String(body.year),
+                    semester: String(body.semester),
+                    sectionId: String(body.sectionId || body.section),
+                    departmentId: String(body.departmentId || body.department),
+                    status: body.status,
+                    fileName: body.fileName,
+                    date: body.date,
+                    details: body.details || "[]",
+                    downloadedBy: session.user.id,
+                    subjectId: body.subjectId || undefined,
+                    periodId: undefined,
+                },
+            });
+            return NextResponse.json(history);
+        }
+
+        // Transactional creation for multiple periods
+        const createdRecords = await prisma.$transaction(
+            periodIds.map((pid) =>
+                prisma.attendanceHistory.create({
+                    data: {
+                        year: String(body.year),
+                        semester: String(body.semester),
+                        sectionId: String(body.sectionId || body.section),
+                        departmentId: String(body.departmentId || body.department),
+                        status: body.status,
+                        fileName: body.fileName,
+                        date: body.date,
+                        details: body.details || "[]",
+                        downloadedBy: session.user.id,
+                        subjectId: body.subjectId || undefined,
+                        periodId: pid,
+                    },
+                })
+            )
+        );
+
+        return NextResponse.json(createdRecords[0]); // Return first record as success indicator
     } catch (error) {
         return NextResponse.json({ error: "Failed to log history" }, { status: 500 });
     }
