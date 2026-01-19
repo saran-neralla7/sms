@@ -16,6 +16,9 @@ export default function StudentsPage() {
 
     // Profile View State
     const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+    const [viewingTab, setViewingTab] = useState<"details" | "attendance">("details");
+    const [attendanceStats, setAttendanceStats] = useState<any>(null);
+    const [statsLoading, setStatsLoading] = useState(false);
 
     // Photo Upload State
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -419,6 +422,29 @@ export default function StudentsPage() {
         XLSX.writeFile(wb, "student_import_template.xlsx");
     };
 
+    const fetchStudentStats = async (studentId: string) => {
+        setStatsLoading(true);
+        try {
+            const res = await fetch(`/api/students/${studentId}/stats`);
+            if (res.ok) {
+                const data = await res.json();
+                setAttendanceStats(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch stats", error);
+        } finally {
+            setStatsLoading(false);
+        }
+    };
+
+    // Reset tabs when closing
+    useEffect(() => {
+        if (!viewingStudent) {
+            setViewingTab("details");
+            setAttendanceStats(null);
+        }
+    }, [viewingStudent]);
+
     const exportData = () => {
         const data = students.map(s => ({
             "Roll Number": s.rollNumber,
@@ -434,6 +460,7 @@ export default function StudentsPage() {
         XLSX.utils.book_append_sheet(wb, ws, "Students");
         XLSX.writeFile(wb, `students_export_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
+
 
     return (
         <div className="mx-auto max-w-7xl">
@@ -844,41 +871,122 @@ export default function StudentsPage() {
                             <h2 className="text-3xl font-bold text-slate-900 mb-2">{viewingStudent.name}</h2>
                             <p className="text-xl font-mono text-slate-500 mb-8">{viewingStudent.rollNumber}</p>
 
-                            <div className="space-y-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                                        <FaLayerGroup size={20} />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-500">Class</p>
-                                        <p className="font-semibold text-slate-900">
-                                            {viewingStudent.year} Year - {viewingStudent.semester} Sem ({typeof viewingStudent.section === 'object' ? (viewingStudent.section as any)?.name : viewingStudent.section})
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                                        <FaBuilding size={20} />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-500">Department</p>
-                                        <p className="font-semibold text-slate-900">
-                                            {typeof viewingStudent.department === 'object' ? (viewingStudent.department as any)?.name : viewingStudent.department}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600">
-                                        <FaPhone size={20} />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-500">Mobile Number</p>
-                                        <p className="font-semibold text-slate-900">{viewingStudent.mobile}</p>
-                                    </div>
-                                </div>
+                            {/* Tabs */}
+                            <div className="flex border-b border-slate-200 mb-6">
+                                <button
+                                    onClick={() => setViewingTab("details")}
+                                    className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${viewingTab === "details" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                                >
+                                    Details
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setViewingTab("attendance");
+                                        if (!attendanceStats) fetchStudentStats(viewingStudent.id);
+                                    }}
+                                    className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${viewingTab === "attendance" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                                >
+                                    Attendance
+                                </button>
                             </div>
+
+                            {viewingTab === "details" ? (
+                                <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                                            <FaLayerGroup size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-500">Class</p>
+                                            <p className="font-semibold text-slate-900">
+                                                {viewingStudent.year} Year - {viewingStudent.semester} Sem ({typeof viewingStudent.section === 'object' ? (viewingStudent.section as any)?.name : viewingStudent.section})
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                            <FaBuilding size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-500">Department</p>
+                                            <p className="font-semibold text-slate-900">
+                                                {typeof viewingStudent.department === 'object' ? (viewingStudent.department as any)?.name : viewingStudent.department}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                                            <FaPhone size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-500">Mobile Number</p>
+                                            <p className="font-semibold text-slate-900">{viewingStudent.mobile}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
+                                    {statsLoading ? (
+                                        <div className="flex justify-center py-8">
+                                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>
+                                        </div>
+                                    ) : attendanceStats ? (
+                                        <>
+                                            {/* Overall Stats */}
+                                            <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
+                                                <div className="flex justify-between items-end mb-2">
+                                                    <div>
+                                                        <p className="text-sm font-medium text-slate-500">Overall Attendance</p>
+                                                        <p className="text-2xl font-bold text-slate-900">{attendanceStats.overall.percentage}%</p>
+                                                    </div>
+                                                    <p className="text-sm text-slate-500 font-mono">
+                                                        {attendanceStats.overall.attended} / {attendanceStats.overall.total} Classes
+                                                    </p>
+                                                </div>
+                                                <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full transition-all duration-500 ${attendanceStats.overall.percentage >= 75 ? "bg-green-500" : attendanceStats.overall.percentage >= 65 ? "bg-yellow-500" : "bg-red-500"}`}
+                                                        style={{ width: `${attendanceStats.overall.percentage}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+
+                                            {/* Subject List */}
+                                            <div className="max-h-[300px] overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
+                                                {attendanceStats.subjects.map((sub: any) => (
+                                                    <div key={sub.id} className="flex flex-col gap-2 rounded-lg border border-slate-100 p-3 hover:bg-slate-50 transition-colors">
+                                                        <div className="flex justify-between items-center">
+                                                            <p className="font-semibold text-slate-700 text-sm truncate max-w-[200px]" title={sub.name}>{sub.name}</p>
+                                                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sub.percentage >= 75 ? "bg-green-100 text-green-700" :
+                                                                sub.percentage >= 65 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
+                                                                }`}>
+                                                                {sub.percentage}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between text-xs text-slate-500">
+                                                            <span>Attendance</span>
+                                                            <span className="font-mono">{sub.attended} / {sub.total}</span>
+                                                        </div>
+                                                        <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full ${sub.percentage >= 75 ? "bg-green-500" : sub.percentage >= 65 ? "bg-yellow-500" : "bg-red-500"}`}
+                                                                style={{ width: `${sub.percentage}%` }}
+                                                            ></div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {attendanceStats.subjects.length === 0 && (
+                                                    <p className="text-center text-sm text-slate-400 py-4">No subjects found for this class.</p>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <p className="text-center text-red-500">Failed to load stats.</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
