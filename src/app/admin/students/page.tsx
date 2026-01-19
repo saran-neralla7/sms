@@ -16,9 +16,13 @@ export default function StudentsPage() {
 
     // Profile View State
     const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
-    const [viewingTab, setViewingTab] = useState<"details" | "attendance">("details");
+    const [viewingTab, setViewingTab] = useState<"details" | "attendance" | "results">("details");
     const [attendanceStats, setAttendanceStats] = useState<any>(null);
     const [statsLoading, setStatsLoading] = useState(false);
+
+    // Results State
+    const [studentResults, setStudentResults] = useState<any[]>([]);
+    const [resultsLoading, setResultsLoading] = useState(false);
 
     // Stats Date Filter
     const [statsDateRange, setStatsDateRange] = useState({ start: "", end: "" });
@@ -448,12 +452,22 @@ export default function StudentsPage() {
         }
     };
 
+    const fetchStudentResults = async (studentId: string) => {
+        setResultsLoading(true);
+        try {
+            const res = await fetch(`/api/results?studentId=${studentId}`);
+            if (res.ok) setStudentResults(await res.json());
+        } catch (e) { console.error(e); }
+        finally { setResultsLoading(false); }
+    };
+
     // Reset tabs when closing
     useEffect(() => {
         if (!viewingStudent) {
             setViewingTab("details");
             setAttendanceStats(null);
             setStatsDateRange({ start: "", end: "" });
+            setStudentResults([]); // Reset results
         }
     }, [viewingStudent]);
 
@@ -909,9 +923,18 @@ export default function StudentsPage() {
                                 >
                                     Attendance
                                 </button>
+                                <button
+                                    onClick={() => {
+                                        setViewingTab("results");
+                                        if (studentResults.length === 0) fetchStudentResults(viewingStudent.id);
+                                    }}
+                                    className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${viewingTab === "results" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                                >
+                                    Results
+                                </button>
                             </div>
 
-                            {viewingTab === "details" ? (
+                            {viewingTab === "details" && (
                                 <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
                                     <div className="flex items-center gap-4">
                                         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
@@ -947,7 +970,9 @@ export default function StudentsPage() {
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
+                            )}
+
+                            {viewingTab === "attendance" && (
                                 <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
                                     {/* Date Range Filter */}
                                     <div className="flex gap-4">
@@ -1030,11 +1055,58 @@ export default function StudentsPage() {
                                     )}
                                 </div>
                             )}
+
+                            {viewingTab === "results" && (
+                                <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
+                                    {resultsLoading ? (
+                                        <div className="flex justify-center py-8">
+                                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>
+                                        </div>
+                                    ) : studentResults.length === 0 ? (
+                                        <p className="text-center text-slate-500 py-8">No results found.</p>
+                                    ) : (
+                                        <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                            {studentResults.map((semResult: any) => (
+                                                <div key={semResult.id} className="rounded-xl border border-slate-200 overflow-hidden">
+                                                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                                                        <h4 className="font-semibold text-slate-800">
+                                                            Year {semResult.year} - Sem {semResult.semester}
+                                                        </h4>
+                                                        <div className="flex gap-2">
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                                                                SGPA: {semResult.sgpa}
+                                                            </span>
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-xs font-bold text-purple-700">
+                                                                CGPA: {semResult.cgpa}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <table className="w-full text-left text-sm">
+                                                        <thead className="bg-white text-slate-500 border-b border-slate-100">
+                                                            <tr>
+                                                                <th className="px-4 py-2 font-medium">Subject Code</th>
+                                                                <th className="px-4 py-2 font-medium text-right">Grade</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-50">
+                                                            {(semResult.grades as any[]).map((g: any, i: number) => (
+                                                                <tr key={i}>
+                                                                    <td className="px-4 py-2 text-slate-700">{g.subjectCode}</td>
+                                                                    <td className="px-4 py-2 text-right font-bold text-slate-900">{g.grade}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
-            )
-            }
+            )}
 
             {/* Photo Upload Results Modal */}
             <Modal
@@ -1089,6 +1161,6 @@ export default function StudentsPage() {
                     )}
                 </div>
             </Modal>
-        </div>
+        </div >
     );
 }

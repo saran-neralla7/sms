@@ -67,6 +67,26 @@ model Student {
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  results    SemesterResult[]
+}
+
+model SemesterResult {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  
+  year      String   // "1", "2"
+  semester  String   // "1", "2"
+  
+  sgpa      String   // "9.5", "Failed"
+  cgpa      String   // "8.9"
+  
+  grades    Json     // [{ subjectCode: "CS101", subjectName: "Java", grade: "O" }]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, year, semester])
 }
 
 
