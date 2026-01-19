@@ -97,7 +97,7 @@ export default function StudentsPage() {
             const query = new URLSearchParams();
             if (year) query.set("year", year);
             if (semester) query.set("semester", semester);
-            if (section) query.set("section", section); // This uses name (A,B,C)
+            if (section) query.set("sectionId", section);
             // Note: API might prefer sectionId but legacy uses name for filter? 
             // Actually API lines 26 check sectionId. But line 15 param is 'section'.
             // The existing code sends 'section' (A, B..). API logic at line 15 handles it potentially (though snippet was vague).
