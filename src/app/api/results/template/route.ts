@@ -22,24 +22,20 @@ export async function GET(request: Request) {
 
     try {
         // 1. Fetch Subjects for the EXAM Context (Result Year/Sem)
-        const subjects = await prisma.subject.findMany({
-            where: {
-                departmentId,
-                year,
-                semester
-            },
-            select: { code: true, name: true },
+        const allSubjects = await prisma.subject.findMany({
+            where: { departmentId, year, semester },
+            select: { code: true, name: true, isElective: true },
             orderBy: { code: 'asc' }
         });
 
+        const coreSubjects = allSubjects.filter(s => !s.isElective);
+        const hasElectives = allSubjects.some(s => s.isElective);
+
         // 2. Fetch Students
-        // If studentYear is provided, we fetch students currently in that year.
-        // Otherwise, we assume the student's current year matches the exam year.
         const whereStudent: any = {
             departmentId,
             year: studentYear || year,
         };
-
         if (targetSectionIds.length > 0) {
             whereStudent.sectionId = { in: targetSectionIds };
         }
@@ -47,6 +43,7 @@ export async function GET(request: Request) {
         const students = await prisma.student.findMany({
             where: whereStudent,
             include: {
+                subjects: true, // Fetch allocated subjects (for identifying their elective)
                 results: {
                     where: { year, semester } // Results for the specific EXAM year/sem
                 }
@@ -56,7 +53,7 @@ export async function GET(request: Request) {
 
         // 3. Construct Data Rows
         const rows = students.map(student => {
-            const result = student.results[0]; // Should be only one for this year/sem
+            const result = student.results[0];
             const grades = (result?.grades as any[]) || [];
 
             const row: any = {
@@ -66,17 +63,37 @@ export async function GET(request: Request) {
                 "CGPA": result?.cgpa || ""
             };
 
-            // Pre-fill grades if they exist
-            subjects.forEach(sub => {
+            // Process Core Subjects
+            coreSubjects.forEach(sub => {
                 const gradeEntry = grades.find(g => g.subjectCode === sub.code);
-                row[sub.code] = gradeEntry ? gradeEntry.grade : "";
+                // Header Format: "Code - Name"
+                row[`${sub.code} - ${sub.name}`] = gradeEntry ? gradeEntry.grade : "";
             });
+
+            // Process Generic Elective Column
+            if (hasElectives) {
+                // Find which elective subject this student is taking
+                const studentElective = student.subjects.find(s =>
+                    allSubjects.some(asm => asm.isElective && asm.code === s.code)
+                );
+
+                if (studentElective) {
+                    const gradeEntry = grades.find(g => g.subjectCode === studentElective.code);
+                    row["ELECTIVE"] = gradeEntry ? gradeEntry.grade : "";
+                } else {
+                    row["ELECTIVE"] = "";
+                }
+            }
 
             return row;
         });
 
+        // Construct Headers
+        const subjectHeaders = coreSubjects.map(s => `${s.code} - ${s.name}`);
+        if (hasElectives) subjectHeaders.push("ELECTIVE");
+
         return NextResponse.json({
-            subjects: subjects.map(s => s.code),
+            subjects: subjectHeaders,
             rows
         });
 

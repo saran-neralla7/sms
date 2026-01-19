@@ -62,17 +62,54 @@ export async function POST(request: Request) {
         for (const res of results) {
             // 1. Find Student by Roll Number (if provided) or ID
             let studentId = res.studentId;
-            if (!studentId && res.rollNumber) {
-                const student = await prisma.student.findUnique({
-                    where: { rollNumber: String(res.rollNumber) }
+            let studentData = null;
+
+            if (res.rollNumber) {
+                studentData = await prisma.student.findUnique({
+                    where: { rollNumber: String(res.rollNumber) },
+                    include: { subjects: true } // Need this to resolve "ELECTIVE"
                 });
-                if (student) studentId = student.id;
+                if (studentData) studentId = studentData.id;
+            } else if (studentId) {
+                // Even if we have ID, we might need subjects if "ELECTIVE" is used
+                studentData = await prisma.student.findUnique({
+                    where: { id: studentId },
+                    include: { subjects: true }
+                });
             }
 
-            if (!studentId) {
+            if (!studentId || !studentData) {
                 errors.push({ ...res, error: "Student not found" });
                 continue;
             }
+
+            // 1.5 Process Grades (Handle "ELECTIVE" column and "Code - Name" format)
+            const processedGrades = (res.grades || []).map((g: any) => {
+                let code = g.subjectCode;
+
+                // Handle "Code - Name" format
+                if (code.includes(" - ")) {
+                    code = code.split(" - ")[0].trim();
+                }
+
+                // Handle "ELECTIVE" placeholder
+                if (code === "ELECTIVE") {
+                    // Find the elective subject this student is enrolled in for this Year/Sem
+                    const actualSubject = studentData?.subjects.find(s =>
+                        s.year === String(res.year) && s.semester === String(res.semester) && s.isElective
+                    );
+
+                    if (actualSubject) {
+                        code = actualSubject.code;
+                    } else {
+                        // If we can't find an allocated elective, we unfortunately can't assign this grade.
+                        // We'll keep it as "ELECTIVE" which might be saved but won't match any subject in UI.
+                        // Or we could log a warning.
+                    }
+                }
+
+                return { ...g, subjectCode: code };
+            });
 
             // 2. Upsert Result
             try {
