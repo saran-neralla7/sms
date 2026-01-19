@@ -84,8 +84,12 @@ export default function StudentsPage() {
     };
 
     const fetchSections = async () => {
+        let url = "/api/sections";
+        if (filterDepartmentId) {
+            url += `?departmentId=${filterDepartmentId}`;
+        }
         try {
-            const res = await fetch("/api/sections");
+            const res = await fetch(url);
             if (res.ok) setSections(await res.json());
         } catch (e) { console.error(e); }
     };
@@ -571,10 +575,9 @@ export default function StudentsPage() {
                 </select>
                 <select value={section} onChange={(e) => setSection(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
                     <option value="">All Sections</option>
-                    <option value="A">Section A</option>
-                    <option value="B">Section B</option>
-                    <option value="C">Section C</option>
-                    <option value="D">Section D</option>
+                    {sections.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
                 </select>
             </div>
 
