@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Student } from "@/types";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
-import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate } from "react-icons/fa";
+import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { useSession } from "next-auth/react";
 
@@ -13,6 +13,19 @@ export default function StudentsPage() {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+    // Profile View State
+    const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+
+    // Photo Upload State
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState<{
+        loading: boolean;
+        results: any[];
+        successCount: number;
+        failCount: number;
+    }>({ loading: false, results: [], successCount: 0, failCount: 0 });
+
 
     // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -348,6 +361,43 @@ export default function StudentsPage() {
         }, 100);
     };
 
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setUploadStatus({ loading: true, results: [], successCount: 0, failCount: 0 });
+        setIsUploadModalOpen(true);
+
+        const formData = new FormData();
+        Array.from(files).forEach((file) => {
+            formData.append("files", file);
+        });
+
+        try {
+            const res = await fetch("/api/students/upload", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setUploadStatus({
+                    loading: false,
+                    results: data.results || [],
+                    successCount: data.successCount || 0,
+                    failCount: data.failCount || 0
+                });
+                fetchStudents();
+            } else {
+                setUploadStatus({ loading: false, results: [{ status: "error", message: "Upload failed" }], successCount: 0, failCount: 1 });
+            }
+        } catch (error) {
+            console.error(error);
+            setUploadStatus({ loading: false, results: [{ status: "error", message: "Network error" }], successCount: 0, failCount: 1 });
+        }
+    };
+
+
     const downloadSample = () => {
         const headers = [
             { "Roll Number": "21131A0501", "Name": "John Doe", "Mobile": "9876543210", "Year": "1", "Semester": "1", "Section": "A", "Department": "CSE" }
@@ -402,6 +452,13 @@ export default function StudentsPage() {
                         <FaFileImport className="text-slate-400" />
                         Sample CSV
                     </button>
+                    {(session?.user as any)?.role === "ADMIN" && (
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
+                            <FaCamera className="text-purple-500" />
+                            Upload Photos
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
+                        </label>
+                    )}
                     <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
                         <FaFileImport className="text-blue-500" />
                         Import
@@ -497,7 +554,13 @@ export default function StudentsPage() {
                                             />
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-slate-600">{student.rollNumber}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{student.name}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-slate-600">{student.rollNumber}</td>
+                                        <td
+                                            className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600 cursor-pointer hover:underline"
+                                            onClick={() => setViewingStudent(student)}
+                                        >
+                                            {student.name}
+                                        </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
                                             {student.year}-{student.semester} ({typeof student.section === 'object' ? (student.section as any)?.name : student.section})
                                         </td>
@@ -731,6 +794,132 @@ export default function StudentsPage() {
                                 </button>
                             </div>
                         </div>
+                    )}
+                </div>
+            </Modal>
+            {/* Profile View Modal */}
+            {viewingStudent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setViewingStudent(null)}>
+                    <div
+                        className="relative w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col md:flex-row"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={() => setViewingStudent(null)}
+                            className="absolute right-4 top-4 z-10 rounded-full bg-black/10 p-2 text-slate-500 backdrop-blur-md transition-colors hover:bg-black/20 hover:text-slate-800"
+                        >
+                            <FaTimes size={20} />
+                        </button>
+
+                        {/* Left: Photo */}
+                        <div className="md:w-1/2 bg-slate-100 flex items-center justify-center p-8 border-r border-slate-200 text-center">
+                            <img
+                                src={viewingStudent.photoUrl || "/default-avatar.png"}
+                                alt={viewingStudent.name}
+                                className="max-h-[500px] w-full object-contain rounded-lg shadow-lg cursor-zoom-in hover:scale-105 transition-transform"
+                                onClick={() => window.open(viewingStudent.photoUrl || "/default-avatar.png", "_blank")}
+                            />
+                        </div>
+
+                        {/* Right: Details */}
+                        <div className="md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
+                            <div className="mb-2">
+                                <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">Student</span>
+                            </div>
+                            <h2 className="text-3xl font-bold text-slate-900 mb-2">{viewingStudent.name}</h2>
+                            <p className="text-xl font-mono text-slate-500 mb-8">{viewingStudent.rollNumber}</p>
+
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                                        <FaLayerGroup size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">Class</p>
+                                        <p className="font-semibold text-slate-900">
+                                            {viewingStudent.year} Year - {viewingStudent.semester} Sem ({typeof viewingStudent.section === 'object' ? (viewingStudent.section as any)?.name : viewingStudent.section})
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                        <FaBuilding size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">Department</p>
+                                        <p className="font-semibold text-slate-900">
+                                            {typeof viewingStudent.department === 'object' ? (viewingStudent.department as any)?.name : viewingStudent.department}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                                        <FaPhone size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">Mobile Number</p>
+                                        <p className="font-semibold text-slate-900">{viewingStudent.mobile}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )
+            }
+
+            {/* Photo Upload Results Modal */}
+            <Modal
+                isOpen={isUploadModalOpen}
+                onClose={() => !uploadStatus.loading && setIsUploadModalOpen(false)}
+                title="Photo Upload Results"
+            >
+                <div className="space-y-4">
+                    {uploadStatus.loading ? (
+                        <div className="flex flex-col items-center py-8">
+                            <div className="h-10 w-10 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600 mb-4"></div>
+                            <p className="text-slate-600">Uploading photos...</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="flex gap-4">
+                                <div className="flex-1 rounded-lg bg-green-50 p-4 text-center border border-green-100">
+                                    <p className="text-2xl font-bold text-green-600">{uploadStatus.successCount}</p>
+                                    <p className="text-sm font-medium text-green-800">Success</p>
+                                </div>
+                                <div className="flex-1 rounded-lg bg-red-50 p-4 text-center border border-red-100">
+                                    <p className="text-2xl font-bold text-red-600">{uploadStatus.failCount}</p>
+                                    <p className="text-sm font-medium text-red-800">Failed</p>
+                                </div>
+                            </div>
+
+                            {uploadStatus.results.length > 0 && (
+                                <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                                    <ul className="space-y-1">
+                                        {uploadStatus.results.map((res: any, idx: number) => (
+                                            <li key={idx} className={`flex justify-between ${res.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                                <span>{res.file}</span>
+                                                <span>{res.status === 'success' ? '✓' : `✗ ${res.message || ''}`}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end pt-2">
+                                <button
+                                    onClick={() => {
+                                        setIsUploadModalOpen(false);
+                                        setUploadStatus({ loading: false, results: [], successCount: 0, failCount: 0 });
+                                    }}
+                                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
             </Modal>

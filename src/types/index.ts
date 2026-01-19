@@ -22,6 +22,7 @@ export interface Student {
 
     departmentId: string;
     department?: Department; // Relation
+    photoUrl?: string; // Optional URL
 }
 
 export interface User {

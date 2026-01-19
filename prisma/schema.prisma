@@ -63,6 +63,8 @@ model Student {
 
   subjects     Subject[] // Many-to-Many for Electives
 
+  photoUrl     String? // URL or Path to student photo
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
