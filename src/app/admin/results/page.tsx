@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { FaFileUpload, FaDownload, FaFilter, FaSearch, FaExclamationTriangle } from "react-icons/fa";
+import { FaFileUpload, FaDownload, FaFilter, FaSearch, FaExclamationTriangle, FaTimes, FaCheckSquare, FaSquare } from "react-icons/fa";
 
 export default function ResultsPage() {
     const { data: session } = useSession();
@@ -15,6 +15,24 @@ export default function ResultsPage() {
     const [semester, setSemester] = useState("");
     const [departmentId, setDepartmentId] = useState("");
     const [departments, setDepartments] = useState<any[]>([]);
+
+    // Template Modal State
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [isPastResults, setIsPastResults] = useState(false);
+    const [templateCtx, setTemplateCtx] = useState({
+        departmentId: "", year: "", semester: "", studentYear: "", sectionIds: [] as string[]
+    });
+    const [availableSections, setAvailableSections] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (templateCtx.departmentId) {
+            fetch(`/api/sections?departmentId=${templateCtx.departmentId}`)
+                .then(res => res.json())
+                .then(data => setAvailableSections(data));
+        } else {
+            setAvailableSections([]);
+        }
+    }, [templateCtx.departmentId]);
 
     // Upload State
     const [isUploadMode, setIsUploadMode] = useState(false);
@@ -141,15 +159,38 @@ export default function ResultsPage() {
         }
     };
 
-    const downloadTemplate = () => {
-        const rows = [
-            { "Roll Number": "3111XXXXX", "Name": "Student Name", "CS4101": "O", "CS4102": "A+", "SGPA": "9.5", "CGPA": "8.8" },
-            { "Roll Number": "3111XXXXY", "Name": "Another Student", "CS4101": "A", "CS4102": "A", "SGPA": "8.5", "CGPA": "8.0" }
-        ];
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Template");
-        XLSX.writeFile(wb, "Results_Template.xlsx");
+    const generateSmartTemplate = async () => {
+        if (!templateCtx.departmentId || !templateCtx.year || !templateCtx.semester) {
+            alert("Please select Department, Year and Semester");
+            return;
+        }
+
+        const params = new URLSearchParams();
+        params.set("departmentId", templateCtx.departmentId);
+        params.set("year", templateCtx.year);
+        params.set("semester", templateCtx.semester);
+        if (templateCtx.sectionIds.length > 0) {
+            params.set("sectionIds", templateCtx.sectionIds.join(","));
+        }
+        if (isPastResults && templateCtx.studentYear) {
+            params.set("studentYear", templateCtx.studentYear);
+        }
+
+        try {
+            const res = await fetch(`/api/results/template?${params}`);
+            if (!res.ok) throw new Error("Failed to generate");
+
+            const data = await res.json();
+
+            const ws = XLSX.utils.json_to_sheet(data.rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Marks");
+            XLSX.writeFile(wb, `Results_Template_${templateCtx.year}_${templateCtx.semester}.xlsx`);
+
+            setShowTemplateModal(false);
+        } catch (e) {
+            alert("Failed to generate template");
+        }
     };
 
     const exportData = () => {
@@ -187,7 +228,7 @@ export default function ResultsPage() {
                     <button onClick={exportData} disabled={results.length === 0} className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                         <FaDownload /> Export Data
                     </button>
-                    <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <button onClick={() => setShowTemplateModal(true)} className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                         <FaDownload /> Template
                     </button>
                     <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 shadow-md transition-all">
@@ -316,6 +357,136 @@ export default function ResultsPage() {
                     )}
                 </div>
             )}
-        </div>
+            {/* Template Modal */}
+            {showTemplateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-slate-900">Download Smart Template</h3>
+                            <button onClick={() => setShowTemplateModal(false)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100"><FaTimes /></button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    value={templateCtx.departmentId}
+                                    onChange={e => setTemplateCtx({ ...templateCtx, departmentId: e.target.value })}
+                                >
+                                    <option value="">Select Department</option>
+                                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Year</label>
+                                    <select
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        value={templateCtx.year}
+                                        onChange={e => setTemplateCtx({ ...templateCtx, year: e.target.value })}
+                                    >
+                                        <option value="">Select Year</option>
+                                        {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Semester</label>
+                                    <select
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        value={templateCtx.semester}
+                                        onChange={e => setTemplateCtx({ ...templateCtx, semester: e.target.value })}
+                                    >
+                                        <option value="">Select Sem</option>
+                                        {[1, 2].map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Past Results Toggle */}
+                        <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-amber-900 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 text-amber-600 rounded"
+                                    checked={isPastResults}
+                                    onChange={e => setIsPastResults(e.target.checked)}
+                                />
+                                Is this for Past Results / Backlogs?
+                            </label>
+                        </div>
+
+                        {/* Conditionally Show Student Year */}
+                        {isPastResults && (
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Target Student Batch (Current Year)</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-amber-50/50"
+                                    value={templateCtx.studentYear}
+                                    onChange={e => setTemplateCtx({ ...templateCtx, studentYear: e.target.value })}
+                                >
+                                    <option value="">Select Current Student Year</option>
+                                    {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <p className="text-xs text-slate-500 mt-1">E.g., Select '3' if you want 3rd years to take a 2nd year exam.</p>
+                            </div>
+                        )}
+
+                        {/* Section Multi-Select */}
+                        {availableSections.length > 0 && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Sections (Select Specific or All)</label>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        onClick={() => {
+                                            if (templateCtx.sectionIds.length === availableSections.length) {
+                                                setTemplateCtx({ ...templateCtx, sectionIds: [] });
+                                            } else {
+                                                setTemplateCtx({ ...templateCtx, sectionIds: availableSections.map(s => s.id) });
+                                            }
+                                        }}
+                                        className="mr-2 text-xs font-semibold text-blue-600 hover:underline"
+                                    >
+                                        {templateCtx.sectionIds.length === availableSections.length ? "Deselect All" : "Select All"}
+                                    </button>
+                                    {availableSections.map(sec => {
+                                        const isSelected = templateCtx.sectionIds.includes(sec.id);
+                                        return (
+                                            <button
+                                                key={sec.id}
+                                                onClick={() => {
+                                                    const newIds = isSelected
+                                                        ? templateCtx.sectionIds.filter(id => id !== sec.id)
+                                                        : [...templateCtx.sectionIds, sec.id];
+                                                    setTemplateCtx({ ...templateCtx, sectionIds: newIds });
+                                                }}
+                                                className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm border ${isSelected ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                                            >
+                                                {isSelected ? <FaCheckSquare className="text-blue-500" /> : <FaSquare className="text-slate-300" />}
+                                                {sec.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-4 flex justify-end gap-2">
+                            <button onClick={() => setShowTemplateModal(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button
+                                onClick={generateSmartTemplate}
+                                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-700 transition-all hover:scale-105 active:scale-95"
+                            >
+                                Download Template
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                </div>
+    )
+}
+        </div >
     );
 }
