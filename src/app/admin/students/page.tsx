@@ -20,6 +20,9 @@ export default function StudentsPage() {
     const [attendanceStats, setAttendanceStats] = useState<any>(null);
     const [statsLoading, setStatsLoading] = useState(false);
 
+    // Stats Date Filter
+    const [statsDateRange, setStatsDateRange] = useState({ start: "", end: "" });
+
     // Photo Upload State
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<{
@@ -422,10 +425,14 @@ export default function StudentsPage() {
         XLSX.writeFile(wb, "student_import_template.xlsx");
     };
 
-    const fetchStudentStats = async (studentId: string) => {
+    const fetchStudentStats = async (studentId: string, start = "", end = "") => {
         setStatsLoading(true);
         try {
-            const res = await fetch(`/api/students/${studentId}/stats`);
+            const query = new URLSearchParams();
+            if (start) query.set("startDate", start);
+            if (end) query.set("endDate", end);
+
+            const res = await fetch(`/api/students/${studentId}/stats?${query.toString()}`);
             if (res.ok) {
                 const data = await res.json();
                 setAttendanceStats(data);
@@ -442,8 +449,19 @@ export default function StudentsPage() {
         if (!viewingStudent) {
             setViewingTab("details");
             setAttendanceStats(null);
+            setStatsDateRange({ start: "", end: "" });
         }
     }, [viewingStudent]);
+
+    // Check when date range changes
+    useEffect(() => {
+        if (viewingStudent && viewingTab === "attendance") {
+            const timer = setTimeout(() => {
+                fetchStudentStats(viewingStudent.id, statsDateRange.start, statsDateRange.end);
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [statsDateRange, viewingTab, viewingStudent]);
 
     const exportData = () => {
         const data = students.map(s => ({
@@ -928,6 +946,28 @@ export default function StudentsPage() {
                                 </div>
                             ) : (
                                 <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
+                                    {/* Date Range Filter */}
+                                    <div className="flex gap-4">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">From Date</label>
+                                            <input
+                                                type="date"
+                                                value={statsDateRange.start}
+                                                onChange={(e) => setStatsDateRange({ ...statsDateRange, start: e.target.value })}
+                                                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">To Date</label>
+                                            <input
+                                                type="date"
+                                                value={statsDateRange.end}
+                                                onChange={(e) => setStatsDateRange({ ...statsDateRange, end: e.target.value })}
+                                                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+
                                     {statsLoading ? (
                                         <div className="flex justify-center py-8">
                                             <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>

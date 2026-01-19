@@ -14,6 +14,9 @@ export async function GET(
 
     try {
         const { id } = await params;
+        const url = new URL(request.url);
+        const startDate = url.searchParams.get("startDate");
+        const endDate = url.searchParams.get("endDate");
 
         // 1. Fetch Student Details
         const student = await prisma.student.findUnique({
@@ -29,7 +32,6 @@ export async function GET(
         }
 
         // 2. Fetch All Subjects for this Student's Context
-        // (To ensure we have names for all potential subjects)
         const subjects = await prisma.subject.findMany({
             where: {
                 year: student.year,
@@ -41,22 +43,31 @@ export async function GET(
         const subjectMap = new Map<string, string>();
         subjects.forEach(s => subjectMap.set(s.id, s.name));
 
-        // 3. Fetch Attendance History for Student's Section
-        // We only care about records that match the student's current state
+        // 3. Build Where Clause
+        const whereClause: any = {
+            year: student.year,
+            semester: student.semester,
+            sectionId: student.sectionId,
+            departmentId: student.departmentId,
+        };
+
+        if (startDate && endDate) {
+            whereClause.date = {
+                gte: new Date(startDate),
+                lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) // Include end of day
+            };
+        }
+
+        // 4. Fetch Attendance History
         const attendanceRecords = await prisma.attendanceHistory.findMany({
-            where: {
-                year: student.year,
-                semester: student.semester,
-                sectionId: student.sectionId,
-                departmentId: student.departmentId,
-            },
+            where: whereClause,
             include: {
                 subject: true
             },
             orderBy: { date: 'desc' }
         });
 
-        // 4. Aggregate Stats
+        // 5. Aggregate Stats
         let overallTotal = 0;
         let overallAttended = 0;
 
@@ -67,7 +78,7 @@ export async function GET(
             attended: number;
         }> = {};
 
-        // Initialize from Subject List (to show 0/0 for subjects with no classes yet)
+        // Initialize from Subject List
         subjects.forEach(sub => {
             subjectStats[sub.id] = {
                 id: sub.id,
@@ -81,14 +92,8 @@ export async function GET(
             const subjectId = record.subjectId;
             const subjectName = record.subject?.name || subjectMap.get(record.subjectId || "") || "Unknown Subject";
 
-            // Should strictly be a subject-based record?
-            // If subjectId is null, it might be an old record or generic.
-            // For this feature, we focus on Subject-wise.
-            // If unknown subject, group under "Others" or skip? 
-            // Let's key by ID if possible, else Name.
-
-            const key = subjectId || "others";
-            const name = subjectId ? subjectName : "General / Lab"; // Fallback
+            const key = subjectId || "unassigned";
+            const name = subjectId ? subjectName : "Unassigned"; // Fallback Renamed
 
             if (!subjectStats[key]) {
                 subjectStats[key] = { id: key, name, total: 0, attended: 0 };
@@ -97,7 +102,6 @@ export async function GET(
             // Parse Details
             let isPresent = false;
             try {
-                // Details is JSON string: [{ "Roll Number": "...", "Status": "Present" }, ...]
                 const details = JSON.parse(record.details);
                 const studentRecord = details.find((d: any) =>
                     d["Roll Number"] === student.rollNumber ||
@@ -105,20 +109,18 @@ export async function GET(
                 );
 
                 if (studentRecord) {
-                    // Check status
                     const status = String(studentRecord["Status"] || studentRecord["status"]).toLowerCase();
                     if (status === "present") {
                         isPresent = true;
                     }
                 }
             } catch (e) {
-                // If parse fails, assume absent or ignore? Safe to ignore.
+                // Ignore parse errors
             }
 
             subjectStats[key].total++;
             if (isPresent) subjectStats[key].attended++;
 
-            // Update Overall (Only count valid classes)
             overallTotal++;
             if (isPresent) overallAttended++;
         }
@@ -127,7 +129,11 @@ export async function GET(
         const subjectList = Object.values(subjectStats).map(stat => ({
             ...stat,
             percentage: stat.total > 0 ? Math.round((stat.attended / stat.total) * 100) : 0
-        })).sort((a, b) => a.name.localeCompare(b.name));
+        })).sort((a, b) => {
+            if (a.name === "Unassigned") return 1; // Unassigned at bottom
+            if (b.name === "Unassigned") return -1;
+            return a.name.localeCompare(b.name);
+        });
 
         const overallPercentage = overallTotal > 0 ? Math.round((overallAttended / overallTotal) * 100) : 0;
 
