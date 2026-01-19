@@ -87,23 +87,50 @@ export async function POST(request: Request) {
 
         // HOD Scoping Enforcement
         if (role === "HOD" && body.departmentId !== userDeptId) {
-            return NextResponse.json({ error: "You can only add students to your own department" }, { status: 403 });
+            return NextResponse.json({ error: "You can only add/update students in your own department" }, { status: 403 });
         }
 
-        const student = await prisma.student.create({
-            data: {
-                rollNumber: body.rollNumber,
-                name: body.name,
-                mobile: body.mobile,
-                year: body.year,
-                semester: body.semester,
-                sectionId: body.sectionId,
-                departmentId: body.departmentId
-            },
+        // Check if exists
+        const existingStudent = await prisma.student.findUnique({
+            where: { rollNumber: body.rollNumber }
         });
-        return NextResponse.json(student);
+
+        let result;
+        let action = "created";
+
+        if (existingStudent) {
+            // Update
+            result = await prisma.student.update({
+                where: { rollNumber: body.rollNumber },
+                data: {
+                    name: body.name,
+                    mobile: body.mobile,
+                    year: body.year,
+                    semester: body.semester,
+                    sectionId: body.sectionId,
+                    departmentId: body.departmentId
+                }
+            });
+            action = "updated";
+        } else {
+            // Create
+            result = await prisma.student.create({
+                data: {
+                    rollNumber: body.rollNumber,
+                    name: body.name,
+                    mobile: body.mobile,
+                    year: body.year,
+                    semester: body.semester,
+                    sectionId: body.sectionId,
+                    departmentId: body.departmentId
+                },
+            });
+            action = "created";
+        }
+
+        return NextResponse.json({ ...result, action }); // Return action status
     } catch (error) {
         console.error(error);
-        return NextResponse.json({ error: "Failed to create student" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to process student" }, { status: 500 });
     }
 }

@@ -242,12 +242,14 @@ export default function StudentsPage() {
         isOpen: boolean;
         loading: boolean;
         successCount: number;
+        updatedCount: number;
         failCount: number;
         errors: string[];
     }>({
         isOpen: false,
         loading: false,
         successCount: 0,
+        updatedCount: 0,
         failCount: 0,
         errors: []
     });
@@ -261,6 +263,7 @@ export default function StudentsPage() {
             isOpen: true,
             loading: true,
             successCount: 0,
+            updatedCount: 0,
             failCount: 0,
             errors: []
         });
@@ -277,6 +280,7 @@ export default function StudentsPage() {
                     const data: any[] = XLSX.utils.sheet_to_json(ws);
 
                     let successCount = 0;
+                    let updatedCount = 0;
                     let failCount = 0;
                     const importErrors: string[] = [];
 
@@ -327,7 +331,12 @@ export default function StudentsPage() {
                             body: JSON.stringify(studentPayload)
                         });
                         if (res.ok) {
-                            successCount++;
+                            const data = await res.json();
+                            if (data.action === "updated") {
+                                updatedCount++;
+                            } else {
+                                successCount++;
+                            }
                         } else {
                             failCount++;
                             const data = await res.json();
@@ -339,6 +348,7 @@ export default function StudentsPage() {
                         isOpen: true,
                         loading: false, // Done
                         successCount,
+                        updatedCount,
                         failCount,
                         errors: importErrors
                     });
@@ -352,6 +362,7 @@ export default function StudentsPage() {
                         isOpen: true,
                         loading: false,
                         successCount: 0,
+                        updatedCount: 0,
                         failCount: 0,
                         errors: ["Critial error reading file. Please check format."]
                     });
@@ -764,7 +775,11 @@ export default function StudentsPage() {
                             <div className="flex gap-4">
                                 <div className="flex-1 rounded-lg bg-green-50 p-4 text-center border border-green-100">
                                     <p className="text-2xl font-bold text-green-600">{importStatus.successCount}</p>
-                                    <p className="text-sm font-medium text-green-800">Imported</p>
+                                    <p className="text-sm font-medium text-green-800">Created</p>
+                                </div>
+                                <div className="flex-1 rounded-lg bg-blue-50 p-4 text-center border border-blue-100">
+                                    <p className="text-2xl font-bold text-blue-600">{importStatus.updatedCount}</p>
+                                    <p className="text-sm font-medium text-blue-800">Updated</p>
                                 </div>
                                 <div className={`flex-1 rounded-lg p-4 text-center border ${importStatus.failCount > 0 ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-100"}`}>
                                     <p className={`text-2xl font-bold ${importStatus.failCount > 0 ? "text-red-600" : "text-slate-600"}`}>{importStatus.failCount}</p>
