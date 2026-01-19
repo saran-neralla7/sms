@@ -24,6 +24,7 @@ export async function GET(
             include: {
                 section: true,
                 department: true,
+                subjects: true, // Include enrolled electives
             }
         });
 
@@ -32,12 +33,23 @@ export async function GET(
         }
 
         // 2. Fetch All Subjects for this Student's Context
-        const subjects = await prisma.subject.findMany({
+        let subjects = await prisma.subject.findMany({
             where: {
                 year: student.year,
                 semester: student.semester,
                 departmentId: student.departmentId
             }
+        });
+
+        // Filter out non-selected Electives
+        // If subject is ELECTIVE (PE/OE), only show if student is enrolled
+        subjects = subjects.filter(sub => {
+            const isElective = ["PROFESSIONAL_ELECTIVE", "OPEN_ELECTIVE", "ELECTIVE"].includes(sub.type);
+            if (isElective) {
+                // Check if student has this subject in their enrolled list
+                return student.subjects.some(enrolled => enrolled.id === sub.id);
+            }
+            return true; // Always show Core subjects
         });
 
         const subjectMap = new Map<string, string>();
