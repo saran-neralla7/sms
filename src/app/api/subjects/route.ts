@@ -38,6 +38,18 @@ export async function POST(request: Request) {
 
         const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
+        // Resolve Regulation
+        let regulationId = null;
+        const regName = regulation || "R22";
+
+        const regulationRecord = await prisma.regulation.findUnique({ where: { name: regName } });
+        if (regulationRecord) {
+            regulationId = regulationRecord.id;
+        } else {
+            const newReg = await prisma.regulation.create({ data: { name: regName } });
+            regulationId = newReg.id;
+        }
+
         const subject = await prisma.subject.create({
             data: {
                 name,
@@ -46,7 +58,7 @@ export async function POST(request: Request) {
                 semester,
                 type,
                 isElective,
-                regulation: regulation || "R22",
+                regulationId,
                 electiveSlot: electiveSlot || null,
                 departmentId
             }

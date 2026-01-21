@@ -16,6 +16,18 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 
         const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
+        // Resolve Regulation
+        let regulationId = null;
+        const regName = regulation || "R22";
+
+        const regulationRecord = await prisma.regulation.findUnique({ where: { name: regName } });
+        if (regulationRecord) {
+            regulationId = regulationRecord.id;
+        } else {
+            const newReg = await prisma.regulation.create({ data: { name: regName } });
+            regulationId = newReg.id;
+        }
+
         const subject = await prisma.subject.update({
             where: { id: params.id },
             data: {
@@ -25,7 +37,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                 semester,
                 type,
                 isElective,
-                regulation: regulation || "R22",
+                regulationId,
                 electiveSlot: electiveSlot || null,
                 departmentId
             }

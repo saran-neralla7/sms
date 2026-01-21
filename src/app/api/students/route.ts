@@ -95,6 +95,19 @@ export async function POST(request: Request) {
             where: { rollNumber: body.rollNumber }
         });
 
+        // Resolve Regulation
+        let regulationId = null;
+        const regName = body.regulation || "R22";
+
+        const regulationRecord = await prisma.regulation.findUnique({ where: { name: regName } });
+        if (regulationRecord) {
+            regulationId = regulationRecord.id;
+        } else {
+            // Lazy create if needed, or error? Let's lazy create for now to support bulk uploads easily or old fallback
+            const newReg = await prisma.regulation.create({ data: { name: regName } });
+            regulationId = newReg.id;
+        }
+
         let result;
         let action = "created";
 
@@ -109,7 +122,7 @@ export async function POST(request: Request) {
                     semester: body.semester,
                     sectionId: body.sectionId,
                     departmentId: body.departmentId,
-                    regulation: body.regulation || "R22"
+                    regulationId: regulationId
                 }
             });
             action = "updated";
@@ -124,7 +137,7 @@ export async function POST(request: Request) {
                     semester: body.semester,
                     sectionId: body.sectionId,
                     departmentId: body.departmentId,
-                    regulation: body.regulation || "R22"
+                    regulationId: regulationId
                 },
             });
             action = "created";

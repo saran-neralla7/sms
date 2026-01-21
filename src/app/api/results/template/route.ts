@@ -15,16 +15,23 @@ export async function GET(request: Request) {
     const semester = searchParams.get("semester");
     const studentYear = searchParams.get("studentYear");
     const targetSectionIds = searchParams.get("sectionIds")?.split(",") || [];
-    const regulation = searchParams.get("regulation") || "R22"; // Default to R22
+    const regulationParam = searchParams.get("regulation") || "R22"; // Default to R22
 
     if (!departmentId || !year || !semester) {
         return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
     }
 
     try {
+        // Resolve Regulation ID
+        const regRecord = await prisma.regulation.findUnique({ where: { name: regulationParam } });
+        if (!regRecord) {
+            return NextResponse.json({ error: `Regulation '${regulationParam}' not found` }, { status: 404 });
+        }
+        const regulationId = regRecord.id;
+
         // 1. Fetch Subjects for the EXAM Context (Result Year/Sem) AND Regulation
         const allSubjects = await prisma.subject.findMany({
-            where: { departmentId, year, semester, regulation },
+            where: { departmentId, year, semester, regulationId },
             select: { code: true, name: true, isElective: true, electiveSlot: true },
             orderBy: { code: 'asc' }
         });
@@ -47,7 +54,7 @@ export async function GET(request: Request) {
         const whereStudent: any = {
             departmentId,
             year: studentYear || year,
-            regulation // Only fetch students of this regulation
+            regulationId // Only fetch students of this regulation ID
         };
         if (targetSectionIds.length > 0) {
             whereStudent.sectionId = { in: targetSectionIds };

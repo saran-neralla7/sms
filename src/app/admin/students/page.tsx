@@ -65,6 +65,7 @@ export default function StudentsPage() {
     // Dropdown Data
     const [departments, setDepartments] = useState<any[]>([]);
     const [sections, setSections] = useState<any[]>([]);
+    const [regulations, setRegulations] = useState<any[]>([]);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -96,6 +97,13 @@ export default function StudentsPage() {
         try {
             const res = await fetch(url);
             if (res.ok) setSections(await res.json());
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchRegulations = async () => {
+        try {
+            const res = await fetch("/api/regulations");
+            if (res.ok) setRegulations(await res.json());
         } catch (e) { console.error(e); }
     };
 
@@ -131,6 +139,7 @@ export default function StudentsPage() {
         fetchStudents();
         fetchDepartments();
         fetchSections();
+        fetchRegulations();
     }, [year, semester, section, filterDepartmentId]);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -743,9 +752,10 @@ export default function StudentsPage() {
                             onChange={(e) => setFormData({ ...formData, regulation: e.target.value })}
                             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
                         >
-                            <option value="R22">R22</option>
-                            <option value="R20">R20</option>
-                            <option value="R24">R24</option>
+                            <option value="">Select Regulation</option>
+                            {regulations.map((r: any) => (
+                                <option key={r.id} value={r.name}>{r.name}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="grid grid-cols-2 gap-4">

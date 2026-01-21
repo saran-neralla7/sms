@@ -8,6 +8,7 @@ import Modal from "@/components/Modal";
 export default function SubjectsPage() {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
+    const [regulations, setRegulations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -26,7 +27,7 @@ export default function SubjectsPage() {
     const [semester, setSemester] = useState("1");
     const [type, setType] = useState("THEORY");
     const [departmentId, setDepartmentId] = useState("");
-    const [regulation, setRegulation] = useState("R22");
+    const [regulation, setRegulation] = useState("");
     const [electiveSlot, setElectiveSlot] = useState("");
 
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
@@ -34,7 +35,15 @@ export default function SubjectsPage() {
     useEffect(() => {
         fetchDepartments();
         fetchSubjects();
+        fetchRegulations();
     }, [filterDept, filterYear, filterSem]);
+
+    const fetchRegulations = async () => {
+        try {
+            const res = await fetch("/api/regulations");
+            if (res.ok) setRegulations(await res.json());
+        } catch (e) { console.error(e); }
+    };
 
     const fetchDepartments = async () => {
         try {
@@ -140,7 +149,7 @@ export default function SubjectsPage() {
         setSemester("1");
         setType("THEORY");
         setDepartmentId(departments[0]?.id || "");
-        setRegulation("R22");
+        setRegulation("");
         setElectiveSlot("");
         setSelectedSubject(null);
     };
@@ -269,9 +278,10 @@ export default function SubjectsPage() {
                             <div>
                                 <label className="mb-1 block text-sm font-semibold text-slate-700">Regulation</label>
                                 <select value={regulation} onChange={(e) => setRegulation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
-                                    <option value="R22">R22</option>
-                                    <option value="R20">R20</option>
-                                    <option value="R24">R24</option>
+                                    <option value="">Select Regulation</option>
+                                    {regulations.map((r: any) => (
+                                        <option key={r.id} value={r.name}>{r.name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div>
