@@ -505,7 +505,6 @@ export default function Home() {
           </div>
 
           {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
-          {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
           {session?.user?.role !== "USER" && (
             <div className="grid gap-6 md:grid-cols-2">
               {/* Period Selection */}
@@ -612,6 +611,7 @@ export default function Home() {
               </div>
             </div>
           )}
+        </div>
       </motion.div>
 
       <AnimatePresence>
