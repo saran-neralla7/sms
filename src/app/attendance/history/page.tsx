@@ -275,7 +275,7 @@ export default function HistoryPage() {
                 )}
             </div>
 
-            {session?.user.role === "ADMIN" && (
+            {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                 <div className="mb-4 flex items-center justify-end">
                     <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
                         <button
@@ -310,7 +310,7 @@ export default function HistoryPage() {
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">View</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Downloaded By</th>
-                                {session?.user.role === "ADMIN" && <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>}
+                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -376,7 +376,7 @@ export default function HistoryPage() {
                                                 <span>{record.user?.username || "Unknown"}</span>
                                             </div>
                                         </td>
-                                        {session?.user.role === "ADMIN" && (
+                                        {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                                             <td className="whitespace-nowrap px-6 py-4 text-right">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); confirmDelete(record); }}

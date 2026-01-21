@@ -58,7 +58,8 @@ export default function ReportsPage() {
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
 
     useEffect(() => {
-        if (session?.user.role === "ADMIN") fetchDepartments();
+        const role = (session?.user.role || "").toUpperCase();
+        if (["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) fetchDepartments();
         // Initial fetch based on tab
         if (activeTab === "daily") {
             fetchHistory();
@@ -67,7 +68,9 @@ export default function ReportsPage() {
     }, [session]);
 
     useEffect(() => {
-        const effectiveDeptId = session?.user.role === "ADMIN" ? departmentId : (session?.user as any)?.departmentId;
+        const role = (session?.user.role || "").toUpperCase();
+        const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+        const effectiveDeptId = isGlobal ? departmentId : (session?.user as any)?.departmentId;
         if (effectiveDeptId) fetchSections(effectiveDeptId);
         if (effectiveDeptId && year && semester) fetchSubjects(effectiveDeptId);
     }, [departmentId, session, year, semester]);
@@ -641,7 +644,7 @@ export default function ReportsPage() {
 
                     {/* Filters */}
                     <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
-                        {session?.user.role === "ADMIN" && (
+                        {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-slate-700">Department</label>
                                 <select
@@ -751,7 +754,7 @@ export default function ReportsPage() {
                     {/* Filters & Actions */}
                     <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-end">
                         <div className="grid grid-cols-2 gap-4 flex-grow md:grid-cols-4">
-                            {session?.user.role === "ADMIN" && (
+                            {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500">Department</label>
                                     <select
@@ -822,7 +825,7 @@ export default function ReportsPage() {
                     {/* Filters & Actions */}
                     <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                            {session?.user.role === "ADMIN" && (
+                            {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500">Department</label>
                                     <select
@@ -912,7 +915,7 @@ export default function ReportsPage() {
                         {/* Filters */}
                         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                             <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                                {session?.user.role === "ADMIN" && (
+                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                                     <div className="space-y-1">
                                         <label className="text-xs font-semibold text-slate-500">Department</label>
                                         <select
