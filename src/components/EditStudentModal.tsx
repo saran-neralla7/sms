@@ -40,6 +40,7 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                 certificatesSubmitted: student.certificatesSubmitted ? "true" : "false",
                 departmentId: student.departmentId || "",
                 sectionId: student.sectionId || "",
+                // If student has no regulation, we will try to set R22 once regulations load
                 regulationId: student.regulationId || "",
             });
             setStatus({ type: null, message: "" }); // Clear status on open
@@ -57,7 +58,19 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
 
             if (deptRes.ok) setDepartments(await deptRes.json());
             if (secRes.ok) setSections(await secRes.json());
-            if (regRes.ok) setRegulations(await regRes.json());
+            if (regRes.ok) {
+                const regs = await regRes.json();
+                setRegulations(regs);
+
+                // Auto-select R22 if not set
+                setFormData((prev: any) => {
+                    if (!prev.regulationId) {
+                        const r22 = regs.find((r: any) => r.name === "R22");
+                        return r22 ? { ...prev, regulationId: r22.id } : prev;
+                    }
+                    return prev;
+                });
+            }
         } catch (error) {
             console.error(error);
         }
