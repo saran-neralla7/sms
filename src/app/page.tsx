@@ -513,13 +513,10 @@ export default function Home() {
           {session?.user?.role !== "USER" && (
             <div className="grid gap-6 md:grid-cols-2">
               {/* Period Selection */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                    <FaClock className="text-blue-500" />
-                    Select Period
-                  </h2>
-                  <label className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+              <div className="space-y-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-semibold text-slate-700">Select Period</label>
+                  <label className="flex w-fit items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-100 cursor-pointer border border-slate-200">
                     <input
                       type="checkbox"
                       checked={isMultiHour}
@@ -530,14 +527,13 @@ export default function Home() {
                       }}
                       className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
-                    Multi-Hour Session
+                    Enable Multi-Hour Selection
                   </label>
                 </div>
 
                 {isMultiHour ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-                    <div className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Select one or more periods</div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {periods.map((period) => {
                         const isSelected = selectedPeriodIds.has(period.id);
                         return (
@@ -549,13 +545,20 @@ export default function Home() {
                               else newSet.add(period.id);
                               setSelectedPeriodIds(newSet);
                             }}
-                            className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 text-sm transition-all ${isSelected
-                              ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-500"
+                            className={`group relative flex flex-col items-start gap-1 rounded-lg border p-3 text-left shadow-sm transition-all hover:shadow-md ${isSelected
+                              ? "border-blue-500 bg-blue-600 text-white shadow-blue-200"
                               : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                               }`}
                           >
-                            <span className="font-semibold">{period.name}</span>
-                            <span className="text-[10px] text-slate-400">{period.startTime} - {period.endTime}</span>
+                            <span className="font-bold text-sm">{period.name}</span>
+                            <span className={`text-[10px] ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
+                              {period.startTime} - {period.endTime}
+                            </span>
+                            {isSelected && (
+                              <div className="absolute top-2 right-2 rounded-full bg-white/20 p-1">
+                                <FaCheck size={8} className="text-white" />
+                              </div>
+                            )}
                           </button>
                         );
                       })}
@@ -566,16 +569,18 @@ export default function Home() {
                     <select
                       value={selectedPeriodId}
                       onChange={(e) => setSelectedPeriodId(e.target.value)}
-                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pl-11 text-slate-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-all cursor-pointer hover:border-blue-300"
+                      className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-blue-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                     >
-                      <option value="">Select Period...</option>
+                      <option value="">Select a period...</option>
                       {periods.map((period) => (
                         <option key={period.id} value={period.id}>
                           {period.name} ({period.startTime} - {period.endTime})
                         </option>
                       ))}
                     </select>
-                    <FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <FaClock />
+                    </div>
                   </div>
                 )}
               </div>
