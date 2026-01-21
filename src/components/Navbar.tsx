@@ -35,9 +35,11 @@ export default function Navbar() {
             header: "Academic", items: [
                 { href: "/admin/departments", label: "Departments" },
                 { href: "/admin/sections", label: "Sections" },
+                { href: "/admin/regulations", label: "Regulations" },
                 { href: "/admin/periods", label: "Periods" },
                 { href: "/admin/subjects", label: "Subjects" },
-                { href: "/admin/electives", label: "Electives" },
+                { href: "/admin/elective-slots", label: "Elective Slots" },
+                { href: "/admin/electives", label: "Elective Enrollment" },
                 { href: "/admin/results", label: "Results" },
             ]
         }
