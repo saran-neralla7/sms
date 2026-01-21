@@ -529,8 +529,8 @@ export default function Home() {
                         setSelectedPeriodIds(new Set());
                       }}
                       className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${!isMultiHour
-                          ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
-                          : "text-slate-500 hover:text-slate-700"
+                        ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
+                        : "text-slate-500 hover:text-slate-700"
                         }`}
                     >
                       <span>Single Period</span>
@@ -542,8 +542,8 @@ export default function Home() {
                         setSelectedPeriodIds(new Set());
                       }}
                       className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${isMultiHour
-                          ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
-                          : "text-slate-500 hover:text-slate-700"
+                        ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
+                        : "text-slate-500 hover:text-slate-700"
                         }`}
                     >
                       <span>Multi-Hour</span>
@@ -589,7 +589,7 @@ export default function Home() {
                     <select
                       value={selectedPeriodId}
                       onChange={(e) => setSelectedPeriodId(e.target.value)}
-                      className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-blue-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-3 pr-10 text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-blue-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                     >
                       <option value="">Select a period...</option>
                       {periods.map((period) => (
