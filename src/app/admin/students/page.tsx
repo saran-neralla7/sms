@@ -648,8 +648,12 @@ export default function StudentsPage() {
                                                 onChange={() => toggleStudentSelection(student.id)}
                                             />
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-slate-600">{student.rollNumber}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-slate-600">{student.rollNumber}</td>
+                                        <td
+                                            className="whitespace-nowrap px-6 py-4 text-sm font-mono text-blue-600 cursor-pointer hover:underline"
+                                            onClick={() => setViewingStudent(student)}
+                                        >
+                                            {student.rollNumber}
+                                        </td>
                                         <td
                                             className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600 cursor-pointer hover:underline"
                                             onClick={() => setViewingStudent(student)}
