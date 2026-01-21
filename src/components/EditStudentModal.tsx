@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { Student } from "@/types";
+import { useSession } from "next-auth/react";
 import Modal from "./Modal";
 
 interface EditStudentModalProps {
@@ -13,6 +14,10 @@ interface EditStudentModalProps {
 }
 
 export default function EditStudentModal({ isOpen, onClose, student, onSuccess }: EditStudentModalProps) {
+    const { data: session } = useSession();
+    const userRole = (session?.user as any)?.role;
+    const userDeptId = (session?.user as any)?.departmentId;
+
     const [activeTab, setActiveTab] = useState<"basic" | "personal" | "admission" | "contact">("basic");
     const [loading, setLoading] = useState(false);
     const [departments, setDepartments] = useState<any[]>([]);
@@ -133,10 +138,11 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                                 <Select label="Semester" value={formData.semester} onChange={(v) => handleChange("semester", v)} options={[1, 2]} />
                                 <Select
                                     label="Department"
-                                    value={formData.departmentId}
+                                    value={userRole === "HOD" ? userDeptId : formData.departmentId}
                                     onChange={(v) => handleChange("departmentId", v)}
                                     options={departments.map(d => ({ value: d.id, label: d.name }))}
                                     required
+                                    disabled={userRole === "HOD"}
                                 />
                                 <Select
                                     label="Section"
