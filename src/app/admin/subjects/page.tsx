@@ -147,7 +147,7 @@ export default function SubjectsPage() {
         setType(subject.type);
         setDepartmentId(subject.departmentId);
         setRegulation(subject.regulation || "");
-        setElectiveSlot(subject.electiveSlot || "");
+        setElectiveSlot(subject.electiveSlotRelation?.name || "");
         setIsEditModalOpen(true);
     };
 
@@ -222,7 +222,7 @@ export default function SubjectsPage() {
                                     <td className="px-6 py-4 text-sm text-slate-500">
                                         <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${subject.type === "LAB" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"}`}>
                                             {subject.type}
-                                            {subject.electiveSlot && <span className="ml-1 text-xs opacity-75">({subject.electiveSlot})</span>}
+                                            {subject.electiveSlotRelation?.name && <span className="ml-1 text-xs opacity-75">({subject.electiveSlotRelation.name})</span>}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-500">{subject.year}-{subject.semester}</td>
