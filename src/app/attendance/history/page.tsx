@@ -98,38 +98,75 @@ export default function HistoryPage() {
     const handleDownloadFull = () => {
         if (!viewRecord || !viewRecord.details) return;
         try {
-            const data = JSON.parse(viewRecord.details);
-            const ws = XLSX.utils.json_to_sheet(data);
+            const rawData = JSON.parse(viewRecord.details);
+
+            // Map to standard format
+            const data = rawData.map((s: any) => ({
+                "Roll Number": s["Roll Number"] || s.rollNumber,
+                "Name": s["Name"] || s.name,
+                "Status": s["Status"] || s.status,
+                "Mobile": s["Mobile"] || s.mobile || ""
+            }));
+
+            // Create Sheet
+            const ws = XLSX.utils.json_to_sheet(data, { header: ["Roll Number", "Name", "Status", "Mobile"] });
+
+            // Auto-width columns (basic approximate)
+            const wscols = [
+                { wch: 15 }, // Roll No
+                { wch: 25 }, // Name
+                { wch: 10 }, // Status
+                { wch: 15 }  // Mobile
+            ];
+            ws['!cols'] = wscols;
+
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-            XLSX.writeFile(wb, viewRecord.fileName || "Full_Report.xlsx");
-        } catch (e) { console.error(e); }
+
+            // Fix filename
+            let filename = viewRecord.fileName || "Full_Report.xlsx";
+            if (!filename.endsWith(".xlsx")) filename += ".xlsx";
+
+            XLSX.writeFile(wb, filename);
+        } catch (e) { console.error("Download Error:", e); }
     };
 
     const handleDownloadAbsentees = () => {
         if (!viewRecord || !viewRecord.details) return;
         try {
-            const data = JSON.parse(viewRecord.details);
-            const absentees = data.filter((s: any) => s.Status === "Absent").map((s: any) => ({
-                "Roll Number": s["Roll Number"],
-                "Name": s["Name"],
-                "Mobile": s["Mobile"],
-                "Status": "Absent"
-            }));
+            const rawData = JSON.parse(viewRecord.details);
+
+            // Filter and Map
+            const absentees = rawData
+                .filter((s: any) => (s["Status"] || s.status) === "Absent")
+                .map((s: any) => ({
+                    "Roll Number": s["Roll Number"] || s.rollNumber,
+                    "Name": s["Name"] || s.name,
+                    "Status": "Absent",
+                    "Mobile": s["Mobile"] || s.mobile || ""
+                }));
 
             if (absentees.length === 0) {
                 alert("No absentees in this record.");
                 return;
             }
 
-            const ws = XLSX.utils.json_to_sheet(absentees);
+            const ws = XLSX.utils.json_to_sheet(absentees, { header: ["Roll Number", "Name", "Status", "Mobile"] });
+
+            // Auto-width columns
+            const wscols = [{ wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 15 }];
+            ws['!cols'] = wscols;
+
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Absentees");
-            // Customize filename for absentees
-            const baseName = viewRecord.fileName || "Report.xlsx";
-            const filename = baseName.replace("FullReport", "Absentees").replace("Attendance Report", "Absentees");
+
+            // Customize filename
+            let baseName = viewRecord.fileName || "Report.xlsx";
+            if (baseName.endsWith(".xlsx")) baseName = baseName.replace(".xlsx", "");
+
+            const filename = `${baseName}_Absentees.xlsx`;
             XLSX.writeFile(wb, filename);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Download Error:", e); }
     };
 
     const getFilteredHistory = () => {
