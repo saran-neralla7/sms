@@ -513,22 +513,42 @@ export default function Home() {
           {session?.user?.role !== "USER" && (
             <div className="grid gap-6 md:grid-cols-2">
               {/* Period Selection */}
-              <div className="space-y-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-semibold text-slate-700">Select Period</label>
-                  <label className="flex w-fit items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-100 cursor-pointer border border-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={isMultiHour}
-                      onChange={(e) => {
-                        setIsMultiHour(e.target.checked);
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <FaClock className="text-blue-500" />
+                    Select Period
+                  </h2>
+
+                  {/* Segmented Control */}
+                  <div className="flex items-center rounded-lg bg-slate-100 p-1 ring-1 ring-slate-200">
+                    <button
+                      onClick={() => {
+                        setIsMultiHour(false);
                         setSelectedPeriodId("");
                         setSelectedPeriodIds(new Set());
                       }}
-                      className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
-                    Enable Multi-Hour Selection
-                  </label>
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${!isMultiHour
+                          ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
+                          : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      <span>Single Period</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMultiHour(true);
+                        setSelectedPeriodId("");
+                        setSelectedPeriodIds(new Set());
+                      }}
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${isMultiHour
+                          ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
+                          : "text-slate-500 hover:text-slate-700"
+                        }`}
+                    >
+                      <span>Multi-Hour</span>
+                    </button>
+                  </div>
                 </div>
 
                 {isMultiHour ? (
