@@ -124,8 +124,8 @@ export default function HistoryPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Attendance");
 
             // Fix filename
-            let filename = viewRecord.fileName || "Full_Report.xlsx";
-            if (!filename.endsWith(".xlsx")) filename += ".xlsx";
+            const dateStr = new Date(viewRecord.date).toLocaleDateString("en-IN").replace(/\//g, "-");
+            const filename = `Attendance_Year-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${dateStr}.xlsx`;
 
             XLSX.writeFile(wb, filename);
         } catch (e) { console.error("Download Error:", e); }
@@ -161,10 +161,9 @@ export default function HistoryPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Absentees");
 
             // Customize filename
-            let baseName = viewRecord.fileName || "Report.xlsx";
-            if (baseName.endsWith(".xlsx")) baseName = baseName.replace(".xlsx", "");
+            const dateStr = new Date(viewRecord.date).toLocaleDateString("en-IN").replace(/\//g, "-");
+            const filename = `Absentees_Year-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${dateStr}.xlsx`;
 
-            const filename = `${baseName}_Absentees.xlsx`;
             XLSX.writeFile(wb, filename);
         } catch (e) { console.error("Download Error:", e); }
     };
