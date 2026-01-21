@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Student } from "@/types";
 import { motion } from "framer-motion";
-import { FaArrowLeft, FaAward, FaCalendarAlt, FaEnvelope, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate } from "react-icons/fa";
+import { FaArrowLeft, FaAward, FaCalendarAlt, FaEnvelope, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaEdit } from "react-icons/fa";
 import Image from "next/image";
+import EditStudentModal from "@/components/EditStudentModal";
 
 export default function StudentProfilePage() {
     const params = useParams();
@@ -18,6 +19,7 @@ export default function StudentProfilePage() {
     const [statsLoading, setStatsLoading] = useState(false);
     const [resultsLoading, setResultsLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ start: "", end: "" });
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
     useEffect(() => {
         if (params.id) {
@@ -121,9 +123,18 @@ export default function StudentProfilePage() {
                         </div>
 
                         <div className="flex-1 space-y-4 pt-2 text-center sm:text-left">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-900">{student.name}</h1>
-                                <p className="font-mono text-lg text-blue-600">{student.rollNumber}</p>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-slate-900">{student.name}</h1>
+                                    <p className="font-mono text-lg text-blue-600">{student.rollNumber}</p>
+                                </div>
+                                <button
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+                                >
+                                    <FaEdit className="text-blue-500" />
+                                    Edit Profile
+                                </button>
                             </div>
 
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-600 sm:justify-start">
@@ -398,6 +409,17 @@ export default function StudentProfilePage() {
                     </motion.div>
                 )}
             </div>
+
+            {/* Edit Modal */}
+            <EditStudentModal
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+                student={student}
+                onSuccess={() => {
+                    fetchStudent();
+                    setIsEditModalOpen(false);
+                }}
+            />
         </div>
     );
 }

@@ -23,7 +23,8 @@ export interface Student {
     departmentId: string;
     department?: Department; // Relation
     photoUrl?: string; // Optional URL
-    regulation?: string;
+    regulationId?: string;
+    regulation?: string | any; // Allow object or string for now to avoid breaking legacy code
 
     // Extended
     hallTicketNumber?: string;

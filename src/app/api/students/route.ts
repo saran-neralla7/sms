@@ -152,7 +152,7 @@ export async function POST(request: Request) {
                     abcId: body.abcId || null,
                     reimbursement: body.reimbursement === true || body.reimbursement === "true",
                     certificatesSubmitted: body.certificatesSubmitted === true || body.certificatesSubmitted === "true",
-                    domainMailId: body.domainMailId || null
+                    domainMailId: body.rollNumber ? `${body.rollNumber.toUpperCase()}@gvpcdpgc.edu.in` : null
                 }
             });
             action = "updated";
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
                     abcId: body.abcId || null,
                     reimbursement: body.reimbursement === true || body.reimbursement === "true",
                     certificatesSubmitted: body.certificatesSubmitted === true || body.certificatesSubmitted === "true",
-                    domainMailId: body.domainMailId || null
+                    domainMailId: body.rollNumber ? `${body.rollNumber.toUpperCase()}@gvpcdpgc.edu.in` : null
                 },
             });
             action = "created";

@@ -10,9 +10,10 @@ interface ModalProps {
     onClose: () => void;
     title: string;
     children: ReactNode;
+    maxWidth?: string;
 }
 
-export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, maxWidth = "max-w-lg" }: ModalProps) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -37,7 +38,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
                         initial={{ scale: 0.95, opacity: 0, y: 10 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.95, opacity: 0, y: 10 }}
-                        className="relative w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5"
+                        className={`relative w-full ${maxWidth} overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5`}
                     >
                         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                             <h3 className="text-lg font-bold text-slate-900">{title}</h3>
