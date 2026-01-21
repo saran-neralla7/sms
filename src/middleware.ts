@@ -7,19 +7,15 @@ export default withAuth(
         const path = req.nextUrl.pathname;
         const role = token?.role;
 
-        // 1. Student Management -> Admin or HOD
+        // 1. Student Management -> Allow All Authenticated Users
+        // (Access control is handled within the page for Read-Only vs Edit)
         if (path.startsWith("/admin/students")) {
-            if (role !== "ADMIN" && role !== "HOD") {
-                const url = req.nextUrl.clone();
-                url.pathname = "/"; // Redirect to Dashboard
-                return NextResponse.redirect(url);
-            }
             return;
         }
 
         // 2. Promotion -> Admin Only
         if (path.startsWith("/admin/promote")) {
-            if (role !== "ADMIN") {
+            if (role !== "ADMIN" && role !== "DIRECTOR" && role !== "PRINCIPAL") {
                 const url = req.nextUrl.clone();
                 url.pathname = "/";
                 return NextResponse.redirect(url);
@@ -27,9 +23,10 @@ export default withAuth(
             return;
         }
 
-        // 3. General Admin -> Admin Only (Users, Departments, Sections, Alumni)
+        // 3. General Admin -> Global Admins (Users, Departments, Sections, Alumni)
         if (path.startsWith("/admin")) {
-            if (role !== "ADMIN") {
+            const globalAdmins = ["ADMIN", "DIRECTOR", "PRINCIPAL"];
+            if (!globalAdmins.includes(role as string)) {
                 const url = req.nextUrl.clone();
                 url.pathname = "/";
                 return NextResponse.redirect(url);
