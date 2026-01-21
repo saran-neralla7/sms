@@ -34,14 +34,22 @@ export async function GET(request: Request) {
     // Scoping
     const userRole = (session.user as any).role;
     const userDeptId = (session.user as any).departmentId;
+    const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole);
 
-    if (userRole !== "ADMIN") {
+    if (!isGlobalAdmin) {
+        // If Role is User/Faculty/HOD, they must have a department
+        // However, USER role (student) might effectively catch all? 
+        // Wait, USER role usually doesn't have dept ID in session? 
+        // Logic: if not global admin, STRICTLY filter by user's department.
+
         if (!userDeptId) {
+            // If a Faculty/User/HOD has no department, they can't see anything.
+            // or maybe we return empty list?
             return NextResponse.json({ error: "User has no department assigned" }, { status: 403 });
         }
         where.departmentId = userDeptId;
     } else {
-        // Admin can filter by dept if passed
+        // Global Admin can filter by dept if passed
         const departmentId = searchParams.get("departmentId");
         if (departmentId) where.departmentId = departmentId;
     }
@@ -72,7 +80,9 @@ export async function POST(request: Request) {
     }
 
     const { role, departmentId: userDeptId } = session.user as any;
-    if (role !== "ADMIN" && role !== "HOD") {
+    const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+
+    if (!isGlobalAdmin && role !== "HOD") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
