@@ -79,6 +79,7 @@ model SemesterResult {
   student   Student  @relation(fields: [studentId], references: [id])
   
   year      String   // "1", "2"
+ 
   semester  String   // "1", "2"
   
   sgpa      String   // "9.5", "Failed"
@@ -112,8 +113,11 @@ model Subject {
   
   regulationId String?
   regulation   Regulation? @relation(fields: [regulationId], references: [id])
+  
 
-  electiveSlot String?  // "PE-1", "OE-1", "PE-2", etc.
+
+  electiveSlotId String?
+  electiveSlotRelation   ElectiveSlot? @relation(fields: [electiveSlotId], references: [id])
 
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id])
@@ -177,4 +181,12 @@ model Alumni {
   department   Department? @relation(fields: [departmentId], references: [id])
 
   createdAt   DateTime @default(now())
+}
+
+model ElectiveSlot {
+  id        String   @id @default(uuid())
+  name      String   @unique // "PE-1", "OE-1"
+  createdAt DateTime @default(now())
+  
+  subjects  Subject[]
 }

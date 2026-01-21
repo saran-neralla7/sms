@@ -28,6 +28,18 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
             regulationId = newReg.id;
         }
 
+        // Resolve Elective Slot
+        let electiveSlotId = null;
+        if (electiveSlot) {
+            const slotRecord = await prisma.electiveSlot.findUnique({ where: { name: electiveSlot } });
+            if (slotRecord) {
+                electiveSlotId = slotRecord.id;
+            } else {
+                const newSlot = await prisma.electiveSlot.create({ data: { name: electiveSlot } });
+                electiveSlotId = newSlot.id;
+            }
+        }
+
         const subject = await prisma.subject.update({
             where: { id: params.id },
             data: {
@@ -38,7 +50,8 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                 type,
                 isElective,
                 regulationId,
-                electiveSlot: electiveSlot || null,
+                regulationId,
+                electiveSlotId,
                 departmentId
             }
         });

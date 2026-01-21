@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         const subjects = await prisma.subject.findMany({
             where,
             orderBy: { name: 'asc' },
-            include: { department: true }
+            include: { department: true, regulation: true, electiveSlotRelation: true }
         });
         return NextResponse.json(subjects);
     } catch (error) {
@@ -50,6 +50,18 @@ export async function POST(request: Request) {
             regulationId = newReg.id;
         }
 
+        // Resolve Elective Slot
+        let electiveSlotId = null;
+        if (electiveSlot) {
+            const slotRecord = await prisma.electiveSlot.findUnique({ where: { name: electiveSlot } });
+            if (slotRecord) {
+                electiveSlotId = slotRecord.id;
+            } else {
+                const newSlot = await prisma.electiveSlot.create({ data: { name: electiveSlot } });
+                electiveSlotId = newSlot.id;
+            }
+        }
+
         const subject = await prisma.subject.create({
             data: {
                 name,
@@ -59,7 +71,7 @@ export async function POST(request: Request) {
                 type,
                 isElective,
                 regulationId,
-                electiveSlot: electiveSlot || null,
+                electiveSlotId,
                 departmentId
             }
         });

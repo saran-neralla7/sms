@@ -9,6 +9,7 @@ export default function SubjectsPage() {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [regulations, setRegulations] = useState<any[]>([]);
+    const [electiveSlots, setElectiveSlots] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -36,7 +37,15 @@ export default function SubjectsPage() {
         fetchDepartments();
         fetchSubjects();
         fetchRegulations();
+        fetchElectiveSlots();
     }, [filterDept, filterYear, filterSem]);
+
+    const fetchElectiveSlots = async () => {
+        try {
+            const res = await fetch("/api/elective-slots");
+            if (res.ok) setElectiveSlots(await res.json());
+        } catch (e) { console.error(e); }
+    };
 
     const fetchRegulations = async () => {
         try {
@@ -137,7 +146,7 @@ export default function SubjectsPage() {
         setSemester(subject.semester);
         setType(subject.type);
         setDepartmentId(subject.departmentId);
-        setRegulation(subject.regulation || "R22");
+        setRegulation(subject.regulation || "");
         setElectiveSlot(subject.electiveSlot || "");
         setIsEditModalOpen(true);
     };
@@ -217,7 +226,9 @@ export default function SubjectsPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-500">{subject.year}-{subject.semester}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{subject.regulation}</td>
+                                    <td className="p-4">{subject.type}</td>
+                                    <td className="p-4">{subject.electiveSlotRelation?.name || "-"}</td>
+                                    <td className="p-4">{subject.regulation?.name || "-"}</td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button onClick={() => openEditModal(subject)} className="rounded p-2 text-blue-600 hover:bg-blue-50 transition-colors">
@@ -286,13 +297,13 @@ export default function SubjectsPage() {
                             </div>
                             <div>
                                 <label className="mb-1 block text-sm font-semibold text-slate-700">Elective Slot (Optional)</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. PE-1, OE-1"
-                                    value={electiveSlot}
-                                    onChange={(e) => setElectiveSlot(e.target.value)}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                                />
+                                <select value={electiveSlot} onChange={(e) => setElectiveSlot(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
+                                    <option value="">None (Not an Elective Slot)</option>
+                                    {electiveSlots.map(slot => (
+                                        <option key={slot.id} value={slot.name}>{slot.name}</option>
+                                    ))}
+                                </select>
+                                <p className="mt-1 text-xs text-slate-500">Only for Professional/Open Electives.</p>
                             </div>
                         </div>
 
