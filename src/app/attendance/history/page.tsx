@@ -30,14 +30,20 @@ export default function HistoryPage() {
 
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
 
+    const [viewMode, setViewMode] = useState<"academic" | "sms">("academic");
+
     useEffect(() => {
         fetchHistory();
-    }, []);
+    }, [viewMode]); // Refetch when mode changes
 
     const fetchHistory = async () => {
         setLoading(true);
         try {
-            const res = await fetch("/api/attendance/history");
+            let url = "/api/attendance/history";
+            if (viewMode === "sms") {
+                url += "?mode=sms";
+            }
+            const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
                 setHistory(data);
@@ -268,6 +274,31 @@ export default function HistoryPage() {
                     </div>
                 )}
             </div>
+
+            {session?.user.role === "ADMIN" && (
+                <div className="mb-4 flex items-center justify-end">
+                    <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                        <button
+                            onClick={() => setViewMode("academic")}
+                            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${viewMode === "academic"
+                                ? "bg-blue-50 text-blue-700 shadow-sm"
+                                : "text-slate-500 hover:text-slate-900"
+                                }`}
+                        >
+                            Academic Records
+                        </button>
+                        <button
+                            onClick={() => setViewMode("sms")}
+                            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${viewMode === "sms"
+                                ? "bg-purple-50 text-purple-700 shadow-sm"
+                                : "text-slate-500 hover:text-slate-900"
+                                }`}
+                        >
+                            SMS / Bulk Logs
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="overflow-x-auto">

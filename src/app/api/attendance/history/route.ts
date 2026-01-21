@@ -36,7 +36,15 @@ export async function GET(request: Request) {
             // 1. See Academic Attendance (NOT marked by USER role)
             // 2. Filter by Dept if HOD
 
-            whereClause.user = { role: { not: "USER" } };
+            const mode = searchParams.get("mode");
+
+            if (mode === "sms" && userRole === "ADMIN") {
+                // View SMS Log History (attendance marked by USER role)
+                whereClause.user = { role: "USER" };
+            } else {
+                // Default: View Academic Attendance (NOT marked by USER role)
+                whereClause.user = { role: { not: "USER" } };
+            }
 
             if (userRole === "HOD") {
                 const userProfile = await prisma.user.findUnique({
