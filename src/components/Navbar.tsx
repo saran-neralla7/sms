@@ -45,12 +45,33 @@ export default function Navbar() {
         }
     ];
 
-    const isAdmin = session.user.role === "ADMIN";
-    const isHOD = session.user.role === "HOD";
+    // Roles & Access
+    const role = session.user.role;
+    const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+    const isHOD = role === "HOD";
+    const canManage = isGlobalAdmin || isHOD;
 
-    // Additional links based on role
+    // Filter Links Based on Role
+    // HODs should NOT see "Departments" creation or "Users" (unless creating faculty - maybe later).
+    // For now, let's restrict HODs from: Departments, Alumni (maybe?), Periods (maybe?)
+    // Actually, HODs need to manage Sections, Periods, Subjects, Electives, Results, Students for THEIR department.
+    // They should NOT manage: Users (Global), Departments (Global).
+
+    const filteredAdminLinks = adminManageLinks.map(group => {
+        return {
+            ...group,
+            items: group.items.filter(item => {
+                if (isHOD) {
+                    // HOD Restrictions
+                    if (["/admin/users", "/admin/departments", "/admin/alumni", "/admin/regulations"].includes(item.href)) return false;
+                }
+                return true;
+            })
+        };
+    }).filter(group => group.items.length > 0);
+
     const getExtraLinks = () => {
-        if (isAdmin || isHOD || session.user.role === "USER") {
+        if (canManage || session.user.role === "USER") {
             return [{ href: "/reports", label: "Reports" }];
         }
         return [];
@@ -98,8 +119,8 @@ export default function Navbar() {
                                     );
                                 })}
 
-                                {/* Admin Dropdown */}
-                                {isAdmin && (
+                                {/* Admin/HOD Dropdown */}
+                                {canManage && (
                                     <div
                                         className="relative"
                                         onMouseEnter={() => setIsDropdownOpen(true)}
@@ -109,7 +130,7 @@ export default function Navbar() {
                                             className={`flex items-center gap-1 text-sm font-medium transition-colors ${pathname.startsWith("/admin") ? "text-blue-600" : "text-slate-600 hover:text-slate-900"
                                                 }`}
                                         >
-                                            Manage
+                                            {isGlobalAdmin ? "Administration" : "Department"}
                                             <svg className={`h-4 w-4 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                             </svg>
@@ -124,7 +145,7 @@ export default function Navbar() {
                                                     className="absolute left-0 top-full mt-2 w-64 rounded-xl border border-slate-100 bg-white p-2 shadow-xl ring-1 ring-black ring-opacity-5"
                                                 >
                                                     <div className="flex flex-col gap-2">
-                                                        {adminManageLinks.map((group, idx) => (
+                                                        {filteredAdminLinks.map((group, idx) => (
                                                             <div key={idx} className="px-2 py-2">
                                                                 <h3 className="mb-2 px-2 text-xs font-bold uppercase tracking-wider text-slate-400">{group.header}</h3>
                                                                 <div className="space-y-1">
@@ -208,10 +229,10 @@ export default function Navbar() {
                                     </Link>
                                 ))}
 
-                                {isAdmin && (
+                                {canManage && (
                                     <div className="mt-4 border-t border-slate-100 pt-4">
                                         <p className="mb-2 px-4 text-xs font-bold uppercase text-slate-400">Management</p>
-                                        {adminManageLinks.map(group => (
+                                        {filteredAdminLinks.map(group => (
                                             <div key={group.header}>
                                                 {group.items.map(item => (
                                                     <Link

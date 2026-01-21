@@ -31,15 +31,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "ADMIN") {
+    if (!hasGlobalAccess(session?.user)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     try {
         const { username, password, role, departmentId } = await request.json();
 
-        // Validation: HOD/USER must have department
-        if (role !== "ADMIN" && !departmentId) {
+        // Validation Checks
+        const isGlobalRole = GLOBAL_ROLES.includes(role);
+
+        // Non-global roles MUST have a department (HOD, FACULTY, USER)
+        if (!isGlobalRole && !departmentId) {
             return NextResponse.json({ error: "Department is required for this role" }, { status: 400 });
         }
 
@@ -50,7 +53,7 @@ export async function POST(request: Request) {
                 username,
                 password: hashedPassword,
                 role: role || "USER",
-                departmentId: role === "ADMIN" ? null : departmentId
+                departmentId: isGlobalRole ? null : departmentId
             },
             select: {
                 id: true,
