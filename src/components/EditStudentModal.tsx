@@ -102,6 +102,9 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                 ...cleanedData,
                 reimbursement: formData.reimbursement === "true",
                 certificatesSubmitted: formData.certificatesSubmitted === "true",
+                regulationId: cleanedData.regulationId || undefined,
+                departmentId: cleanedData.departmentId || undefined,
+                sectionId: cleanedData.sectionId || undefined,
             };
 
             const res = await fetch(`/api/students/${student.id}`, {
