@@ -20,7 +20,7 @@ export default function ResultsPage() {
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [isPastResults, setIsPastResults] = useState(false);
     const [templateCtx, setTemplateCtx] = useState({
-        departmentId: "", year: "", semester: "", studentYear: "", sectionIds: [] as string[]
+        departmentId: "", year: "", semester: "", studentYear: "", regulation: "R22", sectionIds: [] as string[]
     });
     const [availableSections, setAvailableSections] = useState<any[]>([]);
 
@@ -169,6 +169,7 @@ export default function ResultsPage() {
         params.set("departmentId", templateCtx.departmentId);
         params.set("year", templateCtx.year);
         params.set("semester", templateCtx.semester);
+        params.set("regulation", templateCtx.regulation);
         if (templateCtx.sectionIds.length > 0) {
             params.set("sectionIds", templateCtx.sectionIds.join(","));
         }

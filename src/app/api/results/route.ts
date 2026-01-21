@@ -83,7 +83,7 @@ export async function POST(request: Request) {
                 continue;
             }
 
-            // 1.5 Process Grades (Handle "ELECTIVE" column and "Code - Name" format)
+            // 1.5 Process Grades (Handle "ELECTIVE", "PE-1", etc., and "Code - Name" format)
             const processedGrades = (res.grades || []).map((g: any) => {
                 let code = g.subjectCode;
 
@@ -92,19 +92,22 @@ export async function POST(request: Request) {
                     code = code.split(" - ")[0].trim();
                 }
 
-                // Handle "ELECTIVE" placeholder
+                // Handle Generic "ELECTIVE" placeholder
                 if (code === "ELECTIVE") {
-                    // Find the elective subject this student is enrolled in for this Year/Sem
                     const actualSubject = studentData?.subjects.find(s =>
-                        s.year === String(res.year) && s.semester === String(res.semester) && s.isElective
+                        s.year === String(res.year) && s.semester === String(res.semester) && s.isElective && !s.electiveSlot
                     );
+                    if (actualSubject) code = actualSubject.code;
+                }
 
-                    if (actualSubject) {
-                        code = actualSubject.code;
-                    } else {
-                        // If we can't find an allocated elective, we unfortunately can't assign this grade.
-                        // We'll keep it as "ELECTIVE" which might be saved but won't match any subject in UI.
-                        // Or we could log a warning.
+                // Handle Slot Placeholders (e.g., "PE-1", "OE-1")
+                // We check if the student has a subject with this electiveSlot
+                if (studentData) {
+                    const slotSubject = studentData.subjects.find(s =>
+                        s.year === String(res.year) && s.semester === String(res.semester) && s.electiveSlot === code
+                    );
+                    if (slotSubject) {
+                        code = slotSubject.code;
                     }
                 }
 

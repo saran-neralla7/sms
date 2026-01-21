@@ -34,7 +34,9 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { name, code, year, semester, type, departmentId } = body;
+        const { name, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
+
+        const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
         const subject = await prisma.subject.create({
             data: {
@@ -43,6 +45,9 @@ export async function POST(request: Request) {
                 year,
                 semester,
                 type,
+                isElective,
+                regulation: regulation || "R22",
+                electiveSlot: electiveSlot || null,
                 departmentId
             }
         });

@@ -26,6 +26,8 @@ export default function SubjectsPage() {
     const [semester, setSemester] = useState("1");
     const [type, setType] = useState("THEORY");
     const [departmentId, setDepartmentId] = useState("");
+    const [regulation, setRegulation] = useState("R22");
+    const [electiveSlot, setElectiveSlot] = useState("");
 
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
 
@@ -67,7 +69,7 @@ export default function SubjectsPage() {
             const res = await fetch("/api/subjects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, code, year, semester, type, departmentId })
+                body: JSON.stringify({ name, code, year, semester, type, departmentId, regulation, electiveSlot })
             });
             if (res.ok) {
                 fetchSubjects();
@@ -88,7 +90,7 @@ export default function SubjectsPage() {
             const res = await fetch(`/api/subjects/${selectedSubject.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, code, year, semester, type, departmentId })
+                body: JSON.stringify({ name, code, year, semester, type, departmentId, regulation, electiveSlot })
             });
             if (res.ok) {
                 fetchSubjects();
@@ -126,6 +128,8 @@ export default function SubjectsPage() {
         setSemester(subject.semester);
         setType(subject.type);
         setDepartmentId(subject.departmentId);
+        setRegulation(subject.regulation || "R22");
+        setElectiveSlot(subject.electiveSlot || "");
         setIsEditModalOpen(true);
     };
 
@@ -136,6 +140,8 @@ export default function SubjectsPage() {
         setSemester("1");
         setType("THEORY");
         setDepartmentId(departments[0]?.id || "");
+        setRegulation("R22");
+        setElectiveSlot("");
         setSelectedSubject(null);
     };
 
@@ -181,7 +187,7 @@ export default function SubjectsPage() {
                             <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Name</th>
                             <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Type</th>
                             <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Class</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Dept</th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Reg</th>
                             <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
                         </tr>
                     </thead>
@@ -198,10 +204,11 @@ export default function SubjectsPage() {
                                     <td className="px-6 py-4 text-sm text-slate-500">
                                         <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${subject.type === "LAB" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"}`}>
                                             {subject.type}
+                                            {subject.electiveSlot && <span className="ml-1 text-xs opacity-75">({subject.electiveSlot})</span>}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-500">{subject.year}-{subject.semester}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{subject.department?.name}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">{subject.regulation}</td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button onClick={() => openEditModal(subject)} className="rounded p-2 text-blue-600 hover:bg-blue-50 transition-colors">
@@ -256,6 +263,27 @@ export default function SubjectsPage() {
                                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                 required
                             />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="mb-1 block text-sm font-semibold text-slate-700">Regulation</label>
+                                <select value={regulation} onChange={(e) => setRegulation(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
+                                    <option value="R22">R22</option>
+                                    <option value="R20">R20</option>
+                                    <option value="R24">R24</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-sm font-semibold text-slate-700">Elective Slot (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. PE-1, OE-1"
+                                    value={electiveSlot}
+                                    onChange={(e) => setElectiveSlot(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
                         </div>
 
                         <div>

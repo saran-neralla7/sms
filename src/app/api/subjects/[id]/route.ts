@@ -12,7 +12,9 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 
     try {
         const body = await request.json();
-        const { name, code, year, semester, type, departmentId } = body;
+        const { name, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
+
+        const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
         const subject = await prisma.subject.update({
             where: { id: params.id },
@@ -22,6 +24,9 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                 year,
                 semester,
                 type,
+                isElective,
+                regulation: regulation || "R22",
+                electiveSlot: electiveSlot || null,
                 departmentId
             }
         });

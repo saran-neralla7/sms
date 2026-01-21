@@ -74,7 +74,8 @@ export default function StudentsPage() {
         year: "1",
         semester: "1",
         departmentId: "",
-        sectionId: ""
+        sectionId: "",
+        regulation: "R22"
     });
 
     const fetchDepartments = async () => {
@@ -152,7 +153,7 @@ export default function StudentsPage() {
                 const successMessage = editingStudent ? "Student updated successfully" : "Student created successfully";
                 setStatus({ type: "success", message: successMessage });
                 setEditingStudent(null);
-                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "" });
+                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22" });
                 fetchStudents();
                 setTimeout(() => {
                     setIsModalOpen(false);
@@ -233,7 +234,7 @@ export default function StudentsPage() {
 
     const openAddModal = () => {
         setEditingStudent(null);
-        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "" });
+        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22" });
         setIsModalOpen(true);
     };
 
@@ -247,6 +248,7 @@ export default function StudentsPage() {
             semester: student.semester,
             departmentId: student.departmentId || "",
             sectionId: student.sectionId || "",
+            regulation: student.regulation || "R22"
         });
         setIsModalOpen(true);
     };
@@ -733,6 +735,18 @@ export default function StudentsPage() {
                                 ))}
                             </select>
                         </div>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-slate-700">Regulation</label>
+                        <select
+                            value={formData.regulation}
+                            onChange={(e) => setFormData({ ...formData, regulation: e.target.value })}
+                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                        >
+                            <option value="R22">R22</option>
+                            <option value="R20">R20</option>
+                            <option value="R24">R24</option>
+                        </select>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>

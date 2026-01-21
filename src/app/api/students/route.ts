@@ -108,7 +108,8 @@ export async function POST(request: Request) {
                     year: body.year,
                     semester: body.semester,
                     sectionId: body.sectionId,
-                    departmentId: body.departmentId
+                    departmentId: body.departmentId,
+                    regulation: body.regulation || "R22"
                 }
             });
             action = "updated";
@@ -122,7 +123,8 @@ export async function POST(request: Request) {
                     year: body.year,
                     semester: body.semester,
                     sectionId: body.sectionId,
-                    departmentId: body.departmentId
+                    departmentId: body.departmentId,
+                    regulation: body.regulation || "R22"
                 },
             });
             action = "created";

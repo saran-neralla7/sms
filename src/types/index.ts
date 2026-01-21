@@ -23,6 +23,21 @@ export interface Student {
     departmentId: string;
     department?: Department; // Relation
     photoUrl?: string; // Optional URL
+    regulation?: string;
+}
+
+export interface Subject {
+    id: string;
+    name: string;
+    code: string;
+    year: string;
+    semester: string;
+    type: string;
+    isElective: boolean;
+    electiveSlot?: string | null;
+    regulation?: string;
+    departmentId: string;
+    department?: Department;
 }
 
 export interface User {

@@ -60,6 +60,8 @@ model Student {
 
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id])
+  
+  regulation   String   @default("R22") // "R20", "R22"
 
   subjects     Subject[] // Many-to-Many for Electives
 
@@ -100,6 +102,9 @@ model Subject {
   type         String   // "THEORY" | "LAB"
   isElective   Boolean  @default(false)
   
+  regulation   String   @default("R22") // "R20", "R22"
+  electiveSlot String?  // "PE-1", "OE-1", "PE-2", etc.
+
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id])
   
