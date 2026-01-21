@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes } from "react-icons/fa";
+import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes, FaClock, FaBook } from "react-icons/fa";
 import Modal from "@/components/Modal";
 
 export default function Home() {
@@ -505,6 +505,7 @@ export default function Home() {
           </div>
 
           {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
+          {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
           {session?.user?.role !== "USER" && (
             <div className="grid gap-6 md:grid-cols-2">
               {/* Period Selection */}
@@ -517,12 +518,11 @@ export default function Home() {
                   <label className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                     <input
                       type="checkbox"
-                      checked={isMultiPeriod}
+                      checked={isMultiHour}
                       onChange={(e) => {
-                        setIsMultiPeriod(e.target.checked);
-                        setSelectedPeriod("");
-                        setSelectedPeriodIds([]);
-                        setIsPeriodFree(false);
+                        setIsMultiHour(e.target.checked);
+                        setSelectedPeriodId("");
+                        setSelectedPeriodIds(new Set());
                       }}
                       className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
@@ -530,30 +530,38 @@ export default function Home() {
                   </label>
                 </div>
 
-                {isMultiPeriod ? (
+                {isMultiHour ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
                     <div className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Select one or more periods</div>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {periods.map((period) => (
-                        <button
-                          key={period.id}
-                          onClick={() => togglePeriod(period.id)}
-                          className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 text-sm transition-all ${selectedPeriodIds.includes(period.id)
-                            ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-500"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                            }`}
-                        >
-                          <span className="font-semibold">{period.name}</span>
-                          <span className="text-[10px] text-slate-400">{period.startTime} - {period.endTime}</span>
-                        </button>
-                      ))}
+                      {periods.map((period) => {
+                        const isSelected = selectedPeriodIds.has(period.id);
+                        return (
+                          <button
+                            key={period.id}
+                            onClick={() => {
+                              const newSet = new Set(selectedPeriodIds);
+                              if (newSet.has(period.id)) newSet.delete(period.id);
+                              else newSet.add(period.id);
+                              setSelectedPeriodIds(newSet);
+                            }}
+                            className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 text-sm transition-all ${isSelected
+                              ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-500"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                              }`}
+                          >
+                            <span className="font-semibold">{period.name}</span>
+                            <span className="text-[10px] text-slate-400">{period.startTime} - {period.endTime}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
                   <div className="relative">
                     <select
-                      value={selectedPeriod}
-                      onChange={(e) => handlePeriodChange(e.target.value)}
+                      value={selectedPeriodId}
+                      onChange={(e) => setSelectedPeriodId(e.target.value)}
                       className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pl-11 text-slate-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-all cursor-pointer hover:border-blue-300"
                     >
                       <option value="">Select Period...</option>
@@ -569,7 +577,7 @@ export default function Home() {
               </div>
 
               {/* Subject Selection */}
-              {(isPeriodFree || (isMultiPeriod && selectedPeriodIds.length > 0)) && (
+              {(!attendanceStatus.exists && (selectedPeriodId || selectedPeriodIds.size > 0)) && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                   <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                     <FaBook className="text-purple-500" />
@@ -577,11 +585,11 @@ export default function Home() {
                   </h2>
                   <div className="relative">
                     <select
-                      value={selectedSubject}
-                      onChange={(e) => setSelectedSubject(e.target.value)}
+                      value={selectedSubjectId}
+                      onChange={(e) => setSelectedSubjectId(e.target.value)}
                       className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pl-11 text-slate-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-all cursor-pointer hover:border-blue-300"
                     >
-                      <option value="">Select Subject...</option>
+                      <option value="">Select Subject</option>
                       {subjects.map((subject) => (
                         <option key={subject.id} value={subject.id}>
                           {subject.name} {subject.code ? `(${subject.code})` : ""}
