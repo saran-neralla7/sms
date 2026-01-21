@@ -8,24 +8,27 @@ import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCa
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { useSession } from "next-auth/react";
 
+import { useRouter } from "next/navigation";
+
 export default function StudentsPage() {
+    const router = useRouter();
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-    // Profile View State
-    const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
-    const [viewingTab, setViewingTab] = useState<"details" | "attendance" | "results">("details");
-    const [attendanceStats, setAttendanceStats] = useState<any>(null);
-    const [statsLoading, setStatsLoading] = useState(false);
+    // Profile View State (Removed in favor of new Profile Page)
+    // const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+    // const [viewingTab, setViewingTab] = useState<"details" | "attendance" | "results">("details");
+    // const [attendanceStats, setAttendanceStats] = useState<any>(null);
+    // const [statsLoading, setStatsLoading] = useState(false);
 
     // Results State
-    const [studentResults, setStudentResults] = useState<any[]>([]);
-    const [resultsLoading, setResultsLoading] = useState(false);
+    // const [studentResults, setStudentResults] = useState<any[]>([]);
+    // const [resultsLoading, setResultsLoading] = useState(false);
 
     // Stats Date Filter
-    const [statsDateRange, setStatsDateRange] = useState({ start: "", end: "" });
+    // const [statsDateRange, setStatsDateRange] = useState({ start: "", end: "" });
 
     // Photo Upload State
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -337,12 +340,33 @@ export default function StudentsPage() {
 
                         const studentPayload = {
                             rollNumber: String(row['Roll Number'] || row['Roll'] || row['rollNumber']),
-                            name: String(row['Name'] || row['name']),
-                            mobile: String(row['Mobile'] || row['Phone'] || row['mobile']),
+                            name: String(row['Name'] || row['name'] || row['Student Name'] || row['STUDENT NAME']),
+                            mobile: String(row['Mobile'] || row['Phone'] || row['Parent Contact Number'] || row['PARENT CONTACT NUMBER']),
                             year: String(row['Year'] || row['year']),
                             semester: String(row['Semester'] || row['Sem'] || row['semester']),
                             sectionId: finalSecId,
-                            departmentId: finalDeptId
+                            departmentId: finalDeptId,
+
+                            // Extended Fields
+                            hallTicketNumber: String(row['Hall Ticket Number'] || row['HALL TICKET NUMBER'] || ""),
+                            eamcetRank: String(row['EAMCET Rank'] || row['EAMCET RANK'] || ""),
+                            dateOfBirth: row['Date of Birth'] || row['DATE OF BIRTH'] || null,
+                            dateOfReporting: row['Date of Reporting'] || row['DATE OF REPORTING'] || null,
+                            gender: String(row['Gender'] || row['GENDER'] || ""),
+                            caste: String(row['Caste'] || row['CASTE'] || ""),
+                            casteName: String(row['Caste Name'] || row['CASTE NAME'] || ""),
+                            category: String(row['Category'] || row['CATEGORY'] || ""),
+                            admissionType: String(row['Admission Type'] || row['ADMISSION TYPE'] || ""),
+                            fatherName: String(row['Father Name'] || row['FATHER NAME'] || ""),
+                            motherName: String(row['Mother Name'] || row['MOTHER NAME'] || ""),
+                            address: String(row['Address'] || row['ADDRESS'] || ""),
+                            studentContactNumber: String(row['Student Contact Number'] || row['STUDENT CONTACT NUMBER'] || ""),
+                            emailId: String(row['Email ID'] || row['EMAIL ID'] || ""),
+                            aadharNumber: String(row['Aadhar Number'] || row['AADHAR NUMBER'] || ""),
+                            abcId: String(row['ABC ID'] || row['ABC Id'] || ""),
+                            reimbursement: String(row['Reimbursement'] || row['REIMBURSEMENT'] || "false").toLowerCase() === "true",
+                            certificatesSubmitted: String(row['Certificates Submitted'] || row['CERTIFICATES SUBMITTED'] || "false").toLowerCase() === "true",
+                            domainMailId: String(row['Domain Mail ID'] || row['DOMAIN MAIL ID'] || "")
                         };
 
                         if (!studentPayload.rollNumber) {
@@ -436,71 +460,39 @@ export default function StudentsPage() {
 
     const downloadSample = () => {
         const headers = [
-            { "Roll Number": "21131A0501", "Name": "John Doe", "Mobile": "9876543210", "Year": "1", "Semester": "1", "Section": "A", "Department": "CSE" }
+            {
+                "Roll Number": "21131A0501", "Name": "John Doe", "Mobile": "9999999999",
+                "Year": "3", "Semester": "1", "Section": "A", "Department": "CSE",
+                "Hall Ticket Number": "HT123456", "EAMCET Rank": "1000", "Date of Birth": "2003-01-01",
+                "Gender": "Male", "Caste": "OC", "Student Contact Number": "8888888888",
+                "Address": "Visakhapatnam", "Email ID": "john@example.com"
+            }
         ];
         const ws = XLSX.utils.json_to_sheet(headers);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Template");
-        XLSX.writeFile(wb, "student_import_template.xlsx");
+        XLSX.writeFile(wb, "student_import_template_v2.xlsx");
     };
 
-    const fetchStudentStats = async (studentId: string, start = "", end = "") => {
-        setStatsLoading(true);
-        try {
-            const query = new URLSearchParams();
-            if (start) query.set("startDate", start);
-            if (end) query.set("endDate", end);
-
-            const res = await fetch(`/api/students/${studentId}/stats?${query.toString()}`);
-            if (res.ok) {
-                const data = await res.json();
-                setAttendanceStats(data);
-            }
-        } catch (error) {
-            console.error("Failed to fetch stats", error);
-        } finally {
-            setStatsLoading(false);
-        }
-    };
-
-    const fetchStudentResults = async (studentId: string) => {
-        setResultsLoading(true);
-        try {
-            const res = await fetch(`/api/results?studentId=${studentId}`);
-            if (res.ok) setStudentResults(await res.json());
-        } catch (e) { console.error(e); }
-        finally { setResultsLoading(false); }
-    };
-
-    // Reset tabs when closing
-    useEffect(() => {
-        if (!viewingStudent) {
-            setViewingTab("details");
-            setAttendanceStats(null);
-            setStatsDateRange({ start: "", end: "" });
-            setStudentResults([]); // Reset results
-        }
-    }, [viewingStudent]);
-
-    // Check when date range changes
-    useEffect(() => {
-        if (viewingStudent && viewingTab === "attendance") {
-            const timer = setTimeout(() => {
-                fetchStudentStats(viewingStudent.id, statsDateRange.start, statsDateRange.end);
-            }, 500);
-            return () => clearTimeout(timer);
-        }
-    }, [statsDateRange, viewingTab, viewingStudent]);
+    // ... (fetchStudentStats, fetchStudentResults kept same or removed if used in new page) ...
+    // Assuming we keep them for backward compat or if needed, but here simplifying
 
     const exportData = () => {
         const data = students.map(s => ({
             "Roll Number": s.rollNumber,
             "Name": s.name,
-            "Mobile": s.mobile,
+            "Mobile (Parent)": s.mobile,
+            "Student Mobile": s.studentContactNumber || "",
             "Year": s.year,
             "Semester": s.semester,
             "Section": (typeof s.section === 'object' ? (s.section as any)?.name : s.section) || "",
-            "Department": (typeof s.department === 'object' ? (s.department as any)?.code : s.department) || ""
+            "Department": (typeof s.department === 'object' ? (s.department as any)?.code : s.department) || "",
+            "Hall Ticket": s.hallTicketNumber || "",
+            "EAMCET Rank": s.eamcetRank || "",
+            "DOB": s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString() : "",
+            "Email": s.emailId || "",
+            "Aadhar": s.aadharNumber || "",
+            "Address": s.address || ""
         }));
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
@@ -650,13 +642,13 @@ export default function StudentsPage() {
                                         </td>
                                         <td
                                             className="whitespace-nowrap px-6 py-4 text-sm font-mono text-blue-600 cursor-pointer hover:underline"
-                                            onClick={() => setViewingStudent(student)}
+                                            onClick={() => router.push(`/admin/students/${student.id}`)}
                                         >
                                             {student.rollNumber}
                                         </td>
                                         <td
                                             className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600 cursor-pointer hover:underline"
-                                            onClick={() => setViewingStudent(student)}
+                                            onClick={() => router.push(`/admin/students/${student.id}`)}
                                         >
                                             {student.name}
                                         </td>
