@@ -105,6 +105,9 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                 regulationId: cleanedData.regulationId || undefined,
                 departmentId: cleanedData.departmentId || undefined,
                 sectionId: cleanedData.sectionId || undefined,
+                // Fix Date fields: Empty string "" must be null for Prisma DateTime?
+                dateOfBirth: cleanedData.dateOfBirth ? new Date(cleanedData.dateOfBirth).toISOString() : null,
+                dateOfReporting: cleanedData.dateOfReporting ? new Date(cleanedData.dateOfReporting).toISOString() : null,
             };
 
             const res = await fetch(`/api/students/${student.id}`, {
