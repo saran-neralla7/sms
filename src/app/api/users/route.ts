@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
+import { hasGlobalAccess, GLOBAL_ROLES } from "@/lib/permissions";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
