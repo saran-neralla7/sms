@@ -43,26 +43,30 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    if (session?.user.role === "ADMIN") {
+    // Check role safely
+    const role = (session?.user.role || "").toUpperCase();
+    if (["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) {
       fetchDepartments();
     }
     fetchPeriods();
   }, [session]);
 
   // Derived Department ID (Admin's selection OR HOD's assigned)
-  const effectiveDepartmentId = session?.user.role === "ADMIN" ? departmentId : (session?.user as any)?.departmentId;
+  const userRole = (session?.user.role || "").toUpperCase();
+  const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole);
+  const effectiveDepartmentId = isGlobalAdmin ? departmentId : (session?.user as any)?.departmentId;
 
   // Re-fetch sections and subjects whenever the effective department changes
   useEffect(() => {
     if (session) {
-      if (session.user.role === "ADMIN" && !departmentId) {
+      if (isGlobalAdmin && !departmentId) {
         setSections([]);
         setSubjects([]);
       } else {
         fetchSections(effectiveDepartmentId);
       }
     }
-  }, [effectiveDepartmentId, session]);
+  }, [effectiveDepartmentId, session, departmentId]); // Added departmentId dependency as isGlobalAdmin uses it indirectly via logic
 
   useEffect(() => {
     if (effectiveDepartmentId && year && semester) {
@@ -147,10 +151,11 @@ export default function Home() {
 
   useEffect(() => {
     // Only fetch if required fields are selected
-    const isAdmin = session?.user.role === "ADMIN";
+    const currentRole = (session?.user.role || "").toUpperCase();
+    const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(currentRole);
 
     if (year && semester && selectedSectionIds.size > 0) {
-      if (isAdmin && !departmentId) {
+      if (isGlobal && !departmentId) {
         return;
       }
       fetchStudents();
@@ -437,7 +442,7 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 p-6 md:grid-cols-4">
-          {session?.user.role === "ADMIN" && (
+          {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Department</label>
               <select
