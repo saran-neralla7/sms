@@ -88,4 +88,13 @@ export interface AttendanceHistory {
     user: {
         username: string;
     };
+    subject?: Subject;
+    period?: Period;
+}
+
+export interface Period {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
 }
