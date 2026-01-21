@@ -132,7 +132,27 @@ export async function POST(request: Request) {
                     semester: body.semester,
                     sectionId: body.sectionId,
                     departmentId: body.departmentId,
-                    regulationId: regulationId
+                    regulationId: regulationId,
+                    // Extended Fields
+                    hallTicketNumber: body.hallTicketNumber || null,
+                    eamcetRank: body.eamcetRank || null,
+                    dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
+                    dateOfReporting: body.dateOfReporting ? new Date(body.dateOfReporting) : null,
+                    gender: body.gender || null,
+                    caste: body.caste || null,
+                    casteName: body.casteName || null,
+                    category: body.category || null,
+                    admissionType: body.admissionType || null,
+                    fatherName: body.fatherName || null,
+                    motherName: body.motherName || null,
+                    address: body.address || null,
+                    studentContactNumber: body.studentContactNumber || null,
+                    emailId: body.emailId || null,
+                    aadharNumber: body.aadharNumber || null,
+                    abcId: body.abcId || null,
+                    reimbursement: body.reimbursement === true || body.reimbursement === "true",
+                    certificatesSubmitted: body.certificatesSubmitted === true || body.certificatesSubmitted === "true",
+                    domainMailId: body.domainMailId || null
                 }
             });
             action = "updated";
@@ -147,7 +167,27 @@ export async function POST(request: Request) {
                     semester: body.semester,
                     sectionId: body.sectionId,
                     departmentId: body.departmentId,
-                    regulationId: regulationId
+                    regulationId: regulationId,
+                    // Extended Fields
+                    hallTicketNumber: body.hallTicketNumber || null,
+                    eamcetRank: body.eamcetRank || null,
+                    dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
+                    dateOfReporting: body.dateOfReporting ? new Date(body.dateOfReporting) : null,
+                    gender: body.gender || null,
+                    caste: body.caste || null,
+                    casteName: body.casteName || null,
+                    category: body.category || null,
+                    admissionType: body.admissionType || null,
+                    fatherName: body.fatherName || null,
+                    motherName: body.motherName || null,
+                    address: body.address || null,
+                    studentContactNumber: body.studentContactNumber || null,
+                    emailId: body.emailId || null,
+                    aadharNumber: body.aadharNumber || null,
+                    abcId: body.abcId || null,
+                    reimbursement: body.reimbursement === true || body.reimbursement === "true",
+                    certificatesSubmitted: body.certificatesSubmitted === true || body.certificatesSubmitted === "true",
+                    domainMailId: body.domainMailId || null
                 },
             });
             action = "created";

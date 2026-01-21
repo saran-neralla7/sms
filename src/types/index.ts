@@ -24,6 +24,27 @@ export interface Student {
     department?: Department; // Relation
     photoUrl?: string; // Optional URL
     regulation?: string;
+
+    // Extended
+    hallTicketNumber?: string;
+    eamcetRank?: string;
+    dateOfBirth?: string; // ISO String from Date
+    dateOfReporting?: string;
+    gender?: string;
+    caste?: string;
+    casteName?: string;
+    category?: string;
+    admissionType?: string;
+    fatherName?: string;
+    motherName?: string;
+    address?: string;
+    studentContactNumber?: string;
+    emailId?: string;
+    aadharNumber?: string;
+    abcId?: string;
+    reimbursement?: boolean;
+    certificatesSubmitted?: boolean;
+    domainMailId?: string;
 }
 
 export interface Subject {

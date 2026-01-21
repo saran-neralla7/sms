@@ -68,6 +68,27 @@ model Student {
 
   photoUrl     String? // URL or Path to student photo
 
+  // Extended Profile Fields
+  hallTicketNumber String?  @unique
+  eamcetRank       String?
+  dateOfBirth      DateTime? // parsed from DD-MM-YYYY
+  dateOfReporting  DateTime? // parsed from DD-MM-YYYY
+  gender           String?
+  caste            String?
+  casteName        String? // Sub-caste or distinctive name
+  category         String? // OC, BC-A, etc.
+  admissionType    String? // Convenor, Management, Spot
+  fatherName       String?
+  motherName       String?
+  address          String?  @db.Text
+  studentContactNumber String?
+  emailId          String?
+  aadharNumber     String?
+  abcId            String?
+  reimbursement    Boolean  @default(false)
+  certificatesSubmitted Boolean @default(false) // or String?
+  domainMailId     String?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   results    SemesterResult[]
