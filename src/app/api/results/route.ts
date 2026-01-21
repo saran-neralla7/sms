@@ -67,14 +67,18 @@ export async function POST(request: Request) {
             if (res.rollNumber) {
                 studentData = await prisma.student.findUnique({
                     where: { rollNumber: String(res.rollNumber) },
-                    include: { subjects: true } // Need this to resolve "ELECTIVE"
+                    include: {
+                        subjects: { include: { electiveSlotRelation: true } }
+                    }
                 });
                 if (studentData) studentId = studentData.id;
             } else if (studentId) {
                 // Even if we have ID, we might need subjects if "ELECTIVE" is used
                 studentData = await prisma.student.findUnique({
                     where: { id: studentId },
-                    include: { subjects: true }
+                    include: {
+                        subjects: { include: { electiveSlotRelation: true } }
+                    }
                 });
             }
 
@@ -95,7 +99,7 @@ export async function POST(request: Request) {
                 // Handle Generic "ELECTIVE" placeholder
                 if (code === "ELECTIVE") {
                     const actualSubject = studentData?.subjects.find(s =>
-                        s.year === String(res.year) && s.semester === String(res.semester) && s.isElective && !s.electiveSlot
+                        s.year === String(res.year) && s.semester === String(res.semester) && s.isElective && !s.electiveSlotRelation
                     );
                     if (actualSubject) code = actualSubject.code;
                 }
@@ -104,7 +108,7 @@ export async function POST(request: Request) {
                 // We check if the student has a subject with this electiveSlot
                 if (studentData) {
                     const slotSubject = studentData.subjects.find(s =>
-                        s.year === String(res.year) && s.semester === String(res.semester) && s.electiveSlot === code
+                        s.year === String(res.year) && s.semester === String(res.semester) && s.electiveSlotRelation?.name === code
                     );
                     if (slotSubject) {
                         code = slotSubject.code;
