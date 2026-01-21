@@ -50,7 +50,6 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                 type,
                 isElective,
                 regulationId,
-                regulationId,
                 electiveSlotId,
                 departmentId
             }
