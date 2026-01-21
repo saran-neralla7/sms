@@ -101,8 +101,9 @@ export async function PUT(
             data: body,
         });
         return NextResponse.json(student);
-    } catch (error) {
-        return NextResponse.json({ error: "Failed to update student" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Student Update Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to update student" }, { status: 500 });
     }
 }
 
