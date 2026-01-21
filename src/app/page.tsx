@@ -517,7 +517,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                     <FaClock className="text-blue-500" />
-                    Select Period
+                    Select Hour
                   </h2>
 
                   {/* Segmented Control */}
@@ -533,7 +533,7 @@ export default function Home() {
                         : "text-slate-500 hover:text-slate-700"
                         }`}
                     >
-                      <span>Single Period</span>
+                      <span>Single Hour</span>
                     </button>
                     <button
                       onClick={() => {
@@ -591,7 +591,7 @@ export default function Home() {
                       onChange={(e) => setSelectedPeriodId(e.target.value)}
                       className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-3 pr-10 text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-blue-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                     >
-                      <option value="">Select a period...</option>
+                      <option value="">Select an hour...</option>
                       {periods.map((period) => (
                         <option key={period.id} value={period.id}>
                           {period.name} ({period.startTime} - {period.endTime})
