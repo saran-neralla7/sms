@@ -461,11 +461,16 @@ export default function StudentsPage() {
     const downloadSample = () => {
         const headers = [
             {
-                "Roll Number": "21131A0501", "Name": "John Doe", "Mobile": "9999999999",
+                "Roll Number": "21131A0501", "Name": "John Doe", "Mobile": "9876543210",
                 "Year": "3", "Semester": "1", "Section": "A", "Department": "CSE",
-                "Hall Ticket Number": "HT123456", "EAMCET Rank": "1000", "Date of Birth": "2003-01-01",
-                "Gender": "Male", "Caste": "OC", "Student Contact Number": "8888888888",
-                "Address": "Visakhapatnam", "Email ID": "john@example.com"
+                "Hall Ticket Number": "HT123456", "EAMCET Rank": "1000",
+                "Date of Birth": "2003-01-01", "Date of Reporting": "2021-09-01",
+                "Gender": "Male", "Caste": "OC", "Caste Name": "Kapu", "Category": "A",
+                "Admission Type": "Convener", "Father Name": "Father Doe", "Mother Name": "Mother Doe",
+                "Address": "Visakhapatnam, AP", "Student Contact Number": "8888888888",
+                "Email ID": "john.doe@example.com", "Aadhar Number": "123412341234",
+                "ABC ID": "ABC123XYZ", "Reimbursement": "true", "Certificates Submitted": "true",
+                "Domain Mail ID": "21131A0501@gvpcdpgc.edu.in"
             }
         ];
         const ws = XLSX.utils.json_to_sheet(headers);
