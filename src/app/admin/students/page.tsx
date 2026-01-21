@@ -672,11 +672,11 @@ export default function StudentsPage() {
                 </div>
             </div>
 
-            <div className={`mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role) ? "sm:grid-cols-4" : "sm:grid-cols-3"
+            <div className={`mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) ? "sm:grid-cols-4" : "sm:grid-cols-3"
                 }`}>
                 {/* Admin Only Department Filter */}
                 {/* Global Admin Department Filter */}
-                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role) && (
+                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) && (
                     <select
                         value={filterDepartmentId}
                         onChange={(e) => setFilterDepartmentId(e.target.value)}

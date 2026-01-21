@@ -46,7 +46,7 @@ export default function Navbar() {
     ];
 
     // Roles & Access
-    const role = session.user.role;
+    const role = (session.user.role || "").toUpperCase();
     const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
     const isHOD = role === "HOD";
     const canManage = isGlobalAdmin || isHOD;
