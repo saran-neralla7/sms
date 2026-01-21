@@ -482,27 +482,81 @@ export default function StudentsPage() {
     // ... (fetchStudentStats, fetchStudentResults kept same or removed if used in new page) ...
     // Assuming we keep them for backward compat or if needed, but here simplifying
 
-    const exportData = () => {
-        const data = students.map(s => ({
-            "Roll Number": s.rollNumber,
-            "Name": s.name,
-            "Mobile (Parent)": s.mobile,
-            "Student Mobile": s.studentContactNumber || "",
-            "Year": s.year,
-            "Semester": s.semester,
-            "Section": (typeof s.section === 'object' ? (s.section as any)?.name : s.section) || "",
-            "Department": (typeof s.department === 'object' ? (s.department as any)?.code : s.department) || "",
-            "Hall Ticket": s.hallTicketNumber || "",
-            "EAMCET Rank": s.eamcetRank || "",
-            "DOB": s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString() : "",
-            "Email": s.emailId || "",
-            "Aadhar": s.aadharNumber || "",
-            "Address": s.address || ""
-        }));
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Students");
-        XLSX.writeFile(wb, `students_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    // Export Modal State
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [exportFilters, setExportFilters] = useState({ year: "", semester: "", sectionId: "" });
+    const [exportLoading, setExportLoading] = useState(false);
+
+    const handleExportClick = () => {
+        // Pre-fill with current page filters
+        setExportFilters({
+            year: year || "",
+            semester: semester || "",
+            sectionId: section || ""
+        });
+        setIsExportModalOpen(true);
+    };
+
+    const handleExportConfirm = async () => {
+        if (!exportFilters.year || !exportFilters.semester) {
+            setStatus({ type: "error", message: "Year and Semester are required for export." });
+            return;
+        }
+
+        setExportLoading(true);
+        setStatus({ type: null, message: "" }); // Clear main status
+
+        try {
+            const query = new URLSearchParams();
+            query.set("year", exportFilters.year);
+            query.set("semester", exportFilters.semester);
+            if (exportFilters.sectionId) query.set("sectionId", exportFilters.sectionId);
+            if (filterDepartmentId) query.set("departmentId", filterDepartmentId); // Respect admin dept filter
+
+            const res = await fetch(`/api/students?${query.toString()}`);
+            if (res.ok) {
+                const studentsData = await res.json();
+
+                if (studentsData.length === 0) {
+                    setStatus({ type: "error", message: "No students found for the selected criteria." });
+                    setExportLoading(false);
+                    setIsExportModalOpen(false);
+                    return;
+                }
+
+                const data = studentsData.map((s: any) => ({
+                    "Roll Number": s.rollNumber,
+                    "Name": s.name,
+                    "Mobile (Parent)": s.mobile,
+                    "Student Mobile": s.studentContactNumber || "",
+                    "Year": s.year,
+                    "Semester": s.semester,
+                    "Section": (typeof s.section === 'object' ? (s.section as any)?.name : s.section) || "",
+                    "Department": (typeof s.department === 'object' ? (s.department as any)?.code : s.department) || "",
+                    "Hall Ticket": s.hallTicketNumber || "",
+                    "EAMCET Rank": s.eamcetRank || "",
+                    "DOB": s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString() : "",
+                    "Email": s.emailId || "",
+                    "Aadhar": s.aadharNumber || "",
+                    "Address": s.address || ""
+                }));
+
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Students");
+                XLSX.writeFile(wb, `students_export_${exportFilters.year}_${exportFilters.semester}.xlsx`);
+
+                setIsExportModalOpen(false);
+                setStatus({ type: "success", message: "Export downloaded successfully." });
+            } else {
+                setStatus({ type: "error", message: "Failed to fetch data for export." });
+            }
+        } catch (error) {
+            console.error(error);
+            setStatus({ type: "error", message: "Error during export." });
+        } finally {
+            setExportLoading(false);
+        }
     };
 
 
@@ -553,7 +607,7 @@ export default function StudentsPage() {
                     )}
 
                     <button
-                        onClick={exportData}
+                        onClick={handleExportClick}
                         className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
                     >
                         <FaDownload className="text-green-500" />
@@ -966,6 +1020,82 @@ export default function StudentsPage() {
                             </div>
                         </>
                     )}
+                </div>
+            </Modal>
+
+            {/* Export Modal */}
+            <Modal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                title="Export Students"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-600">Select criteria for student export. Year and Semester are mandatory.</p>
+
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">Year <span className="text-red-500">*</span></label>
+                            <select
+                                value={exportFilters.year}
+                                onChange={(e) => setExportFilters({ ...exportFilters, year: e.target.value })}
+                                className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white"
+                            >
+                                <option value="">Select Year</option>
+                                {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">Semester <span className="text-red-500">*</span></label>
+                            <select
+                                value={exportFilters.semester}
+                                onChange={(e) => setExportFilters({ ...exportFilters, semester: e.target.value })}
+                                className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white"
+                            >
+                                <option value="">Select Semester</option>
+                                {[1, 2].map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">Section</label>
+                            <select
+                                value={exportFilters.sectionId}
+                                onChange={(e) => setExportFilters({ ...exportFilters, sectionId: e.target.value })}
+                                className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white"
+                            >
+                                <option value="">All Sections</option>
+                                {sections.map((s: any) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end gap-3">
+                        <button
+                            onClick={() => setIsExportModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleExportConfirm}
+                            disabled={exportLoading}
+                            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 shadow-sm disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {exportLoading ? (
+                                <>
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                    Exporting...
+                                </>
+                            ) : (
+                                <>
+                                    <FaDownload /> Download
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </Modal>
         </div >

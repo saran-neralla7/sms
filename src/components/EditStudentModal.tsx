@@ -26,6 +26,8 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
 
     const [formData, setFormData] = useState<any>({});
 
+    const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
+
     useEffect(() => {
         if (isOpen && student) {
             // Initialize form data
@@ -38,8 +40,9 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                 certificatesSubmitted: student.certificatesSubmitted ? "true" : "false",
                 departmentId: student.departmentId || "",
                 sectionId: student.sectionId || "",
-                regulationId: student.regulationId || "", // We might need regulation name if ID not available? API uses ID usually.
+                regulationId: student.regulationId || "",
             });
+            setStatus({ type: null, message: "" }); // Clear status on open
             fetchDropdowns();
         }
     }, [isOpen, student]);
@@ -62,16 +65,28 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
 
     const handleChange = (field: string, value: any) => {
         setFormData((prev: any) => ({ ...prev, [field]: value }));
+        // Clear error when user types
+        if (status.type === "error") setStatus({ type: null, message: "" });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        setStatus({ type: null, message: "" });
 
         try {
-            // Prepare payload
+            // Prepare payload - Sanitize to remove Prisma Relations that cause "Unknown argument"
+            // We create a new object containing only scalar fields we intend to update.
+            // Alternatively, strict allowlist or strict deletelist.
+            // Delete list is safer for now.
+            const {
+                department, section, regulation, subjects, downloads, user,
+                // Exclude other relations if any
+                ...cleanedData
+            } = formData;
+
             const payload = {
-                ...formData,
+                ...cleanedData,
                 reimbursement: formData.reimbursement === "true",
                 certificatesSubmitted: formData.certificatesSubmitted === "true",
             };
@@ -83,15 +98,18 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
             });
 
             if (res.ok) {
-                onSuccess();
-                onClose();
+                setStatus({ type: "success", message: "Student updated successfully!" });
+                setTimeout(() => {
+                    onSuccess();
+                    onClose();
+                }, 1000);
             } else {
                 const data = await res.json();
-                alert(data.error || "Failed to update student");
+                setStatus({ type: "error", message: data.error || "Failed to update student" });
             }
         } catch (error) {
             console.error(error);
-            alert("Error updating student");
+            setStatus({ type: "error", message: "Error updating student. Please try again." });
         } finally {
             setLoading(false);
         }
@@ -102,22 +120,17 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
     // Filter sections based on selected department
     const filteredSections = formData.departmentId
         ? sections.filter((s: any) => {
-            // If section has departmentId (it should), filter. 
-            // The API response for sections might need to include departmentId?
-            // Assuming sections list has departmentId or we rely on all sections.
-            // Let's assume sections are fetched all.
-            // Actually, in `admin/students/page.tsx` it did client side filtering if dept selected but relied on section object having it?
-            // Wait, standard Sections API might not return departmentId?
-            // Let's check typical structure. If not sure, show all.
-            // Ideally we show strictly linked sections.
-            // Let's defer to showing all if we can't filter easily, or check if section object has departmentId.
-            // Usually `sections` table has `departmentId`.
             return s.departmentId === formData.departmentId || !s.departmentId;
         })
         : sections;
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Edit Student Profile">
+            {status.message && (
+                <div className={`mx-6 mt-4 mb-0 rounded-md p-3 text-sm font-medium ${status.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                    {status.message}
+                </div>
+            )}
             <div className="flex flex-col h-[80vh]">
                 {/* Tabs */}
                 <div className="flex border-b border-gray-200 mb-4 overflow-x-auto">
