@@ -276,17 +276,19 @@ interface SelectProps {
     onChange: (value: any) => void;
     options: (string | number | { value: string | number; label: string })[];
     required?: boolean;
+    disabled?: boolean;
 }
 
-function Select({ label, value, onChange, options, required = false }: SelectProps) {
+function Select({ label, value, onChange, options, required = false, disabled = false }: SelectProps) {
     return (
         <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">{label} {required && <span className="text-red-500">*</span>}</label>
             <select
                 value={value || ""}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border disabled:bg-slate-100 disabled:text-slate-500"
                 required={required}
+                disabled={disabled}
             >
                 <option value="">Select...</option>
                 {options.map((opt) => {
