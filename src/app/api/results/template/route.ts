@@ -32,23 +32,23 @@ export async function GET(request: Request) {
         // 1. Fetch Subjects for the EXAM Context (Result Year/Sem) AND Regulation
         const allSubjects = await prisma.subject.findMany({
             where: { departmentId, year, semester, regulationId },
-            select: { code: true, name: true, isElective: true, electiveSlot: true },
+            select: { code: true, name: true, isElective: true, electiveSlotRelation: { select: { name: true } } },
             orderBy: { code: 'asc' }
         });
 
         // Categorize Subjects
-        const coreSubjects = allSubjects.filter(s => !s.isElective && !s.electiveSlot);
+        const coreSubjects = allSubjects.filter(s => !s.isElective && !s.electiveSlotRelation);
 
         // Identify unique elective slots (e.g., "PE-1", "OE-1") present in this semester
         const electiveSlots = Array.from(new Set(
             allSubjects
-                .filter(s => s.electiveSlot)
-                .map(s => s.electiveSlot!)
+                .filter(s => s.electiveSlotRelation)
+                .map(s => s.electiveSlotRelation!.name)
         )).sort();
 
         // Check if there are any "Generic" electives (isElective=true but NO slot)
         // These fall back to the single "ELECTIVE" column
-        const hasGenericElectives = allSubjects.some(s => s.isElective && !s.electiveSlot);
+        const hasGenericElectives = allSubjects.some(s => s.isElective && !s.electiveSlotRelation);
 
         // 2. Fetch Students
         const whereStudent: any = {
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
         const students = await prisma.student.findMany({
             where: whereStudent,
             include: {
-                subjects: true, // Fetch allocated subjects (for identifying their elective)
+                subjects: { include: { electiveSlotRelation: true } }, // Fetch allocated subjects (for identifying their elective)
                 results: {
                     where: { year, semester } // Results for the specific EXAM year/sem
                 }
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
                 // Find which subject this student is taking for this SLOT
                 // The student's allocated subject must match one of the exam's subjects in this slot
                 const studentElective = student.subjects.find(s =>
-                    s.electiveSlot === slot &&
+                    s.electiveSlotRelation?.name === slot &&
                     // Verify it's not just same slot, but also same year/sem context? 
                     // Usually allocated subjects are distinct. But safer to check code is in allSubjects?
                     allSubjects.some(asm => asm.code === s.code)
@@ -111,7 +111,7 @@ export async function GET(request: Request) {
             // Process Generic Elective Column (Fallback)
             if (hasGenericElectives) {
                 const studentElective = student.subjects.find(s =>
-                    s.isElective && !s.electiveSlot &&
+                    s.isElective && !s.electiveSlotRelation &&
                     allSubjects.some(asm => asm.code === s.code)
                 );
 
