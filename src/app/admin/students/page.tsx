@@ -312,6 +312,47 @@ export default function StudentsPage() {
                     let failCount = 0;
                     const importErrors: string[] = [];
 
+                    // Helper to parse dates from Excel (Serial or String)
+                    const parseExcelDate = (val: any): string | null => {
+                        if (!val) return null;
+
+                        // If number (Excel Serial Date)
+                        if (typeof val === 'number') {
+                            const date = new Date((val - (25567 + 2)) * 86400 * 1000); // 25567 is offset, 2 is leap year bug adjust? 
+                            // Actually XLSX utils usually handles this if we use cellDates: true, but manual:
+                            // The standard formula for JS date from Excel serial is: new Date(Math.round((serial - 25569)*86400*1000));
+                            // 25569 = 1970/1/1 in Excel days
+                            const epoch = new Date(Math.round((val - 25569) * 86400 * 1000));
+                            if (!isNaN(epoch.getTime())) return epoch.toISOString();
+                        }
+
+                        // If string
+                        if (typeof val === 'string') {
+                            // Try basic Date parse
+                            const d = new Date(val);
+                            if (!isNaN(d.getTime())) return d.toISOString();
+
+                            // Try parsing DD-MM-YYYY or DD/MM/YYYY manually if standard fails or assuming strict format
+                            // "15-05-2003"
+                            const parts = val.split(/[-/]/);
+                            if (parts.length === 3) {
+                                // Assume DD-MM-YYYY if first part > 12? Or simply DD-MM-YYYY preference?
+                                // Let's try to detect.
+                                const p1 = parseInt(parts[0]);
+                                const p2 = parseInt(parts[1]);
+                                const p3 = parseInt(parts[2]);
+
+                                // if p3 is year (4 digits)
+                                if (p3 > 1000) {
+                                    // d-m-y
+                                    const dmy = new Date(p3, p2 - 1, p1);
+                                    if (!isNaN(dmy.getTime())) return dmy.toISOString();
+                                }
+                            }
+                        }
+                        return null;
+                    };
+
                     for (const row of data) {
                         // Map Names to IDs
                         const deptName = row['Department'] || row['DepartmentId'] || row['Dept'] || row['department'] || "";
@@ -350,8 +391,8 @@ export default function StudentsPage() {
                             // Extended Fields
                             hallTicketNumber: String(row['Hall Ticket Number'] || row['HALL TICKET NUMBER'] || ""),
                             eamcetRank: String(row['EAMCET Rank'] || row['EAMCET RANK'] || ""),
-                            dateOfBirth: row['Date of Birth'] || row['DATE OF BIRTH'] || null,
-                            dateOfReporting: row['Date of Reporting'] || row['DATE OF REPORTING'] || null,
+                            dateOfBirth: parseExcelDate(row['Date of Birth'] || row['DATE OF BIRTH']),
+                            dateOfReporting: parseExcelDate(row['Date of Reporting'] || row['DATE OF REPORTING']),
                             gender: String(row['Gender'] || row['GENDER'] || ""),
                             caste: String(row['Caste'] || row['CASTE'] || ""),
                             casteName: String(row['Caste Name'] || row['CASTE NAME'] || ""),
