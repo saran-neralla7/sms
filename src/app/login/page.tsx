@@ -27,12 +27,17 @@ export default function LoginPage() {
         } else {
             // Fetch session to determine role
             try {
-                const sessionRes = await fetch("/api/auth/session");
+                // Add timestamp to prevent caching
+                const sessionRes = await fetch(`/api/auth/session?t=${Date.now()}`);
                 const sessionData = await sessionRes.json();
                 const role = sessionData?.user?.role;
 
-                // Redirect based on role
-                if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(role)) {
+                console.log("Login Success: Detected Role:", role); // Debugging
+
+                // Redirect based on role (Case insensitive check just in case)
+                const targetRole = role?.toUpperCase();
+
+                if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(targetRole)) {
                     router.push("/admin/students");
                 } else {
                     router.push("/"); // Faculty/User -> Attendance Page
