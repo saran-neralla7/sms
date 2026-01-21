@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+// ... imports
+
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -16,6 +18,9 @@ export async function GET(request: Request) {
         const sectionId = searchParams.get("sectionId");
         const departmentId = searchParams.get("departmentId");
 
+        const userRole = session.user.role;
+        const userId = session.user.id;
+
         let whereClause: any = {
             year: year || undefined,
             semester: semester || undefined,
@@ -23,27 +28,35 @@ export async function GET(request: Request) {
             departmentId: departmentId || undefined,
         };
 
-        if (session.user.role === "HOD") {
-            // HOD: Restricted to their department assigned in User profile
-            const userProfile = await prisma.user.findUnique({
-                where: { id: session.user.id },
-                select: { departmentId: true }
-            });
-            if (userProfile?.departmentId) {
-                whereClause.departmentId = userProfile.departmentId;
+        if (userRole === "USER") {
+            // USER: Strictly sees ONLY what they uploaded (SMS History)
+            whereClause.downloadedBy = userId;
+        } else {
+            // ACADEMIC (Admin/HOD/Faculty): 
+            // 1. See Academic Attendance (NOT marked by USER role)
+            // 2. Filter by Dept if HOD
+
+            whereClause.user = { role: { not: "USER" } };
+
+            if (userRole === "HOD") {
+                const userProfile = await prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { departmentId: true }
+                });
+                if (userProfile?.departmentId) {
+                    whereClause.departmentId = userProfile.departmentId;
+                }
             }
-        } else if (session.user.role === "USER" || session.user.role === "FACULTY") {
-            // USER/FACULTY: Restricted to records THEY downloaded/saved
-            whereClause.downloadedBy = session.user.id;
+            // FACULTY can see all academic history or just their own? 
+            // Usually academic history is open to Staff. Let's keep it open for now but excluding 'USER' SMS logs.
         }
-        // ADMIN: Can see all, filters applied above (departmentId from searchParams)
 
         const history = await prisma.attendanceHistory.findMany({
             where: whereClause,
             include: {
                 section: true,
                 subject: true,
-                user: { select: { username: true } } // Show who downloaded it
+                user: { select: { username: true, role: true } } // Include role to verify
             },
             orderBy: { date: 'desc' }
         });
@@ -61,14 +74,23 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
+        const userRole = session.user.role;
 
-        // Normalize periodIds: Use array if provided, otherwise fallback to single periodId
+        // Validation Logic
+        if (userRole !== "USER") {
+            // ACADEMIC Roles: Must select Subject
+            if (!body.subjectId) {
+                return NextResponse.json({ error: "Subject selection is mandatory for Academic Attendance" }, { status: 400 });
+            }
+        }
+
+        // Normalize periodIds
         const periodIds: string[] = body.periodIds && body.periodIds.length > 0
             ? body.periodIds
             : (body.periodId ? [body.periodId] : []);
 
         if (periodIds.length === 0) {
-            // Fallback for cases where neither is provided (shouldn't happen with correct frontend) or non-period based attendance
+            // If USER (SMS only) uses standard mode without periods
             const history = await prisma.attendanceHistory.create({
                 data: {
                     year: String(body.year),
@@ -108,7 +130,7 @@ export async function POST(request: Request) {
             )
         );
 
-        return NextResponse.json(createdRecords[0]); // Return first record as success indicator
+        return NextResponse.json(createdRecords[0]);
     } catch (error) {
         return NextResponse.json({ error: "Failed to log history" }, { status: 500 });
     }

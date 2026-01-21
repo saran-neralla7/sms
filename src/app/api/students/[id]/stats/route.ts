@@ -72,7 +72,10 @@ export async function GET(
 
         // 4. Fetch Attendance History
         const attendanceRecords = await prisma.attendanceHistory.findMany({
-            where: whereClause,
+            where: {
+                ...whereClause,
+                user: { role: { not: "USER" } } // Exclude SMS/Notification attendance
+            },
             include: {
                 subject: true
             },

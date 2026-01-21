@@ -302,6 +302,23 @@ export default function HistoryPage() {
                                                     Year {record.year} - Sem {record.semester}
                                                 </span>
                                                 <span className="text-xs text-slate-500">Section {record.section?.name}</span>
+                                                {/* Subject & Period (or SMS) */}
+                                                <div className="mt-1">
+                                                    {record.subject ? (
+                                                        <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                                            {record.subject.name}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10 italic">
+                                                            SMS / Bulk Log
+                                                        </span>
+                                                    )}
+                                                    {record.period && (
+                                                        <span className="ml-1 inline-flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+                                                            {record.period.name}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">

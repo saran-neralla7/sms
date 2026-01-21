@@ -50,7 +50,8 @@ export async function GET(request: Request) {
         const history = await prisma.attendanceHistory.findMany({
             where: {
                 sectionId,
-                date: { gte: start, lte: end }
+                date: { gte: start, lte: end },
+                user: { role: { not: "USER" } }
             },
             include: { subject: true }
         });

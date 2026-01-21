@@ -504,91 +504,106 @@ export default function Home() {
             {selectedSectionIds.size === 0 && <p className="text-xs text-slate-400">Select at least one</p>}
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-slate-700">Period / Hour</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="multiHourToggle"
-                  checked={isMultiHour}
-                  onChange={(e) => {
-                    setIsMultiHour(e.target.checked);
-                    setSelectedPeriodId("");
-                    setSelectedPeriodIds(new Set());
-                  }}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="multiHourToggle" className="text-xs text-slate-500 cursor-pointer select-none">Multi-Hour</label>
-              </div>
-            </div>
-
-            {!isMultiHour ? (
-              <select
-                value={selectedPeriodId}
-                onChange={(e) => setSelectedPeriodId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-              >
-                <option value="">Select Period</option>
-                {periods.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.startTime} - {p.endTime})</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {periods.map((p) => {
-                  const isSelected = selectedPeriodIds.has(p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        const newSet = new Set(selectedPeriodIds);
-                        if (newSet.has(p.id)) newSet.delete(p.id);
-                        else newSet.add(p.id);
-                        setSelectedPeriodIds(newSet);
+          {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
+          {session?.user?.role !== "USER" && (
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Period Selection */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <FaClock className="text-blue-500" />
+                    Select Period
+                  </h2>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={isMultiPeriod}
+                      onChange={(e) => {
+                        setIsMultiPeriod(e.target.checked);
+                        setSelectedPeriod("");
+                        setSelectedPeriodIds([]);
+                        setIsPeriodFree(false);
                       }}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${isSelected
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                        }`}
+                      className="rounded border-slate-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    Multi-Hour Session
+                  </label>
+                </div>
+
+                {isMultiPeriod ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                    <div className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">Select one or more periods</div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {periods.map((period) => (
+                        <button
+                          key={period.id}
+                          onClick={() => togglePeriod(period.id)}
+                          className={`flex flex-col items-center justify-center gap-1 rounded-lg border p-3 text-sm transition-all ${selectedPeriodIds.includes(period.id)
+                            ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-500"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                            }`}
+                        >
+                          <span className="font-semibold">{period.name}</span>
+                          <span className="text-[10px] text-slate-400">{period.startTime} - {period.endTime}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={selectedPeriod}
+                      onChange={(e) => handlePeriodChange(e.target.value)}
+                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pl-11 text-slate-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-all cursor-pointer hover:border-blue-300"
                     >
-                      {p.name} <span className="text-[10px] text-slate-500 block">({p.startTime} - {p.endTime})</span>
-                    </button>
-                  );
-                })}
+                      <option value="">Select Period...</option>
+                      {periods.map((period) => (
+                        <option key={period.id} value={period.id}>
+                          {period.name} ({period.startTime} - {period.endTime})
+                        </option>
+                      ))}
+                    </select>
+                    <FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                )}
               </div>
-            )}
-            {isMultiHour && selectedPeriodIds.size === 0 && <p className="text-xs text-slate-400">Select hours</p>}
-          </div>
 
-          {/* Show Subject only if periods selected (logic handled below) */}
-
-          {!attendanceStatus.exists && (selectedPeriodId || selectedPeriodIds.size > 0) && (
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Subject</label>
-              <select
-                value={selectedSubjectId}
-                onChange={(e) => setSelectedSubjectId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-              >
-                <option value="">Select Subject</option>
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.code}) - {s.type}</option>
-                ))}
-              </select>
+              {/* Subject Selection */}
+              {(isPeriodFree || (isMultiPeriod && selectedPeriodIds.length > 0)) && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <FaBook className="text-purple-500" />
+                    Select Subject
+                  </h2>
+                  <div className="relative">
+                    <select
+                      value={selectedSubject}
+                      onChange={(e) => setSelectedSubject(e.target.value)}
+                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pl-11 text-slate-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-all cursor-pointer hover:border-blue-300"
+                    >
+                      <option value="">Select Subject...</option>
+                      {subjects.map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.name} {subject.code ? `(${subject.code})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <FaBook className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </div>
 
-        {attendanceStatus.exists && (
-          <div className="mx-6 mb-6 rounded-lg bg-orange-50 p-4 border border-orange-200 text-orange-800 flex items-start gap-3">
-            <FaTimes className="mt-1" />
-            <div>
-              <p className="font-bold">Attendance Locked</p>
-              <p className="text-sm">{attendanceStatus.message}</p>
+          {attendanceStatus.exists && (
+            <div className="mx-6 mb-6 rounded-lg bg-orange-50 p-4 border border-orange-200 text-orange-800 flex items-start gap-3">
+              <FaTimes className="mt-1" />
+              <div>
+                <p className="font-bold">Attendance Locked</p>
+                <p className="text-sm">{attendanceStatus.message}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </motion.div>
 
       <AnimatePresence>
