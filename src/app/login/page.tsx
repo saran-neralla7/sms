@@ -25,26 +25,22 @@ export default function LoginPage() {
         if (res?.error) {
             setError("Invalid username or password");
         } else {
-            // Check role to redirect
-            const userRes = await fetch("/api/auth/session"); // Or just optimistic redirect based on expectation?
-            // Better to just refresh and let the server/middleware or next client load handle.
-            // But user requested SPECIFIC redirect.
-            // Since `signIn` is client side and we don't know the role immediately without decoding token or fetching session,
-            // it's safer to just router.refresh() and let middleware/page logic handle, OR fetch session.
-            // However, usually we can just push to / and let the root page redirect if needed, OR
-            // we can't easily get the role here synchronously from `signIn` response (res doesn't contain user info).
-            // Let's reload to ensure session is active, then simple logic:
+            // Fetch session to determine role
+            try {
+                const sessionRes = await fetch("/api/auth/session");
+                const sessionData = await sessionRes.json();
+                const role = sessionData?.user?.role;
 
-            // Force hard reload or simple router push
-            router.refresh();
-            // We'll rely on the fact that if they are HOD, they can land on home but might see nothing if we hide home?
-            // Actually user said "directly the HOD user will be opened to the history page".
-            // Let's try to fetch the session to get the role.
-
-            router.push("/");
-            // Ideally we would check role here. Let's assume standard flow for now and handle "Home Page for HOD"
-            // The Home Page currently shows Attendance. HOD shouldn't see it.
-            // So on the Home Page, if HOD, we should redirect!
+                // Redirect based on role
+                if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(role)) {
+                    router.push("/admin/students");
+                } else {
+                    router.push("/"); // Faculty/User -> Attendance Page
+                }
+            } catch (e) {
+                console.error("Failed to fetch session for redirect", e);
+                router.push("/");
+            }
         }
     };
 

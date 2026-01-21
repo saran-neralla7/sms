@@ -544,11 +544,17 @@ export default function StudentsPage() {
                             <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
                         </label>
                     )}
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
-                        <FaFileImport className="text-blue-500" />
-                        Import
-                        <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleFileUpload} />
-                    </label>
+
+                    {!["FACULTY", "USER"].includes((session?.user as any)?.role) && (
+                        <>
+                            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
+                                <FaFileImport className="text-blue-500" />
+                                Import
+                                <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleFileUpload} />
+                            </label>
+                        </>
+                    )}
+
                     <button
                         onClick={exportData}
                         className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
@@ -556,10 +562,14 @@ export default function StudentsPage() {
                         <FaDownload className="text-green-500" />
                         Export
                     </button>
-                    <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
-                        <FaPlus size={12} /> Add Student
-                    </button>
-                    {selectedStudentIds.size > 0 && (
+
+                    {!["FACULTY", "USER"].includes((session?.user as any)?.role) && (
+                        <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
+                            <FaPlus size={12} /> Add Student
+                        </button>
+                    )}
+
+                    {selectedStudentIds.size > 0 && !["FACULTY", "USER"].includes((session?.user as any)?.role) && (
                         <button
                             onClick={() => setIsBulkDeleteModalOpen(true)}
                             className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors"
@@ -573,7 +583,8 @@ export default function StudentsPage() {
             <div className={`mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${(session?.user as any)?.role === "ADMIN" ? "sm:grid-cols-4" : "sm:grid-cols-3"
                 }`}>
                 {/* Admin Only Department Filter */}
-                {(session?.user as any)?.role === "ADMIN" && (
+                {/* Global Admin Department Filter */}
+                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role) && (
                     <select
                         value={filterDepartmentId}
                         onChange={(e) => setFilterDepartmentId(e.target.value)}
@@ -649,22 +660,24 @@ export default function StudentsPage() {
                                             {student.year}-{student.semester} ({typeof student.section === 'object' ? (student.section as any)?.name : student.section})
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-3">
-                                                <button
-                                                    onClick={() => openEditModal(student)}
-                                                    className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                                                    title="Edit"
-                                                >
-                                                    <FaEdit size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => confirmDelete(student)}
-                                                    className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <FaTrash size={16} />
-                                                </button>
-                                            </div>
+                                            {!["FACULTY", "USER"].includes((session?.user as any)?.role) && (
+                                                <div className="flex items-center justify-end gap-3">
+                                                    <button
+                                                        onClick={() => openEditModal(student)}
+                                                        className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                                        title="Edit"
+                                                    >
+                                                        <FaEdit size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => confirmDelete(student)}
+                                                        className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                                        title="Delete"
+                                                    >
+                                                        <FaTrash size={16} />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

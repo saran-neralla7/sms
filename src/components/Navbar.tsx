@@ -80,7 +80,7 @@ export default function Navbar() {
     const visibleLinks = [
         ...mainLinks,
         ...getExtraLinks(),
-        ...(isHOD ? [{ href: "/admin/students", label: "Students" }] : [])
+        ...(isHOD || role === "FACULTY" || role === "USER" ? [{ href: "/admin/students", label: "Students" }] : [])
     ];
 
     return (
