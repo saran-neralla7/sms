@@ -514,7 +514,7 @@ export default function Home() {
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Period Selection */}
               <div className="space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+                <div className="flex flex-col gap-2 items-start">
                   <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                     <FaClock className="text-blue-500" />
                     Select Hour
