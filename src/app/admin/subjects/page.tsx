@@ -147,7 +147,7 @@ export default function SubjectsPage() {
         setSemester(subject.semester);
         setType(subject.type);
         setDepartmentId(subject.departmentId);
-        setRegulation(subject.regulation || "");
+        setRegulation(subject.regulation?.name || "");
         setElectiveSlot(subject.electiveSlotRelation?.name || "");
         setIsEditModalOpen(true);
     };
