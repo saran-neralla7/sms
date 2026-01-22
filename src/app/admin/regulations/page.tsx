@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { FaPlus, FaTrash, FaEdit, FaBook } from "react-icons/fa";
 import Modal from "@/components/Modal";
+import LogoSpinner from "@/components/LogoSpinner";
 import ConfirmationModal from "@/components/ConfirmationModal";
 
 export default function RegulationsPage() {
@@ -137,7 +138,7 @@ export default function RegulationsPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {loading ? (
-                            <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500">Loading...</td></tr>
+                            <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
                         ) : regulations.length === 0 ? (
                             <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500">No regulations found.</td></tr>
                         ) : (

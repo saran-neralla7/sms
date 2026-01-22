@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FaPlus, FaTrash, FaEdit, FaFilter } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
+import LogoSpinner from "@/components/LogoSpinner";
 
 export default function SubjectsPage() {
     const [subjects, setSubjects] = useState<any[]>([]);
@@ -212,7 +213,7 @@ export default function SubjectsPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {loading ? (
-                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">Loading...</td></tr>
+                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
                         ) : subjects.length === 0 ? (
                             <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No subjects found.</td></tr>
                         ) : (

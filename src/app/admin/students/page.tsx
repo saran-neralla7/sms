@@ -9,6 +9,7 @@ import ConfirmationModal from "@/components/ConfirmationModal";
 import { useSession } from "next-auth/react";
 
 import { useRouter } from "next/navigation";
+import LogoSpinner from "@/components/LogoSpinner";
 
 export default function StudentsPage() {
     const router = useRouter();
@@ -750,7 +751,7 @@ export default function StudentsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
+                            {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr> :
                                 filteredStudents.map((student) => (
                                     <tr key={student.id} className="group hover:bg-slate-50/80 transition-colors">
                                         <td className="px-6 py-4">

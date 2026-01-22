@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FaPlus, FaTrash, FaEdit } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
+import LogoSpinner from "@/components/LogoSpinner";
 
 export default function PeriodsPage() {
     const [periods, setPeriods] = useState<any[]>([]);
@@ -188,7 +189,7 @@ export default function PeriodsPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {loading ? (
-                            <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">Loading...</td></tr>
+                            <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
                         ) : periods.length === 0 ? (
                             <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">No periods found. Add one to get started.</td></tr>
                         ) : (

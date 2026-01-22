@@ -9,6 +9,7 @@ import { FaCalendarAlt, FaFileExcel, FaFilter, FaTrash, FaEdit, FaUserCircle, Fa
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import { motion } from "framer-motion";
+import LogoSpinner from "@/components/LogoSpinner";
 
 export default function ReportsPage() {
     const { data: session } = useSession();
@@ -703,7 +704,7 @@ export default function ReportsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
+                                    {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr> :
                                         history.length === 0 ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No reports found.</td></tr> :
                                             history.map((record) => (
                                                 <tr key={record.id} className="hover:bg-slate-50/80">
