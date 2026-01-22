@@ -345,8 +345,10 @@ export default function ResultsPage() {
                                 const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
                                 const avgSGPA = (sectionResults.reduce((acc, r) => acc + (Number(r.sgpa) || 0), 0) / sectionResults.length).toFixed(2);
 
-                                // get batch from first student in this section
+                                // get batch and department from first student in this section
                                 const batchString = sectionResults[0]?.student?.batch || "Unknown Batch";
+                                const deptName = sectionResults[0]?.student?.department?.name || "Unknown Dept"; // Get Dept Name
+
                                 // Get Exam Context from result data (fallback if filters are empty)
                                 const resultYear = sectionResults[0]?.year || year || "?";
                                 const resultSem = sectionResults[0]?.semester || semester || "?";
@@ -357,7 +359,7 @@ export default function ResultsPage() {
                                     <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
                                         <div className="flex flex-col mb-3">
                                             <div className="flex items-center justify-between">
-                                                <h3 className="text-lg font-bold text-slate-800">Section {sectionName}</h3>
+                                                <h3 className="text-lg font-bold text-slate-800">Section {sectionName} <span className="text-sm font-medium text-slate-500">({deptName})</span></h3>
                                                 <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{sectionResults.length} Students</span>
                                             </div>
                                             <p className="text-xs font-medium text-slate-500 mt-1">
