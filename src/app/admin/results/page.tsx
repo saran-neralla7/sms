@@ -378,12 +378,12 @@ export default function ResultsPage() {
                                         </div>
 
                                         <div className="flex flex-col gap-1 mb-4">
-                                            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                            <h3 className="text-lg font-bold text-slate-900">
                                                 {batchString} • {formattedYear} Year {formattedSem} Sem
-                                            </div>
-                                            <h3 className="text-xl font-bold text-slate-900">
-                                                Section {sectionName}
                                             </h3>
+                                            <div className="text-sm font-medium text-slate-500">
+                                                Section {sectionName}
+                                            </div>
                                         </div>
                                         <button
                                             onClick={() => document.getElementById(`results-table-${sectionName}`)?.classList.toggle("hidden")}
