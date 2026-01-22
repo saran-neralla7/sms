@@ -17,7 +17,7 @@ export default function Navbar() {
 
     // Structure
     const mainLinks = [
-        { href: "/", label: "Attendance" },
+        { href: "/dashboard", label: "Attendance" },
         { href: "/attendance/history", label: "History" },
     ];
 
