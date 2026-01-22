@@ -40,11 +40,11 @@ export default function LoginPage() {
                 if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(targetRole)) {
                     router.push("/admin/students");
                 } else {
-                    router.push("/"); // Faculty/User -> Attendance Page
+                    router.push("/dashboard"); // Faculty/User -> Attendance Page
                 }
             } catch (e) {
                 console.error("Failed to fetch session for redirect", e);
-                router.push("/");
+                router.push("/dashboard");
             }
         }
     };

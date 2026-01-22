@@ -36,7 +36,11 @@ export default withAuth(
     },
     {
         callbacks: {
-            authorized: ({ token }) => !!token,
+            authorized: ({ req, token }) => {
+                const path = req.nextUrl.pathname;
+                if (path === "/" || path === "/student-login") return true;
+                return !!token;
+            },
         },
     }
 );
