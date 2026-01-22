@@ -1,9 +1,13 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-export default function LogoSpinner() {
+interface LogoSpinnerProps {
+    fullScreen?: boolean;
+}
+
+export default function LogoSpinner({ fullScreen = true }: LogoSpinnerProps) {
     return (
-        <div className="flex h-screen w-full flex-col items-center justify-center bg-white">
+        <div className={`flex w-full flex-col items-center justify-center bg-white ${fullScreen ? "h-screen" : "py-12"}`}>
             <div className="relative flex items-center justify-center">
                 {/* Rotating Spinner Ring */}
                 <motion.div

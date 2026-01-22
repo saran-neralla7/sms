@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes, FaClock, FaBook, FaFileUpload, FaSpinner, FaTrash } from "react-icons/fa";
 import Modal from "@/components/Modal";
+import LogoSpinner from "@/components/LogoSpinner";
 
 export default function Home() {
   const [year, setYear] = useState("");
@@ -1079,9 +1080,7 @@ export default function Home() {
       </AnimatePresence>
 
       {loading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
-        </div>
+        <LogoSpinner fullScreen={false} />
       )}
 
       {/* Save Confirmation Modal */}
