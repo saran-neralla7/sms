@@ -29,6 +29,7 @@ export async function GET(request: Request) {
                     select: {
                         rollNumber: true,
                         name: true,
+                        batch: true,
                         department: { select: { name: true } },
                         section: { select: { name: true } }
                     }

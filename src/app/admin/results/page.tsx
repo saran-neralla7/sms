@@ -343,14 +343,19 @@ export default function ResultsPage() {
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => {
                                 const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
-                                const passCount = sectionResults.filter(r => Number(r.sgpa) > 0).length; // Rough pass check
                                 const avgSGPA = (sectionResults.reduce((acc, r) => acc + (Number(r.sgpa) || 0), 0) / sectionResults.length).toFixed(2);
+
+                                // get batch from first student in this section
+                                const batchString = sectionResults[0]?.student?.batch || "Unknown Batch";
 
                                 return (
                                     <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="text-lg font-bold text-slate-800">Section {sectionName}</h3>
-                                            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{sectionResults.length} Students</span>
+                                        <div className="flex flex-col mb-3">
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-lg font-bold text-slate-800">Section {sectionName}</h3>
+                                                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{sectionResults.length} Students</span>
+                                            </div>
+                                            <p className="text-xs font-medium text-slate-500 mt-1">{batchString} Batch • {year === "1" ? "1st" : year === "2" ? "2nd" : year === "3" ? "3rd" : year + "th"} Year</p>
                                         </div>
                                         <div className="text-sm text-slate-600 mb-4">
                                             <p>Avg SGPA: <span className="font-semibold text-slate-900">{avgSGPA}</span></p>
