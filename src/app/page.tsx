@@ -709,11 +709,18 @@ export default function Home() {
                     </p>
                   </div>
                   <button
-                    disabled={selectedSectionIds.size === 0}
+                    disabled={selectedSectionIds.size === 0 || !year || !semester}
                     onClick={() => {
                       const sectionId = Array.from(selectedSectionIds)[0];
-                      if (sectionId) window.location.href = `/api/attendance/bulk/template?sectionId=${sectionId}`;
-                      else alert("Please select a section first.");
+                      const currentRole = (session?.user.role || "").toUpperCase();
+                      const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(currentRole);
+                      const effectiveDept = isGlobalAdmin ? departmentId : (session?.user as any)?.departmentId;
+
+                      if (sectionId && effectiveDept && year && semester) {
+                        window.location.href = `/api/attendance/bulk/template?sectionId=${sectionId}&departmentId=${effectiveDept}&year=${year}&semester=${semester}`;
+                      } else {
+                        alert("Please select Department, Year, Semester and Section.");
+                      }
                     }}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

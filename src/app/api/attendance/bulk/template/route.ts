@@ -10,27 +10,31 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
+    const departmentId = searchParams.get("departmentId");
+    const year = searchParams.get("year");
+    const semester = searchParams.get("semester");
 
-    if (!sectionId) return NextResponse.json({ error: "Section ID required" }, { status: 400 });
+    if (!sectionId || !departmentId || !year || !semester) {
+        return NextResponse.json({ error: "Missing filters (section, dept, year, sem)" }, { status: 400 });
+    }
 
     // RBAC Check
     const role = (session.user.role || "").toUpperCase();
     if (role === "HOD") {
         const userDept = (session.user as any).departmentId;
-        const section = await prisma.section.findUnique({
-            where: { id: sectionId },
-            include: { departments: true }
-        });
-
-        const hasAccess = section?.departments.some(d => d.id === userDept);
-        if (!hasAccess) {
+        if (departmentId !== userDept) {
             return NextResponse.json({ error: "Access Denied" }, { status: 403 });
         }
     }
 
     try {
         const students = await prisma.student.findMany({
-            where: { sectionId },
+            where: {
+                sectionId,
+                departmentId,
+                year,
+                semester
+            },
             orderBy: { rollNumber: "asc" },
             select: { rollNumber: true, name: true }
         });
