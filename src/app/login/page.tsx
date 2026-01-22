@@ -65,7 +65,7 @@ export default function LoginPage() {
                         />
                     </div>
                     <h1 className="text-3xl font-bold text-white">GVPCDPGC(A)</h1>
-                    <p className="mt-2 text-blue-100">Student Attendance Management</p>
+                    <p className="mt-2 text-blue-100">Student Management System</p>
                 </div>
 
                 <div className="p-8">
