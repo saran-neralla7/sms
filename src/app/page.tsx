@@ -511,7 +511,7 @@ export default function Home() {
 
           {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
           {session?.user?.role !== "USER" && (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-2">
               {/* Period Selection */}
               <div className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
