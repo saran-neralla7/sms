@@ -331,45 +331,82 @@ export default function ResultsPage() {
                     </div>
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                /* Results View */
+                <div className="space-y-6">
                     {loading ? (
                         <div className="py-12 text-center text-slate-500">Loading results...</div>
                     ) : results.length === 0 ? (
                         <div className="py-12 text-center text-slate-500">No results found for selected filters.</div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50">
-                                    <tr>
-                                        <th className="p-4 font-semibold text-slate-700">Roll Number</th>
-                                        <th className="p-4 font-semibold text-slate-700">Name</th>
-                                        <th className="p-4 font-semibold text-slate-700">SGPA</th>
-                                        <th className="p-4 font-semibold text-slate-700">CGPA</th>
-                                        <th className="p-4 font-semibold text-slate-700 text-right">Grades</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {results.map((res) => (
-                                        <tr key={res.id} className="hover:bg-slate-50/50">
-                                            <td className="p-4 font-medium text-slate-900">{res.student?.rollNumber}</td>
-                                            <td className="p-4 text-slate-600">{res.student?.name}</td>
-                                            <td className="p-4 font-mono font-bold text-slate-800">{res.sgpa}</td>
-                                            <td className="p-4 font-mono text-slate-800">{res.cgpa}</td>
-                                            <td className="p-4 text-right">
-                                                <div className="flex justify-end gap-1 flex-wrap">
-                                                    {(res.grades as any[]).map((g: any, i: number) => (
-                                                        <span key={i} className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600">
-                                                            <span className="font-bold mr-1">{g.subjectCode}:</span> {g.grade}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+
+                        // Summary Cards by Section
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => {
+                                const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
+                                const passCount = sectionResults.filter(r => Number(r.sgpa) > 0).length; // Rough pass check
+                                const avgSGPA = (sectionResults.reduce((acc, r) => acc + (Number(r.sgpa) || 0), 0) / sectionResults.length).toFixed(2);
+
+                                return (
+                                    <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h3 className="text-lg font-bold text-slate-800">Section {sectionName}</h3>
+                                            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{sectionResults.length} Students</span>
+                                        </div>
+                                        <div className="text-sm text-slate-600 mb-4">
+                                            <p>Avg SGPA: <span className="font-semibold text-slate-900">{avgSGPA}</span></p>
+                                        </div>
+                                        <button
+                                            onClick={() => document.getElementById(`results-table-${sectionName}`)?.classList.toggle("hidden")}
+                                            className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                                        >
+                                            View / Hide Results
+                                        </button>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
+
+                    {/* Collapsible Tables per Section */}
+                    {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => (
+                        <div id={`results-table-${sectionName}`} key={sectionName} className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm animate-in fade-in slide-in-from-top-4">
+                            <div className="border-b border-slate-100 bg-slate-50 px-6 py-3">
+                                <h4 className="font-bold text-slate-700">Section {sectionName} Results</h4>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th className="p-4 font-semibold">Roll Number</th>
+                                            <th className="p-4 font-semibold">Name</th>
+                                            <th className="p-4 font-semibold">SGPA</th>
+                                            <th className="p-4 font-semibold">CGPA</th>
+                                            <th className="p-4 font-semibold text-right">Grades</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {results.filter(r => (r.student?.section?.name || "Unknown") === sectionName).map((res) => (
+                                            <tr key={res.id} className="hover:bg-slate-50/50">
+                                                <td className="p-4 font-medium text-slate-900">{res.student?.rollNumber}</td>
+                                                <td className="p-4 text-slate-600">{res.student?.name}</td>
+                                                <td className="p-4 font-mono font-bold text-slate-800">{Number(res.sgpa).toFixed(2)}</td>
+                                                <td className="p-4 font-mono text-slate-800">{Number(res.cgpa).toFixed(2)}</td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex justify-end gap-1 flex-wrap">
+                                                        {(res.grades as any[]).map((g: any, i: number) => (
+                                                            <span key={i} className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600">
+                                                                <span className="font-bold mr-1">{g.subjectCode}:</span> {g.grade}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
             {/* Template Modal */}
