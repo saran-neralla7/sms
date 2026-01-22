@@ -349,57 +349,113 @@ export default function StudentProfilePage() {
                                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
                             </div>
                         ) : results.length > 0 ? (
-                            <div className="grid grid-cols-1 gap-6">
-                                {results.map((semResult: any) => (
-                                    <div key={semResult.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-                                        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                            <div className="space-y-6">
+                                {/* Stats Header */}
+                                {(() => {
+                                    // Calculate Stats
+                                    // 1. Final CGPA: From Latest Semester
+                                    const sortedResults = [...results].sort((a, b) => {
+                                        if (a.year !== b.year) return Number(b.year) - Number(a.year);
+                                        return Number(b.semester) - Number(a.semester);
+                                    });
+                                    const finalCGPA = Number(sortedResults[0]?.cgpa || 0).toFixed(2);
+
+                                    // 2. Backlogs: Count 'F' grades across all results
+                                    // Note: If student passed a subject later, does the old F disappear? 
+                                    // Assuming raw count of Fs in the list for now based on user request "no of F grades".
+                                    // To be more accurate, we might want unique subjects failed. But simple count is safer for "Backlog History".
+                                    const backlogCount = results.reduce((acc: number, res: any) => {
+                                        return acc + (res.grades as any[]).filter((g: any) => g.grade === "F" || g.grade === "ABSENT").length;
+                                    }, 0);
+
+                                    return (
+                                        <div className="flex items-center gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                                             <div>
-                                                <h4 className="text-lg font-bold text-slate-800">
-                                                    Year {semResult.year} - Semester {semResult.semester}
-                                                </h4>
-                                                <p className="text-xs text-slate-500">Academic Result</p>
+                                                <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Cumulative GPA (Final)</p>
+                                                <p className="text-4xl font-extrabold text-slate-900 mt-1">{finalCGPA}</p>
                                             </div>
-                                            <div className="flex gap-3">
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-xs font-semibold text-slate-500 uppercase">SGPA</span>
-                                                    <span className={`text-lg font-bold ${semResult.sgpa === "Failed" ? "text-red-600" : "text-blue-600"}`}>
-                                                        {semResult.sgpa}
-                                                    </span>
+                                            {backlogCount > 0 && (
+                                                <div className="flex flex-col items-start">
+                                                    <p className="text-sm font-medium uppercase tracking-wide text-red-500">Active Backlogs</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-700">{backlogCount}</span>
+                                                        <span className="text-sm text-red-600 font-medium">Failed Subjects</span>
+                                                    </div>
                                                 </div>
-                                                <div className="w-px h-8 bg-slate-300"></div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-xs font-semibold text-slate-500 uppercase">CGPA</span>
-                                                    <span className="text-lg font-bold text-purple-600">{semResult.cgpa}</span>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Accordion List */}
+                                <div className="grid grid-cols-1 gap-4">
+                                    {results.map((semResult: any) => (
+                                        <div key={semResult.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm transition-all">
+                                            {/* Accordion Header */}
+                                            <button
+                                                onClick={() => document.getElementById(`sem-result-${semResult.id}`)?.classList.toggle("hidden")}
+                                                className="w-full flex items-center justify-between bg-slate-50 px-6 py-4 hover:bg-slate-100 transition-colors text-left"
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+                                                        {semResult.year}-{semResult.semester}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-lg font-bold text-slate-800">
+                                                            Year {semResult.year === "1" ? "1st" : semResult.year === "2" ? "2nd" : semResult.year === "3" ? "3rd" : semResult.year + "th"} - Semester {semResult.semester === "1" ? "1st" : semResult.semester === "2" ? "2nd" : semResult.semester + "th"}
+                                                        </h4>
+                                                        <p className="text-xs text-slate-500">Click to view details</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-6 mr-4">
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SGPA</span>
+                                                        <span className={`text-base font-bold ${semResult.sgpa === "Failed" ? "text-red-600" : "text-slate-700"}`}>
+                                                            {Number(semResult.sgpa) ? Number(semResult.sgpa).toFixed(2) : semResult.sgpa}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">CGPA</span>
+                                                        <span className="text-base font-bold text-purple-600">
+                                                            {Number(semResult.cgpa) ? Number(semResult.cgpa).toFixed(2) : semResult.cgpa}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-slate-400">▼</div>
+                                                </div>
+                                            </button>
+
+                                            {/* Accordion Content (Hidden by default) */}
+                                            <div id={`sem-result-${semResult.id}`} className="hidden border-t border-slate-100">
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left text-sm">
+                                                        <thead className="bg-white text-slate-500 border-b border-slate-100">
+                                                            <tr>
+                                                                <th className="px-6 py-3 font-semibold">Subject Code</th>
+                                                                <th className="px-6 py-3 font-semibold text-right">Grade</th>
+                                                                <th className="px-6 py-3 font-semibold text-right">Status</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-50">
+                                                            {(semResult.grades as any[]).map((g: any, i: number) => (
+                                                                <tr key={i} className="hover:bg-slate-50/50">
+                                                                    <td className="px-6 py-3 font-medium text-slate-700">{g.subjectCode}</td>
+                                                                    <td className="px-6 py-3 text-right font-bold text-slate-900">{g.grade}</td>
+                                                                    <td className="px-6 py-3 text-right">
+                                                                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${g.grade === "F" || g.grade === "ABSENT" ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                                                                            }`}>
+                                                                            {g.grade === "F" || g.grade === "ABSENT" ? "Fail" : "Pass"}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-white text-slate-500 border-b border-slate-100">
-                                                    <tr>
-                                                        <th className="px-6 py-3 font-semibold">Subject Code</th>
-                                                        <th className="px-6 py-3 font-semibold text-right">Grade</th>
-                                                        <th className="px-6 py-3 font-semibold text-right">Status</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-50">
-                                                    {(semResult.grades as any[]).map((g: any, i: number) => (
-                                                        <tr key={i} className="hover:bg-slate-50/50">
-                                                            <td className="px-6 py-3 font-medium text-slate-700">{g.subjectCode}</td>
-                                                            <td className="px-6 py-3 text-right font-bold text-slate-900">{g.grade}</td>
-                                                            <td className="px-6 py-3 text-right">
-                                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${g.grade === "F" || g.grade === "ABSENT" ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
-                                                                    }`}>
-                                                                    {g.grade === "F" || g.grade === "ABSENT" ? "Fail" : "Pass"}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         ) : (
                             <div className="text-center py-12 text-slate-500 bg-white rounded-xl border border-slate-200">
