@@ -371,7 +371,7 @@ export default function StudentProfilePage() {
                                     return (
                                         <div className="flex items-center gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                                             <div>
-                                                <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Cumulative GPA (Final)</p>
+                                                <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Cumulative GPA</p>
                                                 <p className="text-4xl font-extrabold text-slate-900 mt-1">{finalCGPA}</p>
                                             </div>
                                             {backlogCount > 0 && (

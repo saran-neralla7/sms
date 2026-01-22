@@ -379,45 +379,55 @@ export default function ResultsPage() {
                     )}
 
                     {/* Collapsible Tables per Section */}
-                    {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => (
-                        <div id={`results-table-${sectionName}`} key={sectionName} className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm animate-in fade-in slide-in-from-top-4">
-                            <div className="border-b border-slate-100 bg-slate-50 px-6 py-3">
-                                <h4 className="font-bold text-slate-700">Section {sectionName} Results</h4>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                                        <tr>
-                                            <th className="p-4 font-semibold">Roll Number</th>
-                                            <th className="p-4 font-semibold">Name</th>
-                                            <th className="p-4 font-semibold">SGPA</th>
-                                            <th className="p-4 font-semibold">CGPA</th>
-                                            <th className="p-4 font-semibold text-right">Grades</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {results.filter(r => (r.student?.section?.name || "Unknown") === sectionName).map((res) => (
-                                            <tr key={res.id} className="hover:bg-slate-50/50">
-                                                <td className="p-4 font-medium text-slate-900">{res.student?.rollNumber}</td>
-                                                <td className="p-4 text-slate-600">{res.student?.name}</td>
-                                                <td className="p-4 font-mono font-bold text-slate-800">{Number(res.sgpa).toFixed(2)}</td>
-                                                <td className="p-4 font-mono text-slate-800">{Number(res.cgpa).toFixed(2)}</td>
-                                                <td className="p-4 text-right">
-                                                    <div className="flex justify-end gap-1 flex-wrap">
-                                                        {(res.grades as any[]).map((g: any, i: number) => (
-                                                            <span key={i} className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600">
-                                                                <span className="font-bold mr-1">{g.subjectCode}:</span> {g.grade}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </td>
+                    {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => {
+                        const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
+                        // Extract all unique subject codes for this section to build matrix headers
+                        const allSubjects = Array.from(new Set(sectionResults.flatMap(r => (r.grades as any[]).map(g => g.subjectCode)))).sort();
+
+                        return (
+                            <div id={`results-table-${sectionName}`} key={sectionName} className="hidden overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm animate-in fade-in slide-in-from-top-4">
+                                <div className="border-b border-slate-200 bg-slate-100 px-6 py-3 flex justify-between items-center">
+                                    <h4 className="font-bold text-slate-800">Section {sectionName} Matrix Results</h4>
+                                    <span className="text-xs text-slate-500 italic">Showing {allSubjects.length} Unique Subjects</span>
+                                </div>
+                                <div className="overflow-x-auto max-h-[600px]">
+                                    <table className="w-full text-left text-sm border-collapse">
+                                        <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-700 sticky top-0 z-10 shadow-sm">
+                                            <tr>
+                                                <th className="p-2 border border-slate-300 min-w-[120px] bg-slate-50">Roll No</th>
+                                                <th className="p-2 border border-slate-300 min-w-[200px] bg-slate-50">Name</th>
+                                                <th className="p-2 border border-slate-300 text-center bg-slate-50">SGPA</th>
+                                                <th className="p-2 border border-slate-300 text-center bg-slate-50">CGPA</th>
+                                                {allSubjects.map(sub => (
+                                                    <th key={sub} className="p-2 border border-slate-300 text-center min-w-[80px] bg-slate-50">{sub}</th>
+                                                ))}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-200">
+                                            {sectionResults.map((res, idx) => (
+                                                <tr key={res.id} className={`hover:bg-blue-50/50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
+                                                    <td className="p-2 border border-slate-300 font-mono font-medium text-slate-900">{res.student?.rollNumber}</td>
+                                                    <td className="p-2 border border-slate-300 text-slate-700 truncate max-w-[200px]" title={res.student?.name}>{res.student?.name}</td>
+                                                    <td className="p-2 border border-slate-300 text-center font-bold text-slate-800">{Number(res.sgpa) ? Number(res.sgpa).toFixed(2) : res.sgpa}</td>
+                                                    <td className="p-2 border border-slate-300 text-center text-slate-800">{Number(res.cgpa) ? Number(res.cgpa).toFixed(2) : res.cgpa}</td>
+                                                    {allSubjects.map(subCode => {
+                                                        const gradeEntry = (res.grades as any[]).find(g => g.subjectCode === subCode);
+                                                        const grade = gradeEntry?.grade || "-";
+                                                        const isFail = grade === "F" || grade === "ABSENT";
+                                                        return (
+                                                            <td key={subCode} className={`p-2 border border-slate-300 text-center font-medium ${isFail ? "bg-red-50 text-red-600" : "text-slate-600"}`}>
+                                                                {grade}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
             {/* Template Modal */}
