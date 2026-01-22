@@ -95,8 +95,21 @@ export async function POST(request: Request) {
 
             // Validate Subject (Strict)
             const subjStr = String(rawSubject || "").toLowerCase().trim();
+
             if (!subjStr) {
-                errors.push(`Column ${j + 1} (${date.toLocaleDateString()} - ${rawPeriod}): Subject Name missing.`);
+                // Check if this column has ANY attendance data filled in rows 3+
+                let hasData = false;
+                for (let k = 3; k < rawData.length; k++) {
+                    if (rawData[k][j]) {
+                        hasData = true;
+                        break;
+                    }
+                }
+
+                if (hasData) {
+                    errors.push(`Column ${j + 1} (${date.toLocaleDateString()} - ${rawPeriod}): Subject Name missing.`);
+                }
+                // If subject is empty AND no data, we simply skip this column (it's unused)
                 continue;
             }
 

@@ -14,6 +14,9 @@ export async function GET(request: Request) {
     const year = searchParams.get("year") || undefined;
     const semester = searchParams.get("semester") || undefined;
 
+    const startDateStr = searchParams.get("startDate");
+    const endDateStr = searchParams.get("endDate");
+
     if (!sectionId) return NextResponse.json({ error: "Section ID required" }, { status: 400 });
 
     // RBAC Check
@@ -48,22 +51,60 @@ export async function GET(request: Request) {
             return numA - numB;
         });
 
-        // Row 1: Date (Merged)
-        // Row 2: Subject (Empty)
-        // Row 3: Headers (Roll, Name, Period names)
+        // Calculate Dates
+        let dates: Date[] = [];
+        if (startDateStr && endDateStr) {
+            const start = new Date(startDateStr);
+            const end = new Date(endDateStr);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                dates.push(new Date(d));
+            }
+        } else {
+            dates = [new Date()]; // Default to today
+        }
 
-        // We generate 5 days (Columns) worth of headers as a sample?
-        // User requested: "next date will be added beside it".
-        // We will just generate ONE day (Date Placeholder) + All Periods.
-        // The user can copy-paste columns to add more days.
+        // Headers Construction
+        const headerRow1 = ["Date (DD-MM-YYYY)", ""]; // Roll, Name placeholders
+        const headerRow2 = ["Subject Name", ""];
+        const headerRow3 = ["Roll Number", "Name"];
+        const wscols = [{ wch: 15 }, { wch: 25 }]; // Initial widths
 
-        // Headers
-        const dateValue = new Date().toLocaleDateString("en-IN").replace(/\//g, "-"); // Current Date as placeholder
-        const headerRow1 = ["Date (DD-MM-YYYY)", "", dateValue, ...periods.slice(1).map(() => "")]; // Only first cell has date
-        const headerRow2 = ["Subject Name", "", ...periods.map(() => "")]; // Empty for inputs
-        const headerRow3 = ["Roll Number", "Name", ...periods.map(p => p.name)];
+        const merges: any[] = [];
+        let colIndex = 2; // Start after Roll, Name
 
-        const dataRows = students.map(s => [s.rollNumber, s.name, ...periods.map(() => "")]);
+        dates.forEach(date => {
+            const dateStr = date.toLocaleDateString("en-IN").replace(/\//g, "-");
+
+            // Add Date Header (First cell gets value, rest empty for merge)
+            headerRow1.push(dateStr);
+            for (let i = 1; i < periods.length; i++) headerRow1.push("");
+
+            // Add Merge for Date
+            if (periods.length > 0) {
+                merges.push({
+                    s: { r: 0, c: colIndex },
+                    e: { r: 0, c: colIndex + periods.length - 1 }
+                });
+            }
+
+            // Add Subject Headers (Empty blanks for user input)
+            periods.forEach(() => headerRow2.push(""));
+
+            // Add Period Headers
+            periods.forEach(p => {
+                headerRow3.push(p.name);
+                wscols.push({ wch: 15 });
+            });
+
+            colIndex += periods.length;
+        });
+
+        const dataRows = students.map(s => {
+            const row = [s.rollNumber, s.name];
+            // Add empty cells for all periods across all dates
+            for (let i = 0; i < dates.length * periods.length; i++) row.push("");
+            return row;
+        });
 
         const worksheetData = [
             headerRow1,
@@ -73,26 +114,7 @@ export async function GET(request: Request) {
         ];
 
         const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-
-        // Merge Cells Logic
-        // Merge Date Row (C1 -> Last Period Col)
-        // Cell references are A1, B1, C1... 
-        // Col 0=A, 1=B, 2=C.
-        // Merge from Col 2 to Col (2 + periods.length - 1)
-        if (periods.length > 0) {
-            if (!worksheet["!merges"]) worksheet["!merges"] = [];
-            worksheet["!merges"].push({
-                s: { r: 0, c: 2 }, // Start Row 0, Col C
-                e: { r: 0, c: 2 + periods.length - 1 } // End Row 0, Last Period Col
-            });
-        }
-
-        // Styling hints (Col widths)
-        const wscols = [
-            { wch: 15 }, // Roll
-            { wch: 25 }, // Name
-            ...periods.map(() => ({ wch: 15 })) // Periods
-        ];
+        worksheet["!merges"] = merges;
         worksheet["!cols"] = wscols;
 
         const workbook = XLSX.utils.book_new();
@@ -103,7 +125,7 @@ export async function GET(request: Request) {
         return new NextResponse(buffer, {
             headers: {
                 "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "Content-Disposition": `attachment; filename="Attendance_Template_Grouped.xlsx"`,
+                "Content-Disposition": `attachment; filename="Attendance_Template.xlsx"`,
             },
         });
     } catch (error) {

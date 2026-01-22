@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes, FaClock, FaBook, FaFileUpload, FaSpinner } from "react-icons/fa";
+import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes, FaClock, FaBook, FaFileUpload, FaSpinner, FaTrash } from "react-icons/fa";
 import Modal from "@/components/Modal";
 
 export default function Home() {
@@ -45,8 +45,53 @@ export default function Home() {
   const [bulkStatus, setBulkStatus] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
 
+  // Template & Delete Dates
+  const [templateStartDate, setTemplateStartDate] = useState("");
+  const [templateEndDate, setTemplateEndDate] = useState("");
+  const [deleteStartDate, setDeleteStartDate] = useState("");
+  const [deleteEndDate, setDeleteEndDate] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const { data: session } = useSession();
   const router = useRouter();
+
+  const handleDeleteBulk = async () => {
+    if (!deleteStartDate || !deleteEndDate) {
+      alert("Please select Start and End dates to delete.");
+      return;
+    }
+    const sectionId = Array.from(selectedSectionIds)[0];
+    if (!sectionId) {
+      alert("Please select a Section first.");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to PERMANENTLY DELETE attendance for this section from ${deleteStartDate} to ${deleteEndDate}?`)) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/attendance/bulk/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId,
+          startDate: deleteStartDate,
+          endDate: deleteEndDate
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || "Deletion Successful");
+      } else {
+        alert(data.error || "Deletion Failed");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("An error occurred during deletion.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleBulkUpload = async () => {
     if (!bulkFile || !year || !semester || selectedSectionIds.size === 0) {
@@ -715,11 +760,31 @@ export default function Home() {
             <div className="px-1 pb-6 space-y-6 animate-in fade-in slide-in-from-top-4">
               <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-6">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-blue-900">1. Download Template</h3>
                     <p className="text-sm text-blue-700/80 mt-1">
                       Get the Register-style Excel for <strong>{selectedSectionIds.size > 0 ? "Selected Section" : "Selected Class"}</strong>.
                     </p>
+                    <div className="flex gap-4 mt-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-blue-800">Start Date (Optional)</label>
+                        <input
+                          type="date"
+                          value={templateStartDate}
+                          onChange={e => setTemplateStartDate(e.target.value)}
+                          className="w-full rounded border-blue-200 px-2 py-1 text-sm text-blue-900 bg-white/80"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-blue-800">End Date (Optional)</label>
+                        <input
+                          type="date"
+                          value={templateEndDate}
+                          onChange={e => setTemplateEndDate(e.target.value)}
+                          className="w-full rounded border-blue-200 px-2 py-1 text-sm text-blue-900 bg-white/80"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <button
                     disabled={selectedSectionIds.size === 0 || !year || !semester}
@@ -730,12 +795,15 @@ export default function Home() {
                       const effectiveDept = isGlobalAdmin ? departmentId : (session?.user as any)?.departmentId;
 
                       if (sectionId && effectiveDept && year && semester) {
-                        window.location.href = `/api/attendance/bulk/template?sectionId=${sectionId}&departmentId=${effectiveDept}&year=${year}&semester=${semester}`;
+                        let url = `/api/attendance/bulk/template?sectionId=${sectionId}&departmentId=${effectiveDept}&year=${year}&semester=${semester}`;
+                        if (templateStartDate) url += `&startDate=${templateStartDate}`;
+                        if (templateEndDate) url += `&endDate=${templateEndDate}`;
+                        window.location.href = url;
                       } else {
                         alert("Please select Department, Year, Semester and Section.");
                       }
                     }}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed self-end md:self-center"
                   >
                     <FaDownload /> Download Excel
                   </button>
@@ -803,6 +871,50 @@ export default function Home() {
                   )}
                 </div>
               )}
+
+              {/* Danger Zone: Delete Bulk Attendance */}
+              <div className="rounded-xl border border-red-200 bg-red-50 p-6">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <h3 className="font-bold text-red-900 flex items-center gap-2">
+                      <FaTrash /> Delete Attendance Records
+                    </h3>
+                    <p className="text-sm text-red-700 mt-1">
+                      Undo a bulk upload by deleting all attendance records for this section within a date range. <br />
+                      <span className="font-bold">Warning: This action is irreversible.</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-4 items-end">
+                    <div className="space-y-1 flex-1">
+                      <label className="text-xs font-semibold text-red-800">Start Date</label>
+                      <input
+                        type="date"
+                        value={deleteStartDate}
+                        onChange={e => setDeleteStartDate(e.target.value)}
+                        className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-red-200"
+                      />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <label className="text-xs font-semibold text-red-800">End Date</label>
+                      <input
+                        type="date"
+                        value={deleteEndDate}
+                        onChange={e => setDeleteEndDate(e.target.value)}
+                        className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-red-200"
+                      />
+                    </div>
+                    <button
+                      onClick={handleDeleteBulk}
+                      disabled={isDeleting || !deleteStartDate || !deleteEndDate}
+                      className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isDeleting ? <FaSpinner className="animate-spin" /> : <FaTrash />}
+                      {isDeleting ? "Deleting..." : "Delete Records"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
