@@ -360,7 +360,8 @@ export default function ResultsPage() {
 
                                 // get batch and department from first student in this section
                                 const batchString = sectionResults[0]?.student?.batch || "Unknown Batch";
-                                const deptName = sectionResults[0]?.student?.department?.name || "Unknown Dept"; // Get Dept Name
+                                const deptName = sectionResults[0]?.student?.department?.name || "Unknown Dept";
+                                const deptCode = sectionResults[0]?.student?.department?.code || deptName;
 
                                 // Get Exam Context from result data (fallback if filters are empty)
                                 const resultYear = sectionResults[0]?.year || year || "?";
@@ -369,15 +370,20 @@ export default function ResultsPage() {
                                 const formattedSem = resultSem === "1" ? "1st" : resultSem === "2" ? "2nd" : resultSem + "th";
 
                                 return (
-                                    <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="flex flex-col mb-3">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="text-lg font-bold text-slate-800">Section {sectionName} <span className="text-sm font-medium text-slate-500">({deptName})</span></h3>
-                                                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{sectionResults.length} Students</span>
+                                    <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all relative">
+                                        <div className="absolute top-4 right-4">
+                                            <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200">
+                                                {deptCode}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex flex-col gap-1 mb-4">
+                                            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                                {batchString} • {formattedYear} Year {formattedSem} Sem
                                             </div>
-                                            <p className="text-xs font-medium text-slate-500 mt-1">
-                                                {batchString} Batch • {formattedYear} Year {formattedSem} Sem
-                                            </p>
+                                            <h3 className="text-xl font-bold text-slate-900">
+                                                Section {sectionName}
+                                            </h3>
                                         </div>
                                         <button
                                             onClick={() => document.getElementById(`results-table-${sectionName}`)?.classList.toggle("hidden")}
