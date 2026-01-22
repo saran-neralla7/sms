@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Student } from "@/types";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
-import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup } from "react-icons/fa";
+import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup, FaSearch } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { useSession } from "next-auth/react";
 
@@ -55,6 +55,9 @@ export default function StudentsPage() {
     const [semester, setSemester] = useState("");
     const [section, setSection] = useState("");
     const [filterDepartmentId, setFilterDepartmentId] = useState("");
+
+    // Search State
+    const [searchQuery, setSearchQuery] = useState("");
     const { data: session } = useSession();
     // The original loading state for fetchStudents is now replaced by the new `loading` state,
     // but its initial value was `false`. The new `loading` state starts as `true`.
@@ -229,11 +232,17 @@ export default function StudentsPage() {
         }
     };
 
+    // Filter students based on search query
+    const filteredStudents = students.filter(student =>
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.rollNumber.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     const toggleSelectAll = () => {
-        if (selectedStudentIds.size === students.length && students.length > 0) {
+        if (selectedStudentIds.size === filteredStudents.length && filteredStudents.length > 0) {
             setSelectedStudentIds(new Set());
         } else {
-            setSelectedStudentIds(new Set(students.map(s => s.id)));
+            setSelectedStudentIds(new Set(filteredStudents.map(s => s.id)));
         }
     };
 
@@ -709,6 +718,18 @@ export default function StudentsPage() {
                 </select>
             </div>
 
+            {/* Search Bar */}
+            <div className="mb-6 relative">
+                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                    type="text"
+                    placeholder="Search by Name or Roll Number..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 shadow-sm transition-all"
+                />
+            </div>
+
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -718,7 +739,7 @@ export default function StudentsPage() {
                                     <input
                                         type="checkbox"
                                         className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                        checked={students.length > 0 && selectedStudentIds.size === students.length}
+                                        checked={filteredStudents.length > 0 && selectedStudentIds.size === filteredStudents.length}
                                         onChange={toggleSelectAll}
                                     />
                                 </th>
@@ -730,7 +751,7 @@ export default function StudentsPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Loading...</td></tr> :
-                                students.map((student) => (
+                                filteredStudents.map((student) => (
                                     <tr key={student.id} className="group hover:bg-slate-50/80 transition-colors">
                                         <td className="px-6 py-4">
                                             <input
@@ -777,8 +798,10 @@ export default function StudentsPage() {
                                         </td>
                                     </tr>
                                 ))}
-                            {!loading && students.length === 0 && (
-                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">No students found</td></tr>
+                            {!loading && filteredStudents.length === 0 && (
+                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                    {searchQuery ? "No matching students found" : "No students found"}
+                                </td></tr>
                             )}
                         </tbody>
                     </table>
