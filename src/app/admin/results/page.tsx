@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { FaFileUpload, FaDownload, FaFilter, FaSearch, FaExclamationTriangle, FaTimes, FaCheckSquare, FaSquare } from "react-icons/fa";
+import StudentHoverCard from "@/components/StudentHoverCard";
 
 export default function ResultsPage() {
     const { data: session } = useSession();
@@ -406,8 +407,16 @@ export default function ResultsPage() {
                                         <tbody className="divide-y divide-slate-200">
                                             {sectionResults.map((res, idx) => (
                                                 <tr key={res.id} className={`hover:bg-blue-50/50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
-                                                    <td className="p-2 border border-slate-300 font-mono font-medium text-slate-900">{res.student?.rollNumber}</td>
-                                                    <td className="p-2 border border-slate-300 text-slate-700 truncate max-w-[200px]" title={res.student?.name}>{res.student?.name}</td>
+                                                    <td className="p-2 border border-slate-300 font-mono font-medium text-slate-900">
+                                                        <StudentHoverCard name={res.student?.name} rollNumber={res.student?.rollNumber} studentId={res.student?.id}>
+                                                            {res.student?.rollNumber}
+                                                        </StudentHoverCard>
+                                                    </td>
+                                                    <td className="p-2 border border-slate-300 text-slate-700 truncate max-w-[200px]" title={res.student?.name}>
+                                                        <StudentHoverCard name={res.student?.name} rollNumber={res.student?.rollNumber} studentId={res.student?.id}>
+                                                            {res.student?.name}
+                                                        </StudentHoverCard>
+                                                    </td>
                                                     <td className="p-2 border border-slate-300 text-center font-bold text-slate-800">{Number(res.sgpa) ? Number(res.sgpa).toFixed(2) : res.sgpa}</td>
                                                     <td className="p-2 border border-slate-300 text-center text-slate-800">{Number(res.cgpa) ? Number(res.cgpa).toFixed(2) : res.cgpa}</td>
                                                     {allSubjects.map(subCode => {

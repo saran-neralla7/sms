@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Student } from "@/types";
 import { motion } from "framer-motion";
 import { FaArrowLeft, FaAward, FaCalendarAlt, FaEnvelope, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaEdit } from "react-icons/fa";
@@ -11,6 +11,7 @@ import EditStudentModal from "@/components/EditStudentModal";
 export default function StudentProfilePage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [student, setStudent] = useState<Student | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "results">("overview");
@@ -20,6 +21,13 @@ export default function StudentProfilePage() {
     const [resultsLoading, setResultsLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ start: "", end: "" });
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+    useEffect(() => {
+        const tab = searchParams.get("tab");
+        if (tab === "attendance" || tab === "results" || tab === "overview") {
+            setActiveTab(tab);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         if (params.id) {

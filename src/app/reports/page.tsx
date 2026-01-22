@@ -10,6 +10,7 @@ import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import { motion } from "framer-motion";
 import LogoSpinner from "@/components/LogoSpinner";
+import StudentHoverCard from "@/components/StudentHoverCard";
 
 export default function ReportsPage() {
     const { data: session } = useSession();
@@ -1119,8 +1120,16 @@ export default function ReportsPage() {
                                         <tbody className="divide-y divide-slate-100">
                                             {consolidatedData.map((s) => (
                                                 <tr key={s.rollNumber} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-3 text-sm font-mono text-slate-600">{s.rollNumber}</td>
-                                                    <td className="px-6 py-3 text-sm font-medium text-slate-900">{s.name}</td>
+                                                    <td className="px-6 py-3 text-sm font-mono text-slate-600">
+                                                        <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
+                                                            {s.rollNumber}
+                                                        </StudentHoverCard>
+                                                    </td>
+                                                    <td className="px-6 py-3 text-sm font-medium text-slate-900">
+                                                        <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
+                                                            {s.name}
+                                                        </StudentHoverCard>
+                                                    </td>
                                                     <td className="px-6 py-3 text-sm text-center text-slate-600">{s.totalClasses}</td>
                                                     <td className="px-6 py-3 text-sm text-center text-green-600 font-semibold">{s.present}</td>
                                                     <td className="px-6 py-3 text-sm text-center text-red-600 font-semibold">{s.absent}</td>

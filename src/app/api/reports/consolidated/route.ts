@@ -47,6 +47,7 @@ export async function GET(request: Request) {
 
         // 2. Aggregate Data
         const studentStats: Record<string, {
+            id: string,
             name: string,
             rollNumber: string,
             totalClasses: number,
@@ -67,12 +68,13 @@ export async function GET(request: Request) {
                 sectionId,
                 departmentId: departmentId || undefined
             },
-            select: { rollNumber: true, name: true }
+            select: { id: true, rollNumber: true, name: true }
         });
 
         // Initialize everyone with 0
         students.forEach(s => {
             studentStats[s.rollNumber] = {
+                id: s.id as string,
                 name: s.name,
                 rollNumber: s.rollNumber,
                 totalClasses: 0,
