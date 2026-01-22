@@ -1,43 +1,12 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import * as XLSX from "xlsx";
-
-// Helper to normalized date from Excel
-// Excel dates are numbers (days since 1900). Strings might be "DD-MM-YYYY".
-function parseDate(value: any): Date | null {
-    if (!value) return null;
-
-    if (value instanceof Date) return value;
-
-    // Handle Excel Serial Date
-    if (typeof value === 'number') {
-        // -25569 = Days between 1970 and 1900
-        // 86400 = Seconds in a day
-        // This is a rough estimation, for robust parsing we might use a library, 
-        // but typically xlsx 'cellDates: true' handles this.
-        // However, if we receive a raw number:
-        return new Date(Math.round((value - 25569) * 86400 * 1000));
-    }
-
-    // Handle String DD-MM-YYYY or DD/MM/YYYY
-    if (typeof value === 'string') {
-        const parts = value.split(/[-/]/);
-        if (parts.length === 3) {
-            // Assuming DD-MM-YYYY
-            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        }
-    }
-
-    return new Date(value); // Fallback
-}
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     try {
         const formData = await request.formData();
@@ -47,45 +16,41 @@ export async function POST(request: Request) {
         const year = formData.get("year") as string;
         const semester = formData.get("semester") as string;
 
-        if (!file || !sectionId || !departmentId || !year || !semester) {
+        if (!file || !sectionId || !departmentId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
         const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+        const workbook = XLSX.read(buffer);
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-
-        // Convert to JSON (Array of Arrays)
+        // Read raw data as 2D array
         const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-        // Data Verification
-        if (rawData.length < 3) {
-            return NextResponse.json({ error: "Invalid file format. Header or data missing." }, { status: 400 });
+        // Get Active Context
+        const validSubjects = await prisma.subject.findMany({
+            where: {
+                departmentId,
+                year,
+                semester
+            }
+        });
+        const validPeriods = await prisma.period.findMany();
+
+        // Matrix Parsing
+        // Row 0: Date
+        // Row 1: Period
+        // Row 2: Subject
+        // Row 3: Headers
+        // Row 4+: Data
+
+        if (rawData.length < 5) {
+            return NextResponse.json({ error: "Invalid File Format. Too few rows." }, { status: 400 });
         }
 
-        // Row 1: Headers (Student Roll Numbers starts at Index 3 -> Column D)
-        const headerRow = rawData[0];
-        const studentRolls = headerRow.slice(3).map(r => String(r).trim());
-
-        // Fetch Valid Subjects and Periods for fuzzy matching
-        // We fetch ALL subjects for the department to ensure matching works even if elective...
-        // Or strictly filter by Year/Sem? Better strictly filter to avoid cross-year confusion.
-        const validSubjects = await prisma.subject.findMany({
-            where: { departmentId, year, semester }
-        });
-
-        const validPeriods = await prisma.period.findMany({});
-
-        // Fetch Students to get their names for the JSON details
-        // We assume the roll numbers in header are correct, but valid students map is needed.
-        const validStudents = await prisma.student.findMany({
-            where: { sectionId },
-            select: { rollNumber: true, name: true, id: true, mobile: true }
-        });
-
-        const studentMap = new Map<string, typeof validStudents[0]>();
-        validStudents.forEach(s => studentMap.set(s.rollNumber, s));
+        const dateRow = rawData[0];
+        const periodRow = rawData[1];
+        const subjectRow = rawData[2];
 
         const results = {
             success: 0,
@@ -93,135 +58,155 @@ export async function POST(request: Request) {
             errors: [] as string[]
         };
 
-        // Iterate Rows starting from Row 3 (Index 2)
-        // Row 1 = Headers, Row 2 = Info, Row 3 = Data
-        for (let i = 2; i < rawData.length; i++) {
-            const row = rawData[i];
-            if (!row || row.length === 0) continue;
+        // Identify Valid Columns (Index >= 2)
+        const validColumns: { index: number; date: Date; periodId: string; subjectId: string }[] = [];
 
-            const dateRaw = row[0];
-            const periodName = String(row[1] || "").trim();
-            const subjectNameRaw = String(row[2] || "").trim();
+        // Parse Headers for Columns
+        for (let j = 2; j < dateRow.length; j++) {
+            const rawDate = dateRow[j];
+            const rawPeriod = periodRow[j];
+            const rawSubject = subjectRow[j];
 
-            // 1. Validate Meta
-            if (!dateRaw || !periodName || !subjectNameRaw) {
-                results.errors.push(`Row ${i + 1}: Missing Date, Period, or Subject.`);
-                results.failed++;
-                continue;
-            }
+            if (!rawDate && !rawPeriod && !rawSubject) continue; // Empty column
 
-            const date = parseDate(dateRaw);
-            if (!date || isNaN(date.getTime())) {
-                results.errors.push(`Row ${i + 1}: Invalid Date format.`);
-                results.failed++;
-                continue;
-            }
-
-            // 2. Find Period
-            // Normalized match
-            const period = validPeriods.find(p =>
-                p.name.toLowerCase() === periodName.toLowerCase() ||
-                `period ${p.name}`.toLowerCase() === periodName.toLowerCase() ||
-                p.name.toLowerCase().includes(periodName.toLowerCase()) // Lax matching if needed
-            );
-            if (!period) {
-                results.errors.push(`Row ${i + 1}: Invalid Period '${periodName}'.`);
-                results.failed++;
-                continue;
-            }
-
-            // 3. Find Subject (Name or Code)
-            const subject = validSubjects.find(s =>
-                s.name.toLowerCase() === subjectNameRaw.toLowerCase() ||
-                s.code.toLowerCase() === subjectNameRaw.toLowerCase()
-            );
-            if (!subject) {
-                results.errors.push(`Row ${i + 1}: Invalid Subject '${subjectNameRaw}' for this Year/Sem.`);
-                results.failed++;
-                continue;
-            }
-
-            // 4. Build Student Attendance
-            // Iterate columns starting from D (Index 3)
-            const studentDetails: any[] = [];
-            let presentCount = 0;
-            let absentCount = 0;
-
-            studentRolls.forEach((roll, index) => {
-                const rawStatus = row[index + 3];
-                const student = studentMap.get(roll);
-
-                if (student) {
-                    // Determine Status
-                    // P, Present, 1 = Present
-                    // A, Absent, 0, null = Absent
-                    let status = "Absent";
-                    if (rawStatus) {
-                        const s = String(rawStatus).toLowerCase().trim();
-                        if (s === 'p' || s === 'present' || s === '1') {
-                            status = "Present";
-                            presentCount++;
+            // Validate Date
+            let date: Date;
+            try {
+                if (typeof rawDate === 'number') {
+                    date = new Date(Math.round((rawDate - 25569) * 86400 * 1000)); // Excel serial date
+                } else {
+                    // Try parsing DD-MM-YYYY or YYYY-MM-DD
+                    const parts = String(rawDate).split(/[-/.]/);
+                    if (parts.length === 3) {
+                        // Assume DD-MM-YYYY if parts[0] is day-like (e.g. <=31) and parts[2] is year-like (>=2000)
+                        if (parts[0].length === 2 && parts[2].length === 4) {
+                            date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
                         } else {
-                            absentCount++;
+                            date = new Date(String(rawDate));
                         }
                     } else {
-                        absentCount++; // Treat empty as Absent? Or skip? Standard is usually empty = absent or explicit A. Let's assume empty code = absent for safety, or we could require explicit.
-                        // Let's assume P = Present, anything else = Absent.
+                        date = new Date(String(rawDate));
                     }
-
-                    studentDetails.push({
-                        "id": student.id,
-                        "Roll Number": student.rollNumber,
-                        "Name": student.name,
-                        "Mobile": student.mobile, // Optional but good for details
-                        "Status": status
-                    });
                 }
-            });
-
-            // 5. Create Record
-            // Check for duplicates?
-            // upsert might be better but let's just create. If specific logic needed we can check.
-            // We shouldn't duplicate section+date+period+subject.
-
-            const existing = await prisma.attendanceHistory.findFirst({
-                where: {
-                    sectionId,
-                    date: date,
-                    periodId: period.id,
-                    subjectId: subject.id,
-                }
-            });
-
-            if (existing) {
-                results.errors.push(`Row ${i + 1}: Record already exists for ${date.toDateString()} - ${period.name}. Skipped.`);
-                results.failed++;
-                continue; // Skip Overlap
+                if (isNaN(date.getTime())) throw new Error("Invalid Date");
+            } catch (e) {
+                results.errors.push(`Column ${j + 1}: Invalid Date '${rawDate}'`);
+                continue;
             }
 
-            await prisma.attendanceHistory.create({
-                data: {
-                    year,
-                    semester,
-                    sectionId,
-                    departmentId,
-                    status: "Marked Present", // Or derive from majority? Usually "Marked Present" means the process was done.
-                    fileName: `Bulk Upload - ${date.toDateString()}`,
-                    downloadedBy: session.user.id,
-                    date: date,
-                    subjectId: subject.id,
-                    periodId: period.id,
-                    details: JSON.stringify(studentDetails)
-                }
-            });
+            // Validate Period
+            const periodStr = String(rawPeriod || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const period = validPeriods.find(p => p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === periodStr || p.startTime.includes(periodStr) || periodStr.includes(p.name.toLowerCase()));
+            let finalPeriod = period;
 
-            results.success++;
+            if (!finalPeriod && rawPeriod) { // If period provided but not found
+                // Try fuzzy match "1" -> "1st Hour"
+                const numeric = periodStr.match(/\d/)?.[0];
+                if (numeric) {
+                    finalPeriod = validPeriods.find(p => p.name.includes(numeric));
+                }
+            }
+
+            if (!finalPeriod) {
+                results.errors.push(`Column ${j + 1}: Period '${rawPeriod}' not found`);
+                continue;
+            }
+
+            // Validate Subject
+            const subjStr = String(rawSubject || "").toLowerCase().trim();
+            const subject = validSubjects.find(s => s.name.toLowerCase().includes(subjStr) || s.code.toLowerCase().includes(subjStr));
+            if (!subject) {
+                results.errors.push(`Column ${j + 1}: Subject '${rawSubject}' not found`);
+                continue;
+            }
+
+            validColumns.push({
+                index: j,
+                date: date,
+                periodId: finalPeriod.id,
+                subjectId: subject.id
+            });
+        }
+
+        if (validColumns.length === 0) {
+            return NextResponse.json({ error: "No valid session columns found. Check Date/Period/Subject headers." }, { status: 400 });
+        }
+
+        // Process Each Column (Session)
+        for (const col of validColumns) {
+            const studentDetails: any[] = [];
+
+            for (let i = 4; i < rawData.length; i++) {
+                const row = rawData[i];
+                const rollNumber = String(row[0] || "");
+                if (!rollNumber) continue;
+
+                const name = String(row[1] || "");
+                const statusRaw = row[col.index];
+
+                let status = "Absent"; // Default
+                if (statusRaw) {
+                    const s = String(statusRaw).toUpperCase();
+                    if (["P", "PRESENT", "1", "YES"].includes(s)) status = "Present";
+                    // If A/Absent/0/Empty -> Absent
+                }
+
+                studentDetails.push({
+                    "Roll Number": rollNumber,
+                    "Name": name,
+                    "Status": status
+                });
+            }
+
+            if (studentDetails.length > 0) {
+                // Create History Record for this Session
+                try {
+                    // Check if already exists to avoid duplicates
+                    const existing = await prisma.attendanceHistory.findFirst({
+                        where: {
+                            sectionId,
+                            date: col.date,
+                            year,
+                            semester,
+                            periodId: col.periodId,
+                            subjectId: col.subjectId
+                        }
+                    });
+
+                    if (existing) {
+                        results.errors.push(`Session ${col.date.toDateString()} (Period ${col.index}) already exists. Skipped.`);
+                        results.failed += studentDetails.length;
+                        continue;
+                    }
+
+                    await prisma.attendanceHistory.create({
+                        data: {
+                            date: col.date,
+                            year,
+                            semester,
+                            sectionId,
+                            departmentId,
+                            subjectId: col.subjectId,
+                            periodId: col.periodId,
+                            status: "Bulk Upload",
+                            fileName: file.name,
+                            downloadedBy: session.user.id,
+                            details: JSON.stringify(studentDetails)
+                        }
+                    });
+                    results.success += studentDetails.length;
+                } catch (e) {
+                    console.error(e);
+                    results.failed += studentDetails.length;
+                    results.errors.push(`Failed to save session for ${col.date.toDateString()}`);
+                }
+            }
         }
 
         return NextResponse.json(results);
 
-    } catch (error) {
-        console.error("Bulk Upload Error:", error);
-        return NextResponse.json({ error: "Failed to process file" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Upload Error:", error);
+        return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 });
     }
 }
