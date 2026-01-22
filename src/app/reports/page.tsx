@@ -1083,20 +1083,25 @@ export default function ReportsPage() {
                                                             };
 
                                                             content = (
-                                                                <div className="group relative flex h-full w-full flex-col items-center justify-center py-2 cursor-pointer">
-                                                                    <span className="font-bold text-slate-800 text-sm">{record.subject?.name || "Subject"}</span>
+                                                                <div
+                                                                    className="group relative flex h-full w-full flex-col items-center justify-center rounded-lg border border-slate-900 py-2 cursor-pointer shadow-sm transition-transform hover:scale-[1.02]"
+                                                                    style={bgStyle}
+                                                                >
+                                                                    <span className="font-bold text-slate-900 text-sm text-center px-1 leading-tight">{record.subject?.name || "Subject"}</span>
 
 
                                                                     {/* Tooltip */}
-                                                                    <div className="absolute bottom-full mb-2 hidden w-48 flex-col rounded-lg bg-slate-800 p-2 text-xs text-white shadow-xl group-hover:flex z-50">
-                                                                        <div className="font-bold mb-1 border-b border-slate-600 pb-1">{record.subject?.name}</div>
-                                                                        {colSpan > 1 && <div className="mb-1 text-[10px] text-green-400 font-bold uppercase tracking-wider">{colSpan}-Hour Session</div>}
-                                                                        <div className="flex justify-between"><span>Total:</span> <span>{total}</span></div>
-                                                                        <div className="flex justify-between text-green-300"><span>Present:</span> <span>{present} ({Math.round(presentPct)}%)</span></div>
-                                                                        <div className="flex justify-between text-red-300"><span>Absent:</span> <span>{absent}</span></div>
-                                                                        <div className="mt-1 text-[10px] text-slate-400 text-center">Click to View Details</div>
+                                                                    <div className="absolute bottom-full mb-2 hidden w-48 flex-col rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl group-hover:flex z-50 ring-1 ring-white/10">
+                                                                        <div className="font-bold mb-2 border-b border-slate-700 pb-2 text-sm">{record.subject?.name}</div>
+                                                                        {colSpan > 1 && <div className="mb-2 inline-block self-start rounded bg-indigo-500/20 px-1.5 py-0.5 text-[10px] text-indigo-300 font-bold uppercase tracking-wider border border-indigo-500/30">{colSpan}-Hour Session</div>}
+                                                                        <div className="space-y-1">
+                                                                            <div className="flex justify-between"><span>Total:</span> <span className="font-mono">{total}</span></div>
+                                                                            <div className="flex justify-between text-green-300"><span>Present:</span> <span className="font-mono">{present} ({Math.round(presentPct)}%)</span></div>
+                                                                            <div className="flex justify-between text-red-300"><span>Absent:</span> <span className="font-mono">{absent}</span></div>
+                                                                        </div>
+                                                                        <div className="mt-2 text-[10px] text-slate-400 text-center italic">Click to View Details</div>
                                                                         {/* Arrow */}
-                                                                        <div className="absolute top-full left-1/2 -ml-1 h-2 w-2 -translate-y-1 rotate-45 bg-slate-800"></div>
+                                                                        <div className="absolute top-full left-1/2 -ml-1 h-2 w-2 -translate-y-1 rotate-45 bg-slate-900"></div>
                                                                     </div>
                                                                 </div>
                                                             );
@@ -1106,8 +1111,7 @@ export default function ReportsPage() {
                                                             <td
                                                                 key={p.id}
                                                                 colSpan={colSpan}
-                                                                className="h-24 p-0 align-middle transition-all relative border-r border-b"
-                                                                style={bgStyle}
+                                                                className="h-24 p-1 align-middle transition-all relative border-r border-b border-slate-100 last:border-r-0"
                                                                 onClick={() => record && handleView(record)}
                                                             >
                                                                 {content}
