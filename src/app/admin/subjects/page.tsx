@@ -115,10 +115,11 @@ export default function SubjectsPage() {
                 setIsEditModalOpen(false);
                 resetForm();
             } else {
-                alert("Failed to update subject");
+                const data = await res.json();
+                alert(data.error || "Failed to update subject");
             }
-        } catch (error) {
-            alert("Error updating subject");
+        } catch (error: any) {
+            alert(error.message || "Error updating subject");
         }
     };
 

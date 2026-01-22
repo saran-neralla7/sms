@@ -55,8 +55,9 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
             }
         });
         return NextResponse.json(subject);
-    } catch (error) {
-        return NextResponse.json({ error: "Failed to update subject" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Update Subject Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to update subject" }, { status: 500 });
     }
 }
 
