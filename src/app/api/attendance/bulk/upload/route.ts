@@ -37,20 +37,19 @@ export async function POST(request: Request) {
         });
         const validPeriods = await prisma.period.findMany();
 
-        // Matrix Parsing
-        // Row 0: Date
-        // Row 1: Period
-        // Row 2: Subject
-        // Row 3: Headers
-        // Row 4+: Data
+        // Grouped Matrix Parsing
+        // Row 0: Date (Merged - so we need to fill forward)
+        // Row 1: Subject (Per Column)
+        // Row 2: Period (Per Column)
+        // Row 3: Data Start
 
-        if (rawData.length < 5) {
+        if (rawData.length < 4) {
             return NextResponse.json({ error: "Invalid File Format. Too few rows." }, { status: 400 });
         }
 
         const dateRow = rawData[0];
-        const periodRow = rawData[1];
-        const subjectRow = rawData[2];
+        const subjectRow = rawData[1];
+        const periodRow = rawData[2];
 
         const results = {
             success: 0,
@@ -58,50 +57,68 @@ export async function POST(request: Request) {
             errors: [] as string[]
         };
 
-        // Identify Valid Columns (Index >= 2)
+        // Identify Valid Columns (Index >= 2 usually, check headers)
         const validColumns: { index: number; date: Date; periodId: string; subjectId: string }[] = [];
 
-        // Parse Headers for Columns
+        let lastValidDate: Date | null = null;
+
+        // Iterate columns from Index 2 (C) to end
+        // Assuming A & B are Roll/Name
         for (let j = 2; j < dateRow.length; j++) {
-            const rawDate = dateRow[j];
-            const rawPeriod = periodRow[j];
-            const rawSubject = subjectRow[j];
+            let rawDate = dateRow[j];
 
-            if (!rawDate && !rawPeriod && !rawSubject) continue; // Empty column
-
-            // Validate Date
-            let date: Date;
-            try {
-                if (typeof rawDate === 'number') {
-                    date = new Date(Math.round((rawDate - 25569) * 86400 * 1000)); // Excel serial date
-                } else {
-                    // Try parsing DD-MM-YYYY or YYYY-MM-DD
-                    const parts = String(rawDate).split(/[-/.]/);
-                    if (parts.length === 3) {
-                        // Assume DD-MM-YYYY if parts[0] is day-like (e.g. <=31) and parts[2] is year-like (>=2000)
-                        if (parts[0].length === 2 && parts[2].length === 4) {
-                            date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                        } else {
-                            date = new Date(String(rawDate));
-                        }
+            // Date Fill Forward Logic
+            if (rawDate) {
+                // Parse New Date
+                try {
+                    if (typeof rawDate === 'number') {
+                        lastValidDate = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
                     } else {
-                        date = new Date(String(rawDate));
+                        const parts = String(rawDate).split(/[-/.]/);
+                        if (parts.length === 3) {
+                            if (parts[0].length === 2 && parts[2].length === 4) {
+                                lastValidDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                            } else {
+                                lastValidDate = new Date(String(rawDate));
+                            }
+                        } else {
+                            lastValidDate = new Date(String(rawDate));
+                        }
                     }
+                    if (isNaN(lastValidDate.getTime())) throw new Error("Invalid Date");
+                } catch (e) {
+                    // If date parse fails, do we propagate previous?
+                    // If specific cell has bad date, maybe error.
+                    // But merged cells usually have only top-left value.
+                    // Empty cells follow previous.
+                    // If non-empty but invalid -> Error.
+                    results.errors.push(`Column ${j + 1}: Invalid Date '${rawDate}'`);
+                    lastValidDate = null;
+                    continue;
                 }
-                if (isNaN(date.getTime())) throw new Error("Invalid Date");
-            } catch (e) {
-                results.errors.push(`Column ${j + 1}: Invalid Date '${rawDate}'`);
+            }
+
+            // If current cell is empty, we use lastValidDate (Merged Cell behavior)
+            if (!rawDate && !lastValidDate) {
+                // No date context yet
                 continue;
             }
 
+            const date = lastValidDate!;
+
+            const rawPeriod = periodRow[j];
+            const rawSubject = subjectRow[j];
+
+            if (!rawPeriod) continue; // Skip columns without Period (likely empty)
+
             // Validate Period
-            const periodStr = String(rawPeriod || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-            const period = validPeriods.find(p => p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === periodStr || p.startTime.includes(periodStr) || periodStr.includes(p.name.toLowerCase()));
+            const periodStr = String(rawPeriod).toLowerCase().replace(/[^a-z0-9]/g, "");
+            const period = validPeriods.find(p => p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === periodStr);
             let finalPeriod = period;
 
-            if (!finalPeriod && rawPeriod) { // If period provided but not found
-                // Try fuzzy match "1" -> "1st Hour"
-                const numeric = periodStr.match(/\d/)?.[0];
+            if (!finalPeriod) {
+                // Fuzzy: "1st Hour" -> "1"
+                const numeric = periodStr.match(/\d+/)?.[0];
                 if (numeric) {
                     finalPeriod = validPeriods.find(p => p.name.includes(numeric));
                 }
@@ -113,7 +130,14 @@ export async function POST(request: Request) {
             }
 
             // Validate Subject
+            // If subject is empty, we might error or allow? 
+            // Attendance requires Subject usually.
             const subjStr = String(rawSubject || "").toLowerCase().trim();
+            if (!subjStr) {
+                results.errors.push(`Column ${j + 1}: Subject Name missing`);
+                continue;
+            }
+
             const subject = validSubjects.find(s => s.name.toLowerCase().includes(subjStr) || s.code.toLowerCase().includes(subjStr));
             if (!subject) {
                 results.errors.push(`Column ${j + 1}: Subject '${rawSubject}' not found`);
@@ -129,14 +153,19 @@ export async function POST(request: Request) {
         }
 
         if (validColumns.length === 0) {
-            return NextResponse.json({ error: "No valid session columns found. Check Date/Period/Subject headers." }, { status: 400 });
+            return NextResponse.json({ error: "No valid columns found. Check Date/Subject/Period rows." }, { status: 400 });
         }
+
+        // Context Check for Duplicates before processing rows
+        // To optimized, we can fetch all existing history for these contexts
+        // But basic impl first.
 
         // Process Each Column (Session)
         for (const col of validColumns) {
             const studentDetails: any[] = [];
 
-            for (let i = 4; i < rawData.length; i++) {
+            // Data starts Row 3
+            for (let i = 3; i < rawData.length; i++) {
                 const row = rawData[i];
                 const rollNumber = String(row[0] || "");
                 if (!rollNumber) continue;
@@ -145,10 +174,10 @@ export async function POST(request: Request) {
                 const statusRaw = row[col.index];
 
                 let status = "Absent"; // Default
+                // Interpret: P, Present, 1 -> Present. Else Absent.
                 if (statusRaw) {
                     const s = String(statusRaw).toUpperCase();
                     if (["P", "PRESENT", "1", "YES"].includes(s)) status = "Present";
-                    // If A/Absent/0/Empty -> Absent
                 }
 
                 studentDetails.push({
@@ -159,9 +188,8 @@ export async function POST(request: Request) {
             }
 
             if (studentDetails.length > 0) {
-                // Create History Record for this Session
                 try {
-                    // Check if already exists to avoid duplicates
+                    // Check duplicate
                     const existing = await prisma.attendanceHistory.findFirst({
                         where: {
                             sectionId,
@@ -174,9 +202,8 @@ export async function POST(request: Request) {
                     });
 
                     if (existing) {
-                        results.errors.push(`Session ${col.date.toDateString()} (Period ${col.index}) already exists. Skipped.`);
-                        results.failed += studentDetails.length;
-                        continue;
+                        results.errors.push(`Session ${col.date.toDateString()} (Period: ${col.index}) already exists. Skipped.`);
+                        continue; // Skip without counting failure? Or count as failed?
                     }
 
                     await prisma.attendanceHistory.create({
