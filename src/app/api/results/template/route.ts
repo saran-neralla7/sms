@@ -54,7 +54,7 @@ export async function GET(request: Request) {
         const whereStudent: any = {
             departmentId,
             year: studentYear || year,
-            regulationId // Only fetch students of this regulation ID
+            regulationId // Strict: Only fetch students valid for this Regulation Context
         };
         if (targetSectionIds.length > 0) {
             whereStudent.sectionId = { in: targetSectionIds };
