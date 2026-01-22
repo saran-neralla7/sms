@@ -757,34 +757,36 @@ export default function Home() {
 
           {/* Bulk Upload Tab Content */}
           {activeTab === "bulk" && (
-            <div className="px-1 pb-6 space-y-6 animate-in fade-in slide-in-from-top-4">
-              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-6">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-blue-900">1. Download Template</h3>
-                    <p className="text-sm text-blue-700/80 mt-1">
-                      Get the Register-style Excel for <strong>{selectedSectionIds.size > 0 ? "Selected Section" : "Selected Class"}</strong>.
-                    </p>
-                    <div className="flex gap-4 mt-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-blue-800">Start Date (Optional)</label>
-                        <input
-                          type="date"
-                          value={templateStartDate}
-                          onChange={e => setTemplateStartDate(e.target.value)}
-                          className="w-full rounded border-blue-200 px-2 py-1 text-sm text-blue-900 bg-white/80"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-blue-800">End Date (Optional)</label>
-                        <input
-                          type="date"
-                          value={templateEndDate}
-                          onChange={e => setTemplateEndDate(e.target.value)}
-                          className="w-full rounded border-blue-200 px-2 py-1 text-sm text-blue-900 bg-white/80"
-                        />
-                      </div>
-                    </div>
+            <div className="mx-auto max-w-4xl space-y-8 animate-in fade-in slide-in-from-top-4 pb-12">
+
+              {/* Step 1: Download Template */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-md">
+                <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-bold">1</div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Download Template</h3>
+                    <p className="text-sm text-slate-500">Generate a pre-filled Excel sheet for your class.</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-3 items-end">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Start Date <span className="text-slate-400 font-normal">(Optional)</span></label>
+                    <input
+                      type="date"
+                      value={templateStartDate}
+                      onChange={e => setTemplateStartDate(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">End Date <span className="text-slate-400 font-normal">(Optional)</span></label>
+                    <input
+                      type="date"
+                      value={templateEndDate}
+                      onChange={e => setTemplateEndDate(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                    />
                   </div>
                   <button
                     disabled={selectedSectionIds.size === 0 || !year || !semester}
@@ -803,111 +805,126 @@ export default function Home() {
                         alert("Please select Department, Year, Semester and Section.");
                       }
                     }}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed self-end md:self-center"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:bg-blue-700 hover:shadow-blue-300 active:scale-95 disabled:opacity-50 disabled:shadow-none"
                   >
                     <FaDownload /> Download Excel
                   </button>
                 </div>
               </div>
 
-              <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition-all hover:border-blue-400 hover:bg-slate-100">
-                <input
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  id="bulk-upload"
-                />
-                <label htmlFor="bulk-upload" className="cursor-pointer flex flex-col items-center gap-3">
-                  <div className="p-4 rounded-full bg-slate-200 text-slate-500">
-                    <FaFileUpload size={24} />
-                  </div>
+              {/* Step 2: Upload */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-md">
+                <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 font-bold">2</div>
                   <div>
-                    <p className="font-semibold text-slate-700 text-lg">
-                      {bulkFile ? bulkFile.name : "Click to Upload Filled Excel"}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      Supports .xlsx (Register Style)
-                    </p>
+                    <h3 className="text-lg font-bold text-slate-800">Upload Data</h3>
+                    <p className="text-sm text-slate-500">Upload the filled Excel file to mark attendance.</p>
                   </div>
-                </label>
-              </div>
-
-              {bulkFile && (
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleBulkUpload}
-                    disabled={isBulkUploading}
-                    className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-2.5 text-sm font-semibold text-white shadow hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {isBulkUploading ? <FaSpinner className="animate-spin" /> : <FaCheck />}
-                    {isBulkUploading ? "Processing..." : "Process Upload"}
-                  </button>
                 </div>
-              )}
 
-              {bulkStatus && (
-                <div className={`p-4 rounded-xl border ${bulkStatus.failed === 0 ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
-                  <h4 className="font-bold text-slate-800 mb-2">Upload Results</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                    <div className="bg-white p-3 rounded-lg border border-slate-200">
-                      <span className="block text-slate-500 text-xs">Successful</span>
-                      <span className="text-xl font-bold text-green-600">{bulkStatus.success} rows</span>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls"
+                    onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                    id="bulk-upload"
+                  />
+                  <label
+                    htmlFor="bulk-upload"
+                    className={`flex flex-col items-center gap-4 rounded-xl border-2 border-dashed p-8 text-center transition-all cursor-pointer ${bulkFile ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-blue-400'}`}
+                  >
+                    <div className={`p-4 rounded-full transition-colors ${bulkFile ? 'bg-green-100 text-green-600' : 'bg-white text-slate-400 shadow-sm'}`}>
+                      {bulkFile ? <FaCheck size={24} /> : <FaFileUpload size={28} />}
                     </div>
-                    <div className="bg-white p-3 rounded-lg border border-slate-200">
-                      <span className="block text-slate-500 text-xs">Failed</span>
-                      <span className="text-xl font-bold text-red-600">{bulkStatus.failed} rows</span>
+                    <div>
+                      <p className={`text-lg font-bold ${bulkFile ? 'text-green-800' : 'text-slate-700'}`}>
+                        {bulkFile ? bulkFile.name : "Click to Upload File"}
+                      </p>
+                      <p className="text-sm text-slate-500 mt-1">Supports .xlsx (Register Style)</p>
                     </div>
-                  </div>
-                  {bulkStatus.errors.length > 0 && (
-                    <div className="bg-white p-3 rounded-lg border border-red-100 max-h-40 overflow-y-auto">
-                      <p className="font-semibold text-red-800 text-xs mb-2">Error Log:</p>
-                      <ul className="space-y-1">
-                        {bulkStatus.errors.map((err, i) => (
-                          <li key={i} className="text-xs text-red-600">• {err}</li>
-                        ))}
-                      </ul>
+                  </label>
+
+                  {bulkFile && (
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={handleBulkUpload}
+                        disabled={isBulkUploading}
+                        className="flex items-center gap-2 rounded-lg bg-green-600 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-green-200 transition-all hover:bg-green-700 hover:shadow-green-300 active:scale-95 disabled:opacity-70"
+                      >
+                        {isBulkUploading ? <FaSpinner className="animate-spin" /> : <FaCheck />}
+                        {isBulkUploading ? "Processing..." : "Process Upload"}
+                      </button>
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* Danger Zone: Delete Bulk Attendance */}
-              <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <h3 className="font-bold text-red-900 flex items-center gap-2">
-                      <FaTrash /> Delete Attendance Records
-                    </h3>
-                    <p className="text-sm text-red-700 mt-1">
-                      Undo a bulk upload by deleting all attendance records for this section within a date range. <br />
-                      <span className="font-bold">Warning: This action is irreversible.</span>
-                    </p>
+                {bulkStatus && (
+                  <div className={`mt-6 overflow-hidden rounded-xl border ${bulkStatus.failed === 0 ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
+                    <div className="p-4 border-b border-black/5 bg-black/5 flex justify-between items-center">
+                      <h4 className="font-bold text-slate-900">Upload Results</h4>
+                      <button onClick={() => setBulkStatus(null)} className="text-slate-500 hover:text-slate-800"><FaTimes /></button>
+                    </div>
+                    <div className="p-4">
+                      <div className="flex gap-4 mb-4">
+                        <div className="flex-1 rounded-lg bg-white p-3 border border-slate-200 shadow-sm">
+                          <span className="block text-xs font-bold text-slate-500 uppercase">Success</span>
+                          <span className="text-2xl font-bold text-green-600">{bulkStatus.success}</span>
+                        </div>
+                        <div className="flex-1 rounded-lg bg-white p-3 border border-slate-200 shadow-sm">
+                          <span className="block text-xs font-bold text-slate-500 uppercase">Failed</span>
+                          <span className="text-2xl font-bold text-red-600">{bulkStatus.failed}</span>
+                        </div>
+                      </div>
+                      {bulkStatus.errors.length > 0 && (
+                        <div className="bg-white rounded-lg border border-red-100 max-h-48 overflow-y-auto p-3">
+                          <p className="font-bold text-red-800 text-xs mb-2 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Error Log</p>
+                          <ul className="space-y-1.5">
+                            {bulkStatus.errors.map((err, i) => (
+                              <li key={i} className="text-xs text-red-600 font-mono bg-red-50 p-1.5 rounded border border-red-100">{err}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                )}
+              </div>
 
-                  <div className="flex flex-col md:flex-row gap-4 items-end">
-                    <div className="space-y-1 flex-1">
-                      <label className="text-xs font-semibold text-red-800">Start Date</label>
+              {/* Danger Zone */}
+              <div className="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-3 border-b border-red-50 pb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600 font-bold">!</div>
+                  <div>
+                    <h3 className="text-lg font-bold text-red-900">Management Zone</h3>
+                    <p className="text-sm text-red-600/80">Undo mistakes by deleting records.</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-red-50 p-6 border border-red-100">
+                  <div className="flex flex-col md:flex-row gap-6 items-end">
+                    <div className="space-y-1.5 flex-1 w-full">
+                      <label className="text-xs font-bold text-red-800 uppercase tracking-wide">Start Date</label>
                       <input
                         type="date"
                         value={deleteStartDate}
                         onChange={e => setDeleteStartDate(e.target.value)}
-                        className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-red-200"
+                        className="w-full rounded-lg border border-red-200 bg-white px-3 py-2.5 text-sm font-medium text-red-900 focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all"
                       />
                     </div>
-                    <div className="space-y-1 flex-1">
-                      <label className="text-xs font-semibold text-red-800">End Date</label>
+                    <div className="space-y-1.5 flex-1 w-full">
+                      <label className="text-xs font-bold text-red-800 uppercase tracking-wide">End Date</label>
                       <input
                         type="date"
                         value={deleteEndDate}
                         onChange={e => setDeleteEndDate(e.target.value)}
-                        className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-red-200"
+                        className="w-full rounded-lg border border-red-200 bg-white px-3 py-2.5 text-sm font-medium text-red-900 focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all"
                       />
                     </div>
                     <button
                       onClick={handleDeleteBulk}
                       disabled={isDeleting || !deleteStartDate || !deleteEndDate}
-                      className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-red-700 disabled:opacity-50"
+                      className="flex w-full md:w-auto items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-200 transition-all hover:bg-red-700 hover:shadow-red-300 active:scale-95 disabled:opacity-50"
                     >
                       {isDeleting ? <FaSpinner className="animate-spin" /> : <FaTrash />}
                       {isDeleting ? "Deleting..." : "Delete Records"}
@@ -915,6 +932,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
             </div>
           )}
 
