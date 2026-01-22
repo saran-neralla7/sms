@@ -26,6 +26,12 @@ export default function ResultsPage() {
     });
     const [availableSections, setAvailableSections] = useState<any[]>([]);
 
+    const clearFilters = () => {
+        setYear("");
+        setSemester("");
+        setDepartmentId("");
+    };
+
     useEffect(() => {
         if (templateCtx.departmentId) {
             fetch(`/api/sections?departmentId=${templateCtx.departmentId}`)
@@ -277,6 +283,12 @@ export default function ResultsPage() {
                     <option value="1">1st Sem</option>
                     <option value="2">2nd Sem</option>
                 </select>
+                <button
+                    onClick={clearFilters}
+                    className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-red-600 transition-colors"
+                >
+                    Clear
+                </button>
             </div>
 
             {uploadStatus.message && (

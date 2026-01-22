@@ -14,9 +14,9 @@ interface StudentHoverCardProps {
 export default function StudentHoverCard({ name, rollNumber, studentId, children, className = "" }: StudentHoverCardProps) {
     return (
         <div className={`group relative inline-block ${className}`}>
-            <div className="cursor-pointer underline-offset-4 group-hover:underline decoration-blue-500/30">
+            <Link href={`/admin/students/${studentId}?tab=overview`} target="_blank" className="cursor-pointer underline-offset-4 group-hover:underline decoration-blue-500/30 text-inherit">
                 {children}
-            </div>
+            </Link>
 
             {/* Hover Card Container with Bridge */}
             <div className="absolute left-1/2 top-full z-50 hidden pt-2 -translate-x-1/2 group-hover:block">
@@ -34,6 +34,7 @@ export default function StudentHoverCard({ name, rollNumber, studentId, children
                         <div className="grid grid-cols-3 gap-2">
                             <Link
                                 href={`/admin/students/${studentId}?tab=overview`}
+                                target="_blank"
                                 className="flex flex-col items-center gap-1 rounded-lg p-2 text-center transition-colors hover:bg-slate-50 text-slate-600 hover:text-blue-600"
                                 title="View Details"
                             >
@@ -42,6 +43,7 @@ export default function StudentHoverCard({ name, rollNumber, studentId, children
                             </Link>
                             <Link
                                 href={`/admin/students/${studentId}?tab=attendance`}
+                                target="_blank"
                                 className="flex flex-col items-center gap-1 rounded-lg p-2 text-center transition-colors hover:bg-slate-50 text-slate-600 hover:text-blue-600"
                                 title="Attendance"
                             >
@@ -50,6 +52,7 @@ export default function StudentHoverCard({ name, rollNumber, studentId, children
                             </Link>
                             <Link
                                 href={`/admin/students/${studentId}?tab=results`}
+                                target="_blank"
                                 className="flex flex-col items-center gap-1 rounded-lg p-2 text-center transition-colors hover:bg-slate-50 text-slate-600 hover:text-blue-600"
                                 title="Results"
                             >

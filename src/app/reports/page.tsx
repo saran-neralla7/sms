@@ -59,6 +59,17 @@ export default function ReportsPage() {
 
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
 
+    const clearFilters = () => {
+        setDepartmentId("");
+        setYear("");
+        setSemester("");
+        setSectionId("");
+        setSubjectId("");
+        setStartDate("");
+        setEndDate("");
+        setWeekDate("");
+    };
+
     useEffect(() => {
         const role = (session?.user.role || "").toUpperCase();
         if (["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) fetchDepartments();
@@ -807,13 +818,23 @@ export default function ReportsPage() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={fetchConsolidated}
-                            disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Generate
-                        </button>
+                        <div className="flex flex-col justify-end gap-2">
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={clearFilters}
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
+                                >
+                                    Clear
+                                </button>
+                                <button
+                                    onClick={fetchConsolidated}
+                                    disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                    className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Generate
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -884,13 +905,21 @@ export default function ReportsPage() {
                                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
                             </div>
                             <div className="flex flex-col justify-end gap-2">
-                                <button
-                                    onClick={fetchConsolidated}
-                                    disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Generate
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={clearFilters}
+                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
+                                    >
+                                        Clear
+                                    </button>
+                                    <button
+                                        onClick={fetchConsolidated}
+                                        disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                        className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Generate
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -966,13 +995,21 @@ export default function ReportsPage() {
                                 </div>
                             </div>
                             <div className="mt-4 flex justify-end">
-                                <button
-                                    onClick={fetchWeeklyData}
-                                    disabled={!departmentId || !year || !semester || !sectionId || !weekDate}
-                                    className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    Load Timetable
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={clearFilters}
+                                        className="rounded-lg border border-slate-300 bg-white px-6 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
+                                    >
+                                        Clear
+                                    </button>
+                                    <button
+                                        onClick={fetchWeeklyData}
+                                        disabled={!departmentId || !year || !semester || !sectionId || !weekDate}
+                                        className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                        Load Timetable
+                                    </button>
+                                </div>
                             </div>
                         </div>
 

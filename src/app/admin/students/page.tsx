@@ -10,6 +10,7 @@ import { useSession } from "next-auth/react";
 
 import { useRouter } from "next/navigation";
 import LogoSpinner from "@/components/LogoSpinner";
+import StudentHoverCard from "@/components/StudentHoverCard";
 
 export default function StudentsPage() {
     const router = useRouter();
@@ -252,6 +253,14 @@ export default function StudentsPage() {
         if (newSet.has(id)) newSet.delete(id);
         else newSet.add(id);
         setSelectedStudentIds(newSet);
+    };
+
+    const clearFilters = () => {
+        setYear("");
+        setSemester("");
+        setSection("");
+        setFilterDepartmentId("");
+        setSearchQuery("");
     };
 
     const openAddModal = () => {
@@ -720,15 +729,24 @@ export default function StudentsPage() {
             </div>
 
             {/* Search Bar */}
-            <div className="mb-6 relative">
-                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                    type="text"
-                    placeholder="Search by Name or Roll Number..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 shadow-sm transition-all"
-                />
+            {/* Search Bar & Reset */}
+            <div className="mb-6 flex gap-4">
+                <div className="relative flex-1">
+                    <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="Search by Name or Roll Number..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 shadow-sm transition-all"
+                    />
+                </div>
+                <button
+                    onClick={clearFilters}
+                    className="shrink-0 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-red-600 transition-colors"
+                >
+                    Clear Filters
+                </button>
             </div>
 
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -762,17 +780,15 @@ export default function StudentsPage() {
                                                 onChange={() => toggleStudentSelection(student.id)}
                                             />
                                         </td>
-                                        <td
-                                            className="whitespace-nowrap px-6 py-4 text-sm font-mono text-blue-600 cursor-pointer hover:underline"
-                                            onClick={() => router.push(`/admin/students/${student.id}`)}
-                                        >
-                                            {student.rollNumber}
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-blue-600">
+                                            <StudentHoverCard name={student.name} rollNumber={student.rollNumber} studentId={student.id}>
+                                                {student.rollNumber}
+                                            </StudentHoverCard>
                                         </td>
-                                        <td
-                                            className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600 cursor-pointer hover:underline"
-                                            onClick={() => router.push(`/admin/students/${student.id}`)}
-                                        >
-                                            {student.name}
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600">
+                                            <StudentHoverCard name={student.name} rollNumber={student.rollNumber} studentId={student.id}>
+                                                {student.name}
+                                            </StudentHoverCard>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
                                             {student.year}-{student.semester} ({typeof student.section === 'object' ? (student.section as any)?.name : student.section})

@@ -38,6 +38,11 @@ export default function AlumniPage() {
         passingYear: ""
     });
 
+    const clearFilters = () => {
+        setFilterYear("");
+        setSearchName("");
+    };
+
     useEffect(() => {
         fetchAlumni();
     }, []);
@@ -181,16 +186,24 @@ export default function AlumniPage() {
                     />
                 </div>
 
-                <select
-                    value={filterYear}
-                    onChange={(e) => setFilterYear(e.target.value)}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                >
-                    <option value="">All Batches</option>
-                    {uniqueYears.map(year => (
-                        <option key={year} value={year}>Class of {year}</option>
-                    ))}
-                </select>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={filterYear}
+                        onChange={(e) => setFilterYear(e.target.value)}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                    >
+                        <option value="">All Batches</option>
+                        {uniqueYears.map(year => (
+                            <option key={year} value={year}>Class of {year}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={clearFilters}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-red-600 transition-colors"
+                    >
+                        Clear
+                    </button>
+                </div>
             </div>
 
             {/* Table */}
