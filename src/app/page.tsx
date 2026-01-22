@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes, FaClock, FaBook } from "react-icons/fa";
+import { FaUserGraduate, FaDownload, FaCheck, FaSearch, FaSave, FaTimes, FaClock, FaBook, FaFileUpload, FaSpinner } from "react-icons/fa";
 import Modal from "@/components/Modal";
 
 export default function Home() {
@@ -39,8 +39,60 @@ export default function Home() {
   const [saveStep, setSaveStep] = useState<"verify" | "success">("verify");
   const [saveStats, setSaveStats] = useState({ present: 0, absent: 0, total: 0 });
 
+  // Bulk Upload State
+  const [activeTab, setActiveTab] = useState<"live" | "bulk">("live");
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+
   const { data: session } = useSession();
   const router = useRouter();
+
+  const handleBulkUpload = async () => {
+    if (!bulkFile || !year || !semester || selectedSectionIds.size === 0) {
+      alert("Please select Year, Semester, Section and a File.");
+      return;
+    }
+
+    const currentRole = (session?.user.role || "").toUpperCase();
+    const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(currentRole);
+    if (isGlobal && !departmentId) {
+      alert("Please select a Department.");
+      return;
+    }
+
+    const effectiveDept = isGlobal ? departmentId : (session?.user as any)?.departmentId;
+
+    // Use first selected section
+    const sectionId = Array.from(selectedSectionIds)[0];
+    if (!sectionId) {
+      alert("Please select a section.");
+      return;
+    }
+
+    setIsBulkUploading(true);
+    const formData = new FormData();
+    formData.append("file", bulkFile);
+    formData.append("sectionId", sectionId);
+    formData.append("departmentId", effectiveDept);
+    formData.append("year", year);
+    formData.append("semester", semester);
+
+    try {
+      const res = await fetch("/api/attendance/bulk/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      setBulkStatus(data);
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setIsBulkUploading(false);
+    }
+  };
 
   useEffect(() => {
     // Check role safely
@@ -138,16 +190,7 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => {
-    if (session?.user.role === "HOD") {
-      router.replace("/attendance/history");
-    }
-  }, [session, router]);
-
-  // Prevent flash content for HOD (Optional, but better UX)
-  if (session?.user.role === "HOD") {
-    return null;
-  }
+  // Removed HOD redirect check to allow access to Dashboard (for Live/Bulk attendance)
 
   useEffect(() => {
     // Only fetch if required fields are selected
@@ -421,6 +464,28 @@ export default function Home() {
       >
         <h1 className="text-2xl font-bold">Welcome, {session?.user?.username || "Guest"}!</h1>
         <p className="mt-1 text-blue-100">Ready to mark attendance? Select your class details below.</p>
+
+        {/* Tab Switcher */}
+        {session?.user.role !== "USER" && (
+          <div className="mt-6 flex justify-start">
+            <div className="inline-flex rounded-lg bg-white/20 p-1 backdrop-blur-sm">
+              <button
+                onClick={() => setActiveTab("live")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all ${activeTab === "live" ? "bg-white text-blue-600 shadow-sm" : "text-blue-50 hover:bg-white/10"
+                  }`}
+              >
+                <FaUserGraduate /> Live Attendance
+              </button>
+              <button
+                onClick={() => setActiveTab("bulk")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all ${activeTab === "bulk" ? "bg-white text-blue-600 shadow-sm" : "text-blue-50 hover:bg-white/10"
+                  }`}
+              >
+                <FaFileUpload /> Bulk Upload
+              </button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Class Selection Card */}
@@ -509,9 +574,9 @@ export default function Home() {
             {selectedSectionIds.size === 0 && <p className="text-xs text-slate-400">Select at least one</p>}
           </div>
 
-          {/* Subject & Period Selection - Only for Non-USER roles (Academic) */}
-          {session?.user?.role !== "USER" && (
-            <div className="grid gap-6 lg:grid-cols-2">
+          {/* Subject & Period Selection - Only for Live Tab */}
+          {session?.user?.role !== "USER" && activeTab === "live" && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300 grid gap-6 lg:grid-cols-2">
               {/* Period Selection */}
               <div className="space-y-4">
                 <div className="flex flex-col gap-2 items-start">
@@ -632,6 +697,95 @@ export default function Home() {
             </div>
           )}
 
+          {/* Bulk Upload Tab Content */}
+          {activeTab === "bulk" && (
+            <div className="px-1 pb-6 space-y-6 animate-in fade-in slide-in-from-top-4">
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-6">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-blue-900">1. Download Template</h3>
+                    <p className="text-sm text-blue-700/80 mt-1">
+                      Get the Register-style Excel for <strong>{selectedSectionIds.size > 0 ? "Selected Section" : "Selected Class"}</strong>.
+                    </p>
+                  </div>
+                  <button
+                    disabled={selectedSectionIds.size === 0}
+                    onClick={() => {
+                      const sectionId = Array.from(selectedSectionIds)[0];
+                      if (sectionId) window.location.href = `/api/attendance/bulk/template?sectionId=${sectionId}`;
+                      else alert("Please select a section first.");
+                    }}
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <FaDownload /> Download Excel
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition-all hover:border-blue-400 hover:bg-slate-100">
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                  id="bulk-upload"
+                />
+                <label htmlFor="bulk-upload" className="cursor-pointer flex flex-col items-center gap-3">
+                  <div className="p-4 rounded-full bg-slate-200 text-slate-500">
+                    <FaFileUpload size={24} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-700 text-lg">
+                      {bulkFile ? bulkFile.name : "Click to Upload Filled Excel"}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Supports .xlsx (Register Style)
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {bulkFile && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleBulkUpload}
+                    disabled={isBulkUploading}
+                    className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-2.5 text-sm font-semibold text-white shadow hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {isBulkUploading ? <FaSpinner className="animate-spin" /> : <FaCheck />}
+                    {isBulkUploading ? "Processing..." : "Process Upload"}
+                  </button>
+                </div>
+              )}
+
+              {bulkStatus && (
+                <div className={`p-4 rounded-xl border ${bulkStatus.failed === 0 ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
+                  <h4 className="font-bold text-slate-800 mb-2">Upload Results</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <span className="block text-slate-500 text-xs">Successful</span>
+                      <span className="text-xl font-bold text-green-600">{bulkStatus.success} rows</span>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <span className="block text-slate-500 text-xs">Failed</span>
+                      <span className="text-xl font-bold text-red-600">{bulkStatus.failed} rows</span>
+                    </div>
+                  </div>
+                  {bulkStatus.errors.length > 0 && (
+                    <div className="bg-white p-3 rounded-lg border border-red-100 max-h-40 overflow-y-auto">
+                      <p className="font-semibold text-red-800 text-xs mb-2">Error Log:</p>
+                      <ul className="space-y-1">
+                        {bulkStatus.errors.map((err, i) => (
+                          <li key={i} className="text-xs text-red-600">• {err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {attendanceStatus.exists && (
             <div className="mx-6 mb-6 rounded-lg bg-orange-50 p-4 border border-orange-200 text-orange-800 flex items-start gap-3">
               <FaTimes className="mt-1" />
@@ -645,7 +799,7 @@ export default function Home() {
       </motion.div>
 
       <AnimatePresence>
-        {students.length > 0 && (
+        {activeTab === "live" && students.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
