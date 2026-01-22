@@ -425,87 +425,88 @@ export default function ResultsPage() {
                                 </select>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Past Results Toggle */}
-                    <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
-                        <label className="flex items-center gap-2 text-sm font-semibold text-amber-900 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="w-4 h-4 text-amber-600 rounded"
-                                checked={isPastResults}
-                                onChange={e => setIsPastResults(e.target.checked)}
-                            />
-                            Is this for Past Results / Backlogs?
-                        </label>
-                    </div>
-
-                    {/* Conditionally Show Student Year */}
-                    {isPastResults && (
-                        <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Target Student Batch (Current Year)</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-amber-50/50"
-                                value={templateCtx.studentYear}
-                                onChange={e => setTemplateCtx({ ...templateCtx, studentYear: e.target.value })}
-                            >
-                                <option value="">Select Current Student Year</option>
-                                {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
-                            <p className="text-xs text-slate-500 mt-1">E.g., Select '3' if you want 3rd years to take a 2nd year exam.</p>
+                        {/* Past Results Toggle */}
+                        <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-amber-900 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 text-amber-600 rounded"
+                                    checked={isPastResults}
+                                    onChange={e => setIsPastResults(e.target.checked)}
+                                />
+                                Is this for Past Results / Backlogs?
+                            </label>
                         </div>
-                    )}
 
-                    {/* Section Multi-Select */}
-                    {availableSections.length > 0 && (
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Sections (Select Specific or All)</label>
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    onClick={() => {
-                                        if (templateCtx.sectionIds.length === availableSections.length) {
-                                            setTemplateCtx({ ...templateCtx, sectionIds: [] });
-                                        } else {
-                                            setTemplateCtx({ ...templateCtx, sectionIds: availableSections.map(s => s.id) });
-                                        }
-                                    }}
-                                    className="mr-2 text-xs font-semibold text-blue-600 hover:underline"
+                        {/* Conditionally Show Student Year */}
+                        {isPastResults && (
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Target Student Batch (Current Year)</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-amber-50/50"
+                                    value={templateCtx.studentYear}
+                                    onChange={e => setTemplateCtx({ ...templateCtx, studentYear: e.target.value })}
                                 >
-                                    {templateCtx.sectionIds.length === availableSections.length ? "Deselect All" : "Select All"}
-                                </button>
-                                {availableSections.map(sec => {
-                                    const isSelected = templateCtx.sectionIds.includes(sec.id);
-                                    return (
-                                        <button
-                                            key={sec.id}
-                                            onClick={() => {
-                                                const newIds = isSelected
-                                                    ? templateCtx.sectionIds.filter(id => id !== sec.id)
-                                                    : [...templateCtx.sectionIds, sec.id];
-                                                setTemplateCtx({ ...templateCtx, sectionIds: newIds });
-                                            }}
-                                            className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm border ${isSelected ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                                        >
-                                            {isSelected ? <FaCheckSquare className="text-blue-500" /> : <FaSquare className="text-slate-300" />}
-                                            {sec.name}
-                                        </button>
-                                    );
-                                })}
+                                    <option value="">Select Current Student Year</option>
+                                    {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <p className="text-xs text-slate-500 mt-1">E.g., Select '3' if you want 3rd years to take a 2nd year exam.</p>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    <div className="pt-4 flex justify-end gap-2">
-                        <button onClick={() => setShowTemplateModal(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-                        <button
-                            onClick={generateSmartTemplate}
-                            className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-700 transition-all hover:scale-105 active:scale-95"
-                        >
-                            Download Template
-                        </button>
+                        {/* Section Multi-Select */}
+                        {availableSections.length > 0 && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Sections (Select Specific or All)</label>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        onClick={() => {
+                                            if (templateCtx.sectionIds.length === availableSections.length) {
+                                                setTemplateCtx({ ...templateCtx, sectionIds: [] });
+                                            } else {
+                                                setTemplateCtx({ ...templateCtx, sectionIds: availableSections.map(s => s.id) });
+                                            }
+                                        }}
+                                        className="mr-2 text-xs font-semibold text-blue-600 hover:underline"
+                                    >
+                                        {templateCtx.sectionIds.length === availableSections.length ? "Deselect All" : "Select All"}
+                                    </button>
+                                    {availableSections.map(sec => {
+                                        const isSelected = templateCtx.sectionIds.includes(sec.id);
+                                        return (
+                                            <button
+                                                key={sec.id}
+                                                onClick={() => {
+                                                    const newIds = isSelected
+                                                        ? templateCtx.sectionIds.filter(id => id !== sec.id)
+                                                        : [...templateCtx.sectionIds, sec.id];
+                                                    setTemplateCtx({ ...templateCtx, sectionIds: newIds });
+                                                }}
+                                                className={`flex items-center gap-2 rounded px-3 py-1.5 text-sm border ${isSelected ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                                            >
+                                                {isSelected ? <FaCheckSquare className="text-blue-500" /> : <FaSquare className="text-slate-300" />}
+                                                {sec.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-4 flex justify-end gap-2">
+                            <button onClick={() => setShowTemplateModal(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button
+                                onClick={generateSmartTemplate}
+                                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-700 transition-all hover:scale-105 active:scale-95"
+                            >
+                                Download Template
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
+            {/* End Template Modal */}
         </div >
     );
 }
