@@ -718,24 +718,24 @@ export default function Home() {
             </div>
 
             {/* Student Grid */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {filteredStudents.map((student) => {
                 const isSelected = selectedIds.has(student.id);
 
                 // Dynamic styles based on mode and selection
-                let cardClasses = "relative cursor-pointer overflow-hidden rounded-xl border p-5 transition-all duration-200 ";
+                let cardClasses = "relative cursor-pointer overflow-hidden rounded-lg border p-3 transition-all duration-200 ";
                 let activeColor = "";
 
                 if (isSelected) {
                   if (mode === 'mark_absent') {
-                    cardClasses += "bg-red-50 border-red-200 shadow-md ring-1 ring-red-500 scale-[1.02] ";
+                    cardClasses += "bg-red-50 border-red-200 shadow-sm ring-1 ring-red-500 scale-[1.02] ";
                     activeColor = "text-red-700";
                   } else {
-                    cardClasses += "bg-green-50 border-green-200 shadow-md ring-1 ring-green-500 scale-[1.02] ";
+                    cardClasses += "bg-green-50 border-green-200 shadow-sm ring-1 ring-green-500 scale-[1.02] ";
                     activeColor = "text-green-700";
                   }
                 } else {
-                  cardClasses += "bg-white border-slate-200 hover:border-blue-300 hover:shadow-md ";
+                  cardClasses += "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm ";
                 }
 
                 return (
@@ -746,24 +746,19 @@ export default function Home() {
                     whileTap={{ scale: 0.98 }}
                     className={cardClasses}
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className={`text-lg font-bold font-mono ${isSelected ? activeColor : 'text-slate-900'}`}>{student.rollNumber}</h4>
-                        <span className={`mt-1 inline-block text-sm font-medium ${isSelected ? 'text-slate-700' : 'text-slate-500'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className={`text-sm font-bold font-mono truncate ${isSelected ? activeColor : 'text-slate-900'}`}>{student.rollNumber}</h4>
+                        <p className={`text-xs font-medium truncate ${isSelected ? 'text-slate-700' : 'text-slate-500'}`}>
                           {student.name}
-                        </span>
+                        </p>
                       </div>
-                      <div className={`flex h-6 w-6 items-center justify-center rounded-full border transition-colors ${isSelected
+                      <div className={`flex flex-shrink-0 h-5 w-5 items-center justify-center rounded-full border transition-colors ${isSelected
                         ? (mode === 'mark_absent' ? "border-red-500 bg-red-500 text-white" : "border-green-500 bg-green-500 text-white")
                         : "border-slate-200 bg-slate-50 text-transparent"
                         }`}>
-                        <FaCheck size={12} />
+                        <FaCheck size={10} />
                       </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
-                      <div className={`h-1.5 w-1.5 rounded-full ${isSelected ? (mode === 'mark_absent' ? "bg-red-400" : "bg-green-400") : "bg-slate-300"}`} />
-                      {student.mobile}
                     </div>
                   </motion.div>
                 );
