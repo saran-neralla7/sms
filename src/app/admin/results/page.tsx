@@ -347,6 +347,11 @@ export default function ResultsPage() {
 
                                 // get batch from first student in this section
                                 const batchString = sectionResults[0]?.student?.batch || "Unknown Batch";
+                                // Get Exam Context from result data (fallback if filters are empty)
+                                const resultYear = sectionResults[0]?.year || year || "?";
+                                const resultSem = sectionResults[0]?.semester || semester || "?";
+                                const formattedYear = resultYear === "1" ? "1st" : resultYear === "2" ? "2nd" : resultYear === "3" ? "3rd" : resultYear + "th";
+                                const formattedSem = resultSem === "1" ? "1st" : resultSem === "2" ? "2nd" : resultSem + "th";
 
                                 return (
                                     <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -355,10 +360,9 @@ export default function ResultsPage() {
                                                 <h3 className="text-lg font-bold text-slate-800">Section {sectionName}</h3>
                                                 <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{sectionResults.length} Students</span>
                                             </div>
-                                            <p className="text-xs font-medium text-slate-500 mt-1">{batchString} Batch • {year === "1" ? "1st" : year === "2" ? "2nd" : year === "3" ? "3rd" : year + "th"} Year</p>
-                                        </div>
-                                        <div className="text-sm text-slate-600 mb-4">
-                                            <p>Avg SGPA: <span className="font-semibold text-slate-900">{avgSGPA}</span></p>
+                                            <p className="text-xs font-medium text-slate-500 mt-1">
+                                                {batchString} Batch • {formattedYear} Year {formattedSem} Sem
+                                            </p>
                                         </div>
                                         <button
                                             onClick={() => document.getElementById(`results-table-${sectionName}`)?.classList.toggle("hidden")}
