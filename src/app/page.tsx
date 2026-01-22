@@ -84,11 +84,24 @@ export default function Home() {
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      if (!res.ok) {
+        // Construct Detailed Error
+        if (data.details && Array.isArray(data.details)) {
+          setBulkStatus({
+            success: 0,
+            failed: 0, // Total rejection
+            errors: data.details
+          });
+          throw new Error("Validation Failed. Please check the error log.");
+        } else {
+          throw new Error(data.error || "Upload failed");
+        }
+      }
 
       setBulkStatus(data);
     } catch (error: any) {
-      alert(error.message);
+      if (!bulkStatus?.errors?.length) alert(error.message);
     } finally {
       setIsBulkUploading(false);
     }
