@@ -174,6 +174,11 @@ export default function ResultsPage() {
             return;
         }
 
+        if (isPastResults && !templateCtx.studentYear) {
+            alert("Please select the 'Target Student Batch' (Current Year of the students).");
+            return;
+        }
+
         const params = new URLSearchParams();
         params.set("departmentId", templateCtx.departmentId);
         params.set("year", templateCtx.year);
