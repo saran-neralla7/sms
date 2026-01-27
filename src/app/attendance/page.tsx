@@ -137,6 +137,14 @@ export default function AttendancePage() {
             return;
         }
 
+        const role = (session?.user?.role || "").toUpperCase();
+        const isAcademic = ["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes(role);
+
+        if (isAcademic && !selectedSubject) {
+            setMessage("Subject is required for Academic Attendance.");
+            return;
+        }
+
         // Check for duplicate/existing? We can do a quick check API call here if needed, 
         // but for now let's rely on server or just submit.
         // User might want to overwrite? Or block?
@@ -296,7 +304,9 @@ export default function AttendancePage() {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700">Subject (Optional)</label>
+                            <label className="block text-sm font-medium text-slate-700">
+                                Subject {["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) ? <span className="text-red-500">*</span> : "(Optional)"}
+                            </label>
                             <select
                                 value={selectedSubject}
                                 onChange={(e) => setSelectedSubject(e.target.value)}

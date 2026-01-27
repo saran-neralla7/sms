@@ -88,6 +88,13 @@ export default function DashboardPage() {
         description: "Manage fee structure, payments, and dues.",
         href: "/fees",
         color: "bg-green-50 text-green-600"
+      },
+      {
+        title: "Mark Attendance",
+        icon: <FaUserGraduate className="h-6 w-6" />,
+        description: "Mark student attendance (Academic).",
+        href: "/attendance",
+        color: "bg-red-50 text-red-600"
       }
     ];
   } else {
