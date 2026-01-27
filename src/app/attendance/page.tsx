@@ -61,6 +61,7 @@ export default function AttendancePage() {
     // -- SUMMARY MODAL STATE --
     const [showSummary, setShowSummary] = useState(false);
     const [summaryData, setSummaryData] = useState<any>(null);
+    const [submissionStep, setSubmissionStep] = useState<"confirm" | "success">("confirm");
 
     // Initialize Selections
     useEffect(() => {
@@ -175,27 +176,50 @@ export default function AttendancePage() {
         setStudents(students.map(s => ({ ...s, status })));
     };
 
-    const submitAttendance = async () => {
+    const initiateSubmission = () => {
         if (students.length === 0) return;
+
+        // Calculate Stats for Summary Preview
+        const total = students.length;
+        const present = students.filter(s => s.status === "Present").length;
+        const absent = total - present;
+
+        // Get Names
+        const secName = sections.find(s => s.id === selectedSection)?.name || "Unknown";
+        const subName = subjects.find(s => s.id === selectedSubject)?.name || "N/A";
+        // Safe check for periods
+        const pNames = periods.filter(p => selectedPeriods.includes(p.id)).map(p => p.name).join(", ");
+
+        setSummaryData({
+            date,
+            year,
+            semester,
+            section: secName,
+            subject: subName,
+            periods: pNames,
+            total,
+            present,
+            absent,
+            students // Keep ref to students for payload later
+        });
+
+        setSubmissionStep("confirm");
+        setShowSummary(true);
+    };
+
+    const executeSubmission = async () => {
+        if (!summaryData) return;
         setSubmitting(true);
 
         try {
-            // Check for existing first
-            // We need to check EACH period. 
-            // For simplicity, let's just push and let API handle/fail?
-            // The user wanted "check" logic. 
-            // We'll proceed with submit.
-
             const payload = {
-                date,
-                year,
-                semester,
+                date: summaryData.date,
+                year: summaryData.year,
+                semester: summaryData.semester,
                 sectionId: selectedSection,
                 departmentId: selectedDept,
                 subjectId: selectedSubject || null,
-                periodIds: selectedPeriods, // API update needed? API accepts periodId. 
-                // Wait, previous API might have supported arrays or separate calls.
-                // If API only accepts single periodId, we need loop.
+                periodIds: selectedPeriods,
                 students: students.map(s => ({
                     rollNumber: s.rollNumber,
                     name: s.name,
@@ -211,38 +235,17 @@ export default function AttendancePage() {
             });
 
             if (res.ok) {
-                // Calculate Stats for Summary
-                const total = students.length;
-                const present = students.filter(s => s.status === "Present").length;
-                const absent = total - present;
-
-                // Get Names
-                const secName = sections.find(s => s.id === selectedSection)?.name || "Unknown";
-                const subName = subjects.find(s => s.id === selectedSubject)?.name || "N/A";
-                const pNames = periods.filter(p => selectedPeriods.includes(p.id)).map(p => p.name).join(", ");
-
-                setSummaryData({
-                    date,
-                    year,
-                    semester,
-                    section: secName,
-                    subject: subName,
-                    periods: pNames,
-                    total,
-                    present,
-                    absent,
-                    students // For download
-                });
-
-                setShowSummary(true);
+                setSubmissionStep("success");
             } else {
                 const err = await res.json();
-                setMessage(err.error || "Submission Failed");
+                alert(err.error || "Submission Failed");
+                setShowSummary(false); // Close on error to allow retry
             }
 
         } catch (error) {
             console.error(error);
-            setMessage("Error submitting attendance");
+            alert("Error submitting attendance");
+            setShowSummary(false);
         } finally {
             setSubmitting(false);
         }
@@ -252,6 +255,7 @@ export default function AttendancePage() {
         setShowSummary(false);
         setSummaryData(null);
         setStudents([]); // Clear data
+        setSubmissionStep("confirm"); // Reset for next time
         router.push("/attendance/history");
     };
 
@@ -539,11 +543,11 @@ export default function AttendancePage() {
 
                                 <div className="sticky bottom-4 mt-8 flex justify-end">
                                     <button
-                                        onClick={submitAttendance}
+                                        onClick={initiateSubmission}
                                         disabled={submitting}
                                         className="flex items-center gap-2 rounded-full bg-slate-900 px-8 py-3 font-bold text-white shadow-xl hover:bg-slate-800 hover:scale-105 transition-all disabled:opacity-50"
                                     >
-                                        {submitting ? "Submitting..." : <><FaSave /> Submit Attendance</>}
+                                        <FaSave /> Review & Submit
                                     </button>
                                 </div>
                             </div>
@@ -609,18 +613,25 @@ export default function AttendancePage() {
 
             {/* Summary Modal */}
             {showSummary && summaryData && (
-                <Modal isOpen={showSummary} onClose={handleCloseSummary} title="Attendance Submitted">
+                <Modal isOpen={showSummary} onClose={handleCloseSummary} title={submissionStep === "confirm" ? "Confirm Attendance" : "Attendance Submitted"}>
                     <div className="p-6">
                         <div className="flex flex-col items-center mb-6">
-                            <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-2">
-                                <FaCheckCircle className="h-6 w-6" />
-                            </div>
-                            <h2 className="text-xl font-bold text-slate-800">Success!</h2>
-                            <p className="text-sm text-slate-500">Attendance has been recorded.</p>
+                            {submissionStep === "confirm" ? (
+                                <h2 className="text-xl font-bold text-slate-800">Confirm Submission</h2>
+                            ) : (
+                                <>
+                                    <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-2">
+                                        <FaCheckCircle className="h-6 w-6" />
+                                    </div>
+                                    <h2 className="text-xl font-bold text-slate-800">Success!</h2>
+                                    <p className="text-sm text-slate-500">Attendance has been recorded.</p>
+                                </>
+                            )}
                         </div>
 
                         <div className="rounded-lg bg-slate-50 p-4 border border-slate-100 mb-6">
                             <div className="grid grid-cols-2 gap-4 text-sm">
+                                {/* Details Block (Same for both) */}
                                 <div>
                                     <span className="block text-[10px] uppercase font-bold text-slate-400">Date</span>
                                     <span className="font-semibold text-slate-900">{new Date(summaryData.date).toLocaleDateString()}</span>
@@ -640,11 +651,12 @@ export default function AttendancePage() {
 
                                 <div className="col-span-2 border-t border-slate-200 my-2"></div>
 
+                                {/* Stats - Highlighted for Confirmation */}
                                 <div>
                                     <span className="block text-[10px] uppercase font-bold text-slate-400">Total Students</span>
                                     <span className="font-bold text-slate-900 text-lg">{summaryData.total}</span>
                                 </div>
-                                <div></div> {/* Spacer */}
+                                <div></div>
 
                                 <div className="flex flex-col">
                                     <span className="block text-[10px] uppercase font-bold text-slate-400">Present</span>
@@ -657,27 +669,47 @@ export default function AttendancePage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <button
-                                onClick={downloadSummaryReport}
-                                className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                            >
-                                <FaDownload /> Full Report
-                            </button>
-                            <button
-                                onClick={downloadAbsentees}
-                                className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
-                            >
-                                <FaDownload /> Absentees
-                            </button>
-                        </div>
+                        {submissionStep === "confirm" ? (
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowSummary(false)}
+                                    className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={executeSubmission}
+                                    disabled={submitting}
+                                    className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-slate-800 disabled:opacity-70"
+                                >
+                                    {submitting ? "Saving..." : "Confirm & Save"}
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <button
+                                        onClick={downloadSummaryReport}
+                                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                                    >
+                                        <FaDownload /> Full Report
+                                    </button>
+                                    <button
+                                        onClick={downloadAbsentees}
+                                        className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
+                                    >
+                                        <FaDownload /> Absentees
+                                    </button>
+                                </div>
 
-                        <button
-                            onClick={handleCloseSummary}
-                            className="mt-6 w-full text-center text-sm text-slate-400 hover:text-slate-600 underline"
-                        >
-                            Close
-                        </button>
+                                <button
+                                    onClick={handleCloseSummary}
+                                    className="mt-6 w-full text-center text-sm text-slate-400 hover:text-slate-600 underline"
+                                >
+                                    Close & Return
+                                </button>
+                            </>
+                        )}
                     </div>
                 </Modal>
             )}
