@@ -95,6 +95,13 @@ export default function DashboardPage() {
         description: "Mark student attendance (Academic).",
         href: "/attendance",
         color: "bg-red-50 text-red-600"
+      },
+      {
+        title: "Attendance History",
+        icon: <FaFileAlt className="h-6 w-6" />,
+        description: "View history of marked attendance (Regular & SMS).",
+        href: "/attendance/history",
+        color: "bg-cyan-50 text-cyan-600"
       }
     ];
   } else {
