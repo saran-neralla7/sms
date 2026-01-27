@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaSave, FaSearch, FaUserCheck, FaUserTimes, FaFileDownload, FaFileUpload, FaTrash, FaFilter } from "react-icons/fa";
+import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaSave, FaSearch, FaUserCheck, FaUserTimes, FaFileDownload, FaFileUpload, FaTrash, FaFilter, FaDownload } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
+import Modal from "@/components/Modal";
+import * as XLSX from "xlsx";
 
 // Types
 interface Student {
@@ -55,6 +57,10 @@ export default function AttendancePage() {
     const [bulkUploading, setBulkUploading] = useState(false);
     const [bulkStartDate, setBulkStartDate] = useState(new Date().toISOString().split("T")[0]);
     const [bulkEndDate, setBulkEndDate] = useState(new Date().toISOString().split("T")[0]);
+
+    // -- SUMMARY MODAL STATE --
+    const [showSummary, setShowSummary] = useState(false);
+    const [summaryData, setSummaryData] = useState<any>(null);
 
     // Initialize Selections
     useEffect(() => {
@@ -205,8 +211,30 @@ export default function AttendancePage() {
             });
 
             if (res.ok) {
-                alert("Attendance Submitted Successfully!");
-                router.push("/attendance/history");
+                // Calculate Stats for Summary
+                const total = students.length;
+                const present = students.filter(s => s.status === "Present").length;
+                const absent = total - present;
+
+                // Get Names
+                const secName = sections.find(s => s.id === selectedSection)?.name || "Unknown";
+                const subName = subjects.find(s => s.id === selectedSubject)?.name || "N/A";
+                const pNames = periods.filter(p => selectedPeriods.includes(p.id)).map(p => p.name).join(", ");
+
+                setSummaryData({
+                    date,
+                    year,
+                    semester,
+                    section: secName,
+                    subject: subName,
+                    periods: pNames,
+                    total,
+                    present,
+                    absent,
+                    students // For download
+                });
+
+                setShowSummary(true);
             } else {
                 const err = await res.json();
                 setMessage(err.error || "Submission Failed");
@@ -218,6 +246,47 @@ export default function AttendancePage() {
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleCloseSummary = () => {
+        setShowSummary(false);
+        setSummaryData(null);
+        setStudents([]); // Clear data
+        router.push("/attendance/history");
+    };
+
+    const downloadSummaryReport = () => {
+        if (!summaryData) return;
+        const data = summaryData.students.map((s: any) => ({
+            "Roll Number": s.rollNumber,
+            "Name": s.name,
+            "Mobile": s.mobile,
+            "Status": s.status
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+        XLSX.writeFile(wb, `Attendance_${summaryData.date}_${summaryData.section}.xlsx`);
+    };
+
+    const downloadAbsentees = () => {
+        if (!summaryData) return;
+        const absentees = summaryData.students.filter((s: any) => s.status === "Absent").map((s: any) => ({
+            "Roll Number": s.rollNumber,
+            "Name": s.name,
+            "Mobile": s.mobile,
+            "Status": "Absent"
+        }));
+
+        if (absentees.length === 0) {
+            alert("No absentees to download.");
+            return;
+        }
+
+        const ws = XLSX.utils.json_to_sheet(absentees);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Absentees");
+        XLSX.writeFile(wb, `Absentees_${summaryData.date}_${summaryData.section}.xlsx`);
     };
 
     // -- HANDLERS: BULK MODE --
@@ -408,8 +477,8 @@ export default function AttendancePage() {
                                             key={p.id}
                                             onClick={() => handlePeriodToggle(p.id)}
                                             className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${selectedPeriods.includes(p.id)
-                                                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                                                    : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
+                                                ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                                                : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
                                                 }`}
                                         >
                                             {p.name}
@@ -447,8 +516,8 @@ export default function AttendancePage() {
                                             key={s.id}
                                             onClick={() => toggleStudentStatus(s.id)}
                                             className={`cursor-pointer rounded-lg border p-4 text-center transition-all shadow-sm select-none ${s.status === "Absent"
-                                                    ? "bg-red-50 border-red-500 ring-1 ring-red-500" // Red for Absent
-                                                    : "bg-white border-slate-200 hover:border-green-400 hover:shadow-md" // White/Greenish hover for Present
+                                                ? "bg-red-50 border-red-500 ring-1 ring-red-500" // Red for Absent
+                                                : "bg-white border-slate-200 hover:border-green-400 hover:shadow-md" // White/Greenish hover for Present
                                                 }`}
                                         >
                                             <p className={`text-lg font-bold ${s.status === "Absent" ? "text-red-700" : "text-slate-800"}`}>
@@ -537,6 +606,81 @@ export default function AttendancePage() {
                     </div>
                 )}
             </div>
+
+            {/* Summary Modal */}
+            {showSummary && summaryData && (
+                <Modal isOpen={showSummary} onClose={handleCloseSummary} title="Attendance Submitted">
+                    <div className="p-6">
+                        <div className="flex flex-col items-center mb-6">
+                            <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-2">
+                                <FaCheckCircle className="h-6 w-6" />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800">Success!</h2>
+                            <p className="text-sm text-slate-500">Attendance has been recorded.</p>
+                        </div>
+
+                        <div className="rounded-lg bg-slate-50 p-4 border border-slate-100 mb-6">
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Date</span>
+                                    <span className="font-semibold text-slate-900">{new Date(summaryData.date).toLocaleDateString()}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Class</span>
+                                    <span className="font-semibold text-slate-900">Yr {summaryData.year} - Sem {summaryData.semester} - Sec {summaryData.section}</span>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Subject</span>
+                                    <span className="font-semibold text-slate-900">{summaryData.subject}</span>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Periods</span>
+                                    <span className="font-semibold text-slate-900">{summaryData.periods}</span>
+                                </div>
+
+                                <div className="col-span-2 border-t border-slate-200 my-2"></div>
+
+                                <div>
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Total Students</span>
+                                    <span className="font-bold text-slate-900 text-lg">{summaryData.total}</span>
+                                </div>
+                                <div></div> {/* Spacer */}
+
+                                <div className="flex flex-col">
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Present</span>
+                                    <span className="font-bold text-green-600 text-lg">{summaryData.present}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="block text-[10px] uppercase font-bold text-slate-400">Absent</span>
+                                    <span className="font-bold text-red-600 text-lg">{summaryData.absent}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <button
+                                onClick={downloadSummaryReport}
+                                className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                            >
+                                <FaDownload /> Full Report
+                            </button>
+                            <button
+                                onClick={downloadAbsentees}
+                                className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
+                            >
+                                <FaDownload /> Absentees
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={handleCloseSummary}
+                            className="mt-6 w-full text-center text-sm text-slate-400 hover:text-slate-600 underline"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }
