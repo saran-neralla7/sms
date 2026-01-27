@@ -16,19 +16,18 @@ export default withAuth(
             return;
         }
 
-        // Redirect non-admins trying to access protected routes
-        // Protected routes: /dashboard, /admin, /reports, /faculty, /fees, /timetables
-        const protectedPrefixes = ["/dashboard", "/admin", "/reports", "/faculty", "/fees", "/timetables"];
+        // Protected Admin Routes: /admin, /reports, /faculty, /fees, /timetables
+        const adminRoutes = ["/admin", "/reports", "/faculty", "/fees", "/timetables"];
 
-        if (protectedPrefixes.some(prefix => path.startsWith(prefix))) {
+        if (adminRoutes.some(prefix => path.startsWith(prefix))) {
             if (!isGlobalAdmin) {
-                // Determine redirect based on role (e.g., Student -> Student Profile, Faculty -> Faculty Dashboard in future)
-                // For now, redirect to home or show error
                 const url = req.nextUrl.clone();
-                url.pathname = "/"; // Or a specific "Access Denied" page
+                url.pathname = "/dashboard"; // Redirect unauthorized access to their dashboard
                 return NextResponse.redirect(url);
             }
         }
+
+        // /dashboard and /attendance are valid for all authenticated users (handled by authorized callback)
     },
     {
         callbacks: {
