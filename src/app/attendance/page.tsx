@@ -42,6 +42,10 @@ export default function AttendancePage() {
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
     // Data
+    const [viewMode, setViewMode] = useState<"manual" | "bulk">("manual");
+    const [file, setFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -202,15 +206,74 @@ export default function AttendancePage() {
         }
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setFile(e.target.files[0]);
+        }
+    };
+
+    const handleBulkUpload = async () => {
+        if (!file || !selectedDept || !year || !semester || !selectedSection) {
+            setMessage("Please fill all required fields and select a file.");
+            return;
+        }
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("departmentId", selectedDept);
+        formData.append("year", year);
+        formData.append("semester", semester);
+        formData.append("sectionId", selectedSection);
+
+        try {
+            const res = await fetch("/api/attendance/bulk/upload", {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                alert(`Successfully uploaded ${data.success} records!`);
+                setFile(null);
+                router.push("/attendance/history");
+            } else {
+                setMessage(data.error || "Upload failed");
+                if (data.details) alert(data.details.join("\n"));
+            }
+        } catch (error) {
+            console.error(error);
+            setMessage("Upload error");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     if (status === "loading") return <LogoSpinner />;
 
     return (
         <div className="mx-auto max-w-7xl px-4 py-8">
             <h1 className="mb-6 text-2xl font-bold text-slate-800">Mark Attendance</h1>
 
+            {/* Mode Switcher */}
+            <div className="mb-6 flex gap-4">
+                <button
+                    onClick={() => setViewMode("manual")}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${viewMode === "manual" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                    Manual Entry
+                </button>
+                <button
+                    onClick={() => setViewMode("bulk")}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${viewMode === "bulk" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                    Bulk Upload
+                </button>
+            </div>
+
             <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
 
-                {/* Row 1: Academic Details */}
+                {/* Common Fields */}
                 <div className="grid gap-4 md:grid-cols-4">
                     {/* Department */}
                     <div>
@@ -270,58 +333,94 @@ export default function AttendancePage() {
                     </div>
                 </div>
 
-                {/* Row 2: Schedule Details */}
-                <div className="grid gap-4 md:grid-cols-3 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700">Date</label>
-                        <input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="mt-1 block w-full rounded-md border border-slate-300 p-2 text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700">Period</label>
-                        <select
-                            value={selectedPeriod}
-                            onChange={(e) => setSelectedPeriod(e.target.value)}
-                            className="mt-1 block w-full rounded-md border border-slate-300 p-2 text-sm"
-                        >
-                            <option value="">Select Period</option>
-                            {periods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700">
-                            Subject {["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) ? <span className="text-red-500">*</span> : "(Optional)"}
-                        </label>
-                        <select
-                            value={selectedSubject}
-                            onChange={(e) => setSelectedSubject(e.target.value)}
-                            className="mt-1 block w-full rounded-md border border-slate-300 p-2 text-sm"
-                        >
-                            <option value="">Select Subject</option>
-                            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                    </div>
-                </div>
+                {viewMode === "manual" ? (
+                    <>
+                        {/* MANUAL ENTRY UI (Preserved) */}
+                        <div className="grid gap-4 md:grid-cols-3 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700">Date</label>
+                                <input
+                                    type="date"
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                    className="mt-1 block w-full rounded-md border border-slate-300 p-2 text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700">Period</label>
+                                <select
+                                    value={selectedPeriod}
+                                    onChange={(e) => setSelectedPeriod(e.target.value)}
+                                    className="mt-1 block w-full rounded-md border border-slate-300 p-2 text-sm"
+                                >
+                                    <option value="">Select Period</option>
+                                    {periods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700">
+                                    Subject {["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) ? <span className="text-red-500">*</span> : "(Optional)"}
+                                </label>
+                                <select
+                                    value={selectedSubject}
+                                    onChange={(e) => setSelectedSubject(e.target.value)}
+                                    className="mt-1 block w-full rounded-md border border-slate-300 p-2 text-sm"
+                                >
+                                    <option value="">Select Subject</option>
+                                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
 
-                {/* Load Button */}
-                <div className="flex flex-col items-center justify-center gap-2">
-                    <button
-                        onClick={handleFetchStudents}
-                        disabled={loading}
-                        className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 font-bold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg disabled:bg-slate-300"
-                    >
-                        {loading ? <LogoSpinner fullScreen={false} /> : <><FaSearch /> Load Student List</>}
-                    </button>
-                    {message && <span className={`text-sm font-medium ${message.includes("Success") ? "text-green-600" : "text-red-600"}`}>{message}</span>}
-                </div>
+                        {/* Load Button */}
+                        <div className="flex flex-col items-center justify-center gap-2">
+                            <button
+                                onClick={handleFetchStudents}
+                                disabled={loading}
+                                className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 font-bold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg disabled:bg-slate-300"
+                            >
+                                {loading ? <LogoSpinner fullScreen={false} /> : <><FaSearch /> Load Student List</>}
+                            </button>
+                            {message && <span className={`text-sm font-medium ${message.includes("Success") ? "text-green-600" : "text-red-600"}`}>{message}</span>}
+                        </div>
+                    </>
+                ) : (
+                    /* BULK UPLOAD UI */
+                    <div className="flex flex-col items-center justify-center gap-6 py-10 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl">
+                        <div className="text-center">
+                            <h3 className="text-lg font-semibold text-slate-800">Upload Attendance Sheet</h3>
+                            <p className="text-sm text-slate-500 mt-1">Select an Excel file (.xlsx) with the standard format.</p>
+                        </div>
+
+                        <input
+                            type="file"
+                            accept=".xlsx, .xls"
+                            onChange={handleFileChange}
+                            className="block w-full text-sm text-slate-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-full file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-blue-50 file:text-blue-700
+                            hover:file:bg-blue-100 max-w-xs"
+                        />
+
+                        {file && (
+                            <p className="text-sm font-medium text-green-600">Selected: {file.name}</p>
+                        )}
+
+                        <button
+                            onClick={handleBulkUpload}
+                            disabled={uploading || !file}
+                            className="flex items-center gap-2 rounded-lg bg-green-600 px-8 py-3 text-white font-bold shadow-lg hover:bg-green-700 disabled:bg-gray-400"
+                        >
+                            {uploading ? "Uploading..." : "Upload & Process"}
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {/* Attendance Form */}
-            {students.length > 0 && (
+            {/* Attendance List (Manual Mode Only) */}
+            {viewMode === "manual" && students.length > 0 && (
                 <div className="mt-8 animate-in fade-in slide-in-from-bottom-4">
 
                     <div className="mb-4 flex items-center justify-between">
