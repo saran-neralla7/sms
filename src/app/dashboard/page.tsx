@@ -23,79 +23,92 @@ export default function DashboardPage() {
   }
 
   const role = (session?.user?.role || "").toUpperCase();
+  // Admin Check
   const isAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
 
-  // If not admin, show restricted access message (This will be reinforced by middleware, 
-  // but handled here gracefully for client-side transitions)
-  if (!isAdmin) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-md text-center">
-          <h1 className="mb-2 text-2xl font-bold text-slate-900">Access Restricted</h1>
-          <p className="text-slate-500">This portal is currently available for Administrative access only.</p>
-        </div>
-      </div>
-    );
-  }
+  // Define modules based on role
+  let modules = [];
 
-  const modules = [
-    {
-      title: "Students",
-      icon: <FaUserGraduate className="h-6 w-6" />,
-      description: "Manage student profiles, enrollments, and attendance.",
-      href: "/admin/students",
-      color: "bg-blue-50 text-blue-600"
-    },
-    {
-      title: "Faculty",
-      icon: <FaChalkboardTeacher className="h-6 w-6" />,
-      description: "Manage faculty records, assignments, and workload.",
-      href: "/faculty",
-      color: "bg-indigo-50 text-indigo-600"
-    },
-    {
-      title: "Time Tables",
-      icon: <FaCalendarAlt className="h-6 w-6" />,
-      description: "Manage class schedules, periods, and academic calendar.",
-      href: "/timetables",
-      color: "bg-purple-50 text-purple-600"
-    },
-    {
-      title: "Subjects",
-      icon: <FaBook className="h-6 w-6" />,
-      description: "Manage course catalog, electives, and curriculum.",
-      href: "/admin/subjects",
-      color: "bg-pink-50 text-pink-600"
-    },
-    {
-      title: "Results",
-      icon: <FaPoll className="h-6 w-6" />,
-      description: "Process and view examination results and grades.",
-      href: "/admin/results",
-      color: "bg-orange-50 text-orange-600"
-    },
-    {
-      title: "Reports",
-      icon: <FaFileAlt className="h-6 w-6" />,
-      description: "Generate attendance, performance, and analytical reports.",
-      href: "/reports",
-      color: "bg-teal-50 text-teal-600"
-    },
-    {
-      title: "Administration",
-      icon: <FaCogs className="h-6 w-6" />,
-      description: "System configuration, user management, and settings.",
-      href: "/admin", // Points to the new Admin Dashboard
-      color: "bg-slate-50 text-slate-600"
-    },
-    {
-      title: "Fees",
-      icon: <FaRupeeSign className="h-6 w-6" />,
-      description: "Manage fee structure, payments, and dues.",
-      href: "/fees",
-      color: "bg-green-50 text-green-600"
-    }
-  ];
+  if (isAdmin) {
+    modules = [
+      {
+        title: "Students",
+        icon: <FaUserGraduate className="h-6 w-6" />,
+        description: "Manage student profiles, enrollments, and attendance.",
+        href: "/admin/students",
+        color: "bg-blue-50 text-blue-600"
+      },
+      // ... (rest of admin modules) should be copied or preserved? 
+      // Better to list them all here for clarity in replacement
+      {
+        title: "Faculty",
+        icon: <FaChalkboardTeacher className="h-6 w-6" />,
+        description: "Manage faculty records, assignments, and workload.",
+        href: "/faculty",
+        color: "bg-indigo-50 text-indigo-600"
+      },
+      {
+        title: "Time Tables",
+        icon: <FaCalendarAlt className="h-6 w-6" />,
+        description: "Manage class schedules, periods, and academic calendar.",
+        href: "/timetables",
+        color: "bg-purple-50 text-purple-600"
+      },
+      {
+        title: "Subjects",
+        icon: <FaBook className="h-6 w-6" />,
+        description: "Manage course catalog, electives, and curriculum.",
+        href: "/admin/subjects",
+        color: "bg-pink-50 text-pink-600"
+      },
+      {
+        title: "Results",
+        icon: <FaPoll className="h-6 w-6" />,
+        description: "Process and view examination results and grades.",
+        href: "/admin/results",
+        color: "bg-orange-50 text-orange-600"
+      },
+      {
+        title: "Reports",
+        icon: <FaFileAlt className="h-6 w-6" />,
+        description: "Generate attendance, performance, and analytical reports.",
+        href: "/reports",
+        color: "bg-teal-50 text-teal-600"
+      },
+      {
+        title: "Administration",
+        icon: <FaCogs className="h-6 w-6" />,
+        description: "System configuration, user management, and settings.",
+        href: "/admin", // Points to the new Admin Dashboard
+        color: "bg-slate-50 text-slate-600"
+      },
+      {
+        title: "Fees",
+        icon: <FaRupeeSign className="h-6 w-6" />,
+        description: "Manage fee structure, payments, and dues.",
+        href: "/fees",
+        color: "bg-green-50 text-green-600"
+      }
+    ];
+  } else {
+    // User / Faculty Modules
+    modules = [
+      {
+        title: "Mark Attendance",
+        icon: <FaUserGraduate className="h-6 w-6" />,
+        description: "Mark student attendance for your classes.",
+        href: "/attendance",
+        color: "bg-blue-50 text-blue-600"
+      },
+      {
+        title: "History & Downloads",
+        icon: <FaFileAlt className="h-6 w-6" />,
+        description: "View past records and download reports.",
+        href: "/attendance/history",
+        color: "bg-teal-50 text-teal-600"
+      }
+    ];
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
