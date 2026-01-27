@@ -38,7 +38,7 @@ export default function LoginPage() {
                 const targetRole = role?.toUpperCase();
 
                 if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(targetRole)) {
-                    router.push("/admin/students");
+                    router.push("/dashboard");
                 } else {
                     router.push("/dashboard"); // Faculty/User -> Attendance Page
                 }

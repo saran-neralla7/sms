@@ -11,9 +11,9 @@ export default function manifest(): MetadataRoute.Manifest {
         theme_color: '#0070f3',
         icons: [
             {
-                src: '/favicon.ico',
+                src: '/gvp-logo.jpg',
                 sizes: 'any',
-                type: 'image/x-icon',
+                type: 'image/jpeg',
             },
         ],
     };

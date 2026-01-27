@@ -4,13 +4,15 @@ import { useState, useEffect } from "react";
 import { Student } from "@/types";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
-import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup, FaSearch } from "react-icons/fa";
+import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup, FaSearch, FaUser } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { useSession } from "next-auth/react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import LogoSpinner from "@/components/LogoSpinner";
 import StudentHoverCard from "@/components/StudentHoverCard";
+import Link from "next/link";
+import Image from "next/image"; // Added Image import
 
 export default function StudentsPage() {
     const router = useRouter();
@@ -18,6 +20,9 @@ export default function StudentsPage() {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+    // Photo Preview State
+    const [photoStudent, setPhotoStudent] = useState<Student | null>(null);
 
     // Profile View State (Removed in favor of new Profile Page)
     // const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
@@ -53,13 +58,17 @@ export default function StudentsPage() {
     const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
 
     // Filters
-    const [year, setYear] = useState("");
-    const [semester, setSemester] = useState("");
-    const [section, setSection] = useState("");
-    const [filterDepartmentId, setFilterDepartmentId] = useState("");
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+
+    // Filters - Init from URL or Default
+    const [year, setYear] = useState(searchParams?.get("year") || "");
+    const [semester, setSemester] = useState(searchParams?.get("semester") || "");
+    const [section, setSection] = useState(searchParams?.get("section") || "");
+    const [filterDepartmentId, setFilterDepartmentId] = useState(searchParams?.get("dept") || "");
 
     // Search State
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState(searchParams?.get("q") || "");
     const { data: session } = useSession();
     // The original loading state for fetchStudents is now replaced by the new `loading` state,
     // but its initial value was `false`. The new `loading` state starts as `true`.
@@ -115,6 +124,25 @@ export default function StudentsPage() {
         } catch (e) { console.error(e); }
     };
 
+    const updateFilters = (key: string, value: string) => {
+        const params = new URLSearchParams(searchParams?.toString());
+        if (value) params.set(key, value);
+        else params.delete(key);
+
+        // Reset page or other dependent vars if needed? 
+        // For now just shallow push
+        router.push(`${pathname || "/"}?${params.toString()}`);
+    };
+
+    // Update state when URL params change (e.g. Back button)
+    useEffect(() => {
+        setYear(searchParams?.get("year") || "");
+        setSemester(searchParams?.get("semester") || "");
+        setSection(searchParams?.get("section") || "");
+        setFilterDepartmentId(searchParams?.get("dept") || "");
+        setSearchQuery(searchParams?.get("q") || "");
+    }, [searchParams]);
+
     const fetchStudents = async () => {
         setLoading(true);
         setStatus({ type: null, message: "" });
@@ -123,10 +151,6 @@ export default function StudentsPage() {
             if (year) query.set("year", year);
             if (semester) query.set("semester", semester);
             if (section) query.set("sectionId", section);
-            // Note: API might prefer sectionId but legacy uses name for filter? 
-            // Actually API lines 26 check sectionId. But line 15 param is 'section'.
-            // The existing code sends 'section' (A, B..). API logic at line 15 handles it potentially (though snippet was vague).
-            // We just add departmentId here.
             if (filterDepartmentId) query.set("departmentId", filterDepartmentId);
 
             const res = await fetch(`/api/students?${query.toString()}`);
@@ -256,11 +280,7 @@ export default function StudentsPage() {
     };
 
     const clearFilters = () => {
-        setYear("");
-        setSemester("");
-        setSection("");
-        setFilterDepartmentId("");
-        setSearchQuery("");
+        router.push(pathname || "/"); // Clear all params
     };
 
     const openAddModal = () => {
@@ -494,7 +514,8 @@ export default function StudentsPage() {
         });
 
         try {
-            const res = await fetch("/api/students/upload", {
+            // Use Pages API Route for large file support (bypassing App Router limits)
+            const res = await fetch("/api/upload-photos", {
                 method: "POST",
                 body: formData,
             });
@@ -509,7 +530,8 @@ export default function StudentsPage() {
                 });
                 fetchStudents();
             } else {
-                setUploadStatus({ loading: false, results: [{ status: "error", message: "Upload failed" }], successCount: 0, failCount: 1 });
+                const errData = await res.json();
+                setUploadStatus({ loading: false, results: [{ status: "error", message: errData.error || "Upload failed" }], successCount: 0, failCount: 1 });
             }
         } catch (error) {
             console.error(error);
@@ -698,7 +720,7 @@ export default function StudentsPage() {
                 {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) && (
                     <select
                         value={filterDepartmentId}
-                        onChange={(e) => setFilterDepartmentId(e.target.value)}
+                        onChange={(e) => updateFilters("dept", e.target.value)}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                     >
                         <option value="">All Departments</option>
@@ -708,19 +730,19 @@ export default function StudentsPage() {
                     </select>
                 )}
 
-                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
+                <select value={year} onChange={(e) => updateFilters("year", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
                     <option value="">All Years</option>
                     <option value="1">1st Year</option>
                     <option value="2">2nd Year</option>
                     <option value="3">3rd Year</option>
                     <option value="4">4th Year</option>
                 </select>
-                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
+                <select value={semester} onChange={(e) => updateFilters("semester", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
                     <option value="">All Semesters</option>
                     <option value="1">1st Sem</option>
                     <option value="2">2nd Sem</option>
                 </select>
-                <select value={section} onChange={(e) => setSection(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
+                <select value={section} onChange={(e) => updateFilters("section", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
                     <option value="">All Sections</option>
                     {sections.map((s: any) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
@@ -737,7 +759,7 @@ export default function StudentsPage() {
                         type="text"
                         placeholder="Search by Name or Roll Number..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => updateFilters("q", e.target.value)}
                         className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 shadow-sm transition-all"
                     />
                 </div>
@@ -762,6 +784,7 @@ export default function StudentsPage() {
                                         onChange={toggleSelectAll}
                                     />
                                 </th>
+                                <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Photo</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Roll No</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Name</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Class</th>
@@ -769,7 +792,7 @@ export default function StudentsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {loading ? <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr> :
+                            {loading ? <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr> :
                                 filteredStudents.map((student) => (
                                     <tr key={student.id} className="group hover:bg-slate-50/80 transition-colors">
                                         <td className="px-6 py-4">
@@ -780,13 +803,32 @@ export default function StudentsPage() {
                                                 onChange={() => toggleStudentSelection(student.id)}
                                             />
                                         </td>
+                                        <td className="px-6 py-4">
+                                            <div
+                                                className="relative h-10 w-10 overflow-hidden rounded-full border border-slate-200 bg-slate-100 cursor-pointer hover:opacity-80 transition-opacity"
+                                                onClick={() => student.photoUrl && setPhotoStudent(student)}
+                                            >
+                                                {student.photoUrl ? (
+                                                    <Image
+                                                        src={student.photoUrl}
+                                                        alt={student.name}
+                                                        fill
+                                                        className="object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="flex h-full w-full items-center justify-center text-slate-300">
+                                                        <FaUser size={16} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-mono text-blue-600">
-                                            <StudentHoverCard name={student.name} rollNumber={student.rollNumber} studentId={student.id}>
+                                            <StudentHoverCard name={student.name} rollNumber={student.rollNumber} studentId={student.id} disableHover={true}>
                                                 {student.rollNumber}
                                             </StudentHoverCard>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-blue-600">
-                                            <StudentHoverCard name={student.name} rollNumber={student.rollNumber} studentId={student.id}>
+                                            <StudentHoverCard name={student.name} rollNumber={student.rollNumber} studentId={student.id} disableHover={true}>
                                                 {student.name}
                                             </StudentHoverCard>
                                         </td>
@@ -1176,6 +1218,30 @@ export default function StudentsPage() {
                                 </>
                             )}
                         </button>
+                    </div>
+                </div>
+            </Modal>
+            {/* Photo Preview Modal */}
+            <Modal
+                isOpen={!!photoStudent}
+                onClose={() => setPhotoStudent(null)}
+                title={photoStudent?.name || "Student Photo"}
+                maxWidth="max-w-xl"
+            >
+                <div className="p-4">
+                    <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-slate-100">
+                        {photoStudent?.photoUrl ? (
+                            <Image
+                                src={photoStudent.photoUrl}
+                                alt={photoStudent.name}
+                                fill
+                                className="object-contain"
+                            />
+                        ) : (
+                            <div className="flex h-full w-full items-center justify-center text-slate-400">
+                                <FaUser size={64} />
+                            </div>
+                        )}
                     </div>
                 </div>
             </Modal>

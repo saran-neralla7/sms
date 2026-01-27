@@ -16,8 +16,8 @@ export default function LandingPage() {
         if (status === "authenticated") {
             // Redirect based on role if needed, or just to dashboard
             const role = (session?.user?.role || "").toUpperCase();
-            if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(role)) {
-                router.push("/admin/students");
+            if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD", "FACULTY", "USER"].includes(role)) {
+                router.push("/dashboard");
             } else {
                 router.push("/dashboard");
             }

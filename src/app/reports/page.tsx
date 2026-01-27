@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { FaCalendarAlt, FaFileExcel, FaFilter, FaTrash, FaEdit, FaUserCircle, FaSave, FaTimes, FaEye, FaDownload, FaFilePdf } from "react-icons/fa";
+import { FaCalendarAlt, FaFileExcel, FaFilter, FaTrash, FaEdit, FaUserCircle, FaSave, FaTimes, FaEye, FaDownload, FaFilePdf, FaSortAmountDown, FaSortAmountUp } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import { motion } from "framer-motion";
@@ -31,6 +31,9 @@ export default function ReportsPage() {
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [consolidatedData, setConsolidatedData] = useState<any[]>([]);
+
+    // Sorting State
+    const [sortConfig, setSortConfig] = useState<{ key: "percentage" | "rollNumber" | "totalClasses" | null, direction: "asc" | "desc" }>({ key: null, direction: "asc" });
 
     // Metadata for dropdowns
     const [departments, setDepartments] = useState<any[]>([]);
@@ -226,10 +229,42 @@ export default function ReportsPage() {
         }
     };
 
-    const handleDownloadConsolidated = () => {
-        if (consolidatedData.length === 0) return;
+    const sortedConsolidatedData = useMemo(() => {
+        if (!sortConfig.key) return consolidatedData;
 
-        const ws = XLSX.utils.json_to_sheet(consolidatedData.map(s => ({
+        return [...consolidatedData].sort((a, b) => {
+            let valA = a[sortConfig.key!];
+            let valB = b[sortConfig.key!];
+
+            if (sortConfig.key === "percentage") {
+                valA = parseFloat(String(a.percentage || 0));
+                valB = parseFloat(String(b.percentage || 0));
+            } else if (sortConfig.key === "rollNumber") {
+                // String comparison for roll numbers
+                return sortConfig.direction === "asc"
+                    ? String(valA).localeCompare(String(valB))
+                    : String(valB).localeCompare(String(valA));
+            }
+
+            if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+            return 0;
+        });
+    }, [consolidatedData, sortConfig]);
+
+    const handleSort = (key: string) => {
+        setSortConfig(current => {
+            if (current.key === key) {
+                return { key: key as any, direction: current.direction === "asc" ? "desc" : "asc" };
+            }
+            return { key: key as any, direction: "asc" };
+        });
+    };
+
+    const handleDownloadConsolidated = () => {
+        if (sortedConsolidatedData.length === 0) return;
+
+        const ws = XLSX.utils.json_to_sheet(sortedConsolidatedData.map(s => ({
             "Roll Number": s.rollNumber,
             "Name": s.name,
             "Total Classes": s.totalClasses,
@@ -375,7 +410,7 @@ export default function ReportsPage() {
                     const tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
                     const tableRows: any[] = [];
 
-                    consolidatedData.forEach(student => {
+                    sortedConsolidatedData.forEach(student => {
                         const rowData = [
                             student.rollNumber,
                             student.name,
@@ -765,8 +800,8 @@ export default function ReportsPage() {
                     <p className="mb-4 text-sm text-slate-500">View attendance percentage for the entire class across all subjects.</p>
 
                     {/* Filters & Actions */}
-                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-end">
-                        <div className="grid grid-cols-2 gap-4 flex-grow md:grid-cols-4">
+                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:flex-row xl:items-end">
+                        <div className="grid grid-cols-1 gap-4 flex-grow sm:grid-cols-2 lg:grid-cols-4">
                             {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500">Department</label>
@@ -798,143 +833,148 @@ export default function ReportsPage() {
                                     <option value="2">2nd Sem</option>
                                 </select>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">Section</label>
-                                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                    <option value="">Select Section</option>
-                                    {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
                         </div>
 
+
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-500">Section</label>
+                            <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                <option value="">Select Section</option>
+                                {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-500">Start Date</label>
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-500">End Date</label>
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col justify-end gap-2">
                         <div className="flex gap-2">
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">Start Date</label>
-                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">End Date</label>
-                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col justify-end gap-2">
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={clearFilters}
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
-                                >
-                                    Clear
-                                </button>
-                                <button
-                                    onClick={fetchConsolidated}
-                                    disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                                    className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Generate
-                                </button>
-                            </div>
+                            <button
+                                onClick={clearFilters}
+                                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
+                            >
+                                Clear
+                            </button>
+                            <button
+                                onClick={fetchConsolidated}
+                                disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Generate
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
 
             {/* Subject Reports Section */}
-            {activeTab === "subject" && (
-                <div className="mb-8">
-                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Subject-wise Reports</h2>
-                    <p className="mb-4 text-sm text-slate-500">View attendance for specific subjects or generate an overall summary matrix.</p>
+            {
+                activeTab === "subject" && (
+                    <div className="mb-8">
+                        <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Subject-wise Reports</h2>
+                        <p className="mb-4 text-sm text-slate-500">View attendance for specific subjects or generate an overall summary matrix.</p>
 
-                    {/* Filters & Actions */}
-                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                            {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                        {/* Filters & Actions */}
+                        <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-slate-500">Department</label>
+                                        <select
+                                            value={departmentId}
+                                            onChange={(e) => setDepartmentId(e.target.value)}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value="">Select Dept</option>
+                                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500">Department</label>
-                                    <select
-                                        value={departmentId}
-                                        onChange={(e) => setDepartmentId(e.target.value)}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                                    >
-                                        <option value="">Select Dept</option>
-                                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                    <label className="text-xs font-semibold text-slate-500">Year</label>
+                                    <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">Select Year</option>
+                                        <option value="1">1st Year</option>
+                                        <option value="2">2nd Year</option>
+                                        <option value="3">3rd Year</option>
+                                        <option value="4">4th Year</option>
                                     </select>
                                 </div>
-                            )}
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">Year</label>
-                                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                    <option value="">Select Year</option>
-                                    <option value="1">1st Year</option>
-                                    <option value="2">2nd Year</option>
-                                    <option value="3">3rd Year</option>
-                                    <option value="4">4th Year</option>
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">Semester</label>
-                                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                    <option value="">Select Sem</option>
-                                    <option value="1">1st Sem</option>
-                                    <option value="2">2nd Sem</option>
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">Section</label>
-                                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                    <option value="">Select Section</option>
-                                    {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-2 gap-4 md:mt-0 md:w-full md:grid-cols-4">
-                            <div className="space-y-1 col-span-2 md:col-span-1">
-                                <label className="text-xs font-semibold text-slate-500">Subject</label>
-                                <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                    <option value="">All Subjects</option>
-                                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">Start Date</label>
-                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500">End Date</label>
-                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
-                            </div>
-                            <div className="flex flex-col justify-end gap-2">
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={clearFilters}
-                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
-                                    >
-                                        Clear
-                                    </button>
-                                    <button
-                                        onClick={fetchConsolidated}
-                                        disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                                        className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Generate
-                                    </button>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Semester</label>
+                                    <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">Select Sem</option>
+                                        <option value="1">1st Sem</option>
+                                        <option value="2">2nd Sem</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Section</label>
+                                    <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">Select Section</option>
+                                        {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="mt-4 flex w-full justify-end border-t border-slate-100 pt-4">
-                            <button
-                                onClick={handleDownloadOverall}
-                                disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                                className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
-                            >
-                                <FaFileExcel /> Download Overall Subject Summary (Excel)
-                            </button>
+                            <div className="mt-4 grid grid-cols-2 gap-4 md:mt-0 md:w-full md:grid-cols-4">
+                                <div className="space-y-1 col-span-2 md:col-span-1">
+                                    <label className="text-xs font-semibold text-slate-500">Subject</label>
+                                    <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="">All Subjects</option>
+                                        {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">Start Date</label>
+                                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500">End Date</label>
+                                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
+                                </div>
+                                <div className="flex flex-col justify-end gap-2">
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={clearFilters}
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
+                                        >
+                                            Clear
+                                        </button>
+                                        <button
+                                            onClick={fetchConsolidated}
+                                            disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                            className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Generate
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 flex w-full justify-end border-t border-slate-100 pt-4">
+                                <button
+                                    onClick={handleDownloadOverall}
+                                    disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                    className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                >
+                                    <FaFileExcel /> Download Overall Subject Summary (Excel)
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Weekly Timetable View */}
             {
@@ -1144,22 +1184,52 @@ export default function ReportsPage() {
                                         <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
                                             <FaFilePdf className="text-red-600" /> PDF
                                         </button>
+                                        {sortConfig.key && (
+                                            <button
+                                                onClick={() => setSortConfig({ key: null, direction: "asc" })}
+                                                className="ml-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                                                title="Reset Sort"
+                                            >
+                                                <FaTimes /> Reset
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
                                         <thead className="bg-slate-50">
                                             <tr>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Roll No</th>
+                                                <th onClick={() => handleSort("rollNumber")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                    <div className="flex items-center gap-1">
+                                                        Roll No
+                                                        {sortConfig.key === "rollNumber" && (
+                                                            sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                        )}
+                                                    </div>
+                                                </th>
                                                 <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Name</th>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Total Classes</th>
+                                                <th onClick={() => handleSort("totalClasses")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        Total Classes
+                                                        {sortConfig.key === "totalClasses" && (
+                                                            sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                        )}
+                                                    </div>
+                                                </th>
                                                 <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
                                                 <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">%</th>
+                                                <th onClick={() => handleSort("percentage")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        %
+                                                        {sortConfig.key === "percentage" && (
+                                                            sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                        )}
+                                                    </div>
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {consolidatedData.map((s) => (
+                                            {sortedConsolidatedData.map((s) => (
                                                 <tr key={s.rollNumber} className="hover:bg-slate-50">
                                                     <td className="px-6 py-3 text-sm font-mono text-slate-600">
                                                         <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
@@ -1312,6 +1382,6 @@ export default function ReportsPage() {
                     </Modal>
                 )
             }
-        </div>
+        </div >
     );
 }

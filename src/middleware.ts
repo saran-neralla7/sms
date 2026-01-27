@@ -7,31 +7,27 @@ export default withAuth(
         const path = req.nextUrl.pathname;
         const role = token?.role;
 
-        // 1. Student Management -> Allow All Authenticated Users
-        // (Access control is handled within the page for Read-Only vs Edit)
-        if (path.startsWith("/admin/students")) {
+        // Global Restriction: Only ADMIN, DIRECTOR, PRINCIPAL can access dashboard and admin routes
+        const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL"];
+        const isGlobalAdmin = allowedRoles.includes(role as string);
+
+        // Allow access to public/student photos
+        if (path.startsWith("/student-photos")) {
             return;
         }
 
-        // 2. Promotion -> Admin Only
-        if (path.startsWith("/admin/promote")) {
-            if (role !== "ADMIN" && role !== "DIRECTOR" && role !== "PRINCIPAL") {
-                const url = req.nextUrl.clone();
-                url.pathname = "/";
-                return NextResponse.redirect(url);
-            }
-            return;
-        }
+        // Redirect non-admins trying to access protected routes
+        // Protected routes: /dashboard, /admin, /reports, /faculty, /fees, /timetables
+        const protectedPrefixes = ["/dashboard", "/admin", "/reports", "/faculty", "/fees", "/timetables"];
 
-        // 3. General Admin -> Global Admins (Users, Departments, Sections, Alumni)
-        if (path.startsWith("/admin")) {
-            const globalAdmins = ["ADMIN", "DIRECTOR", "PRINCIPAL"];
-            if (!globalAdmins.includes(role as string)) {
+        if (protectedPrefixes.some(prefix => path.startsWith(prefix))) {
+            if (!isGlobalAdmin) {
+                // Determine redirect based on role (e.g., Student -> Student Profile, Faculty -> Faculty Dashboard in future)
+                // For now, redirect to home or show error
                 const url = req.nextUrl.clone();
-                url.pathname = "/";
+                url.pathname = "/"; // Or a specific "Access Denied" page
                 return NextResponse.redirect(url);
             }
-            return;
         }
     },
     {
@@ -47,6 +43,6 @@ export default withAuth(
 
 export const config = {
     matcher: [
-        "/((?!login|api/auth|_next/static|_next/image|favicon.ico|manifest.json).*)",
+        "/((?!login|api/auth|api/upload-photos|_next/static|_next/image|favicon.ico|manifest.json|student-photos).*)",
     ],
 };

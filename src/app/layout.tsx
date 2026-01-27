@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   description: "Manage student attendance and records",
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.png",
-    shortcut: "/favicon.png",
-    apple: "/apple-icon.png",
+    icon: "/gvp-logo.jpg",
+    shortcut: "/gvp-logo.jpg",
+    apple: "/gvp-logo.jpg",
   },
 };
 
@@ -40,7 +40,7 @@ export default function RootLayout({
             />
           </div>
 
-          <div className="relative z-10 flex flex-col flex-grow">
+          <div className="relative z-10 flex flex-col flex-grow pt-16">
             <Navbar />
             <main className="container mx-auto flex-grow py-8 px-4">{children}</main>
 

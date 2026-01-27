@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { FaArrowLeft, FaAward, FaCalendarAlt, FaEnvelope, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaEdit } from "react-icons/fa";
 import Image from "next/image";
 import EditStudentModal from "@/components/EditStudentModal";
+import Modal from "@/components/Modal";
 
 export default function StudentProfilePage() {
     const params = useParams();
@@ -21,19 +22,20 @@ export default function StudentProfilePage() {
     const [resultsLoading, setResultsLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ start: "", end: "" });
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
     useEffect(() => {
-        const tab = searchParams.get("tab");
+        const tab = searchParams?.get("tab");
         if (tab === "attendance" || tab === "results" || tab === "overview") {
             setActiveTab(tab);
         }
     }, [searchParams]);
 
     useEffect(() => {
-        if (params.id) {
+        if (params?.id) {
             fetchStudent();
         }
-    }, [params.id]);
+    }, [params?.id]);
 
     useEffect(() => {
         if (activeTab === "attendance" && student && !stats) {
@@ -45,7 +47,7 @@ export default function StudentProfilePage() {
 
     const fetchStudent = async () => {
         try {
-            const res = await fetch(`/api/students/${params.id}`);
+            const res = await fetch(`/api/students/${params?.id}`);
             if (res.ok) {
                 const data = await res.json();
                 setStudent(data);
@@ -66,7 +68,7 @@ export default function StudentProfilePage() {
             if (dateRange.start) query.append("startDate", dateRange.start);
             if (dateRange.end) query.append("endDate", dateRange.end);
 
-            const res = await fetch(`/api/students/${params.id}/stats?${query.toString()}`);
+            const res = await fetch(`/api/students/${params?.id}/stats?${query.toString()}`);
             if (res.ok) {
                 const data = await res.json();
                 setStats(data);
@@ -81,7 +83,7 @@ export default function StudentProfilePage() {
     const fetchResults = async () => {
         setResultsLoading(true);
         try {
-            const res = await fetch(`/api/results?studentId=${params.id}`);
+            const res = await fetch(`/api/results?studentId=${params?.id}`);
             if (res.ok) {
                 const data = await res.json();
                 setResults(data);
@@ -114,7 +116,10 @@ export default function StudentProfilePage() {
                 <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div className="flex flex-col gap-6 sm:flex-row">
                         <div className="shrink-0 text-center sm:text-left">
-                            <div className="relative mx-auto h-32 w-32 overflow-hidden rounded-full border-4 border-slate-50 shadow-md sm:mx-0 sm:h-40 sm:w-40">
+                            <div
+                                className="relative mx-auto h-32 w-32 overflow-hidden rounded-full border-4 border-slate-50 shadow-md sm:mx-0 sm:h-40 sm:w-40 cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => student.photoUrl && setIsPhotoModalOpen(true)}
+                            >
                                 {student.photoUrl ? (
                                     <Image
                                         src={student.photoUrl}
@@ -484,6 +489,25 @@ export default function StudentProfilePage() {
                     setIsEditModalOpen(false);
                 }}
             />
+
+            {/* Photo Modal */}
+            <Modal
+                isOpen={isPhotoModalOpen}
+                onClose={() => setIsPhotoModalOpen(false)}
+                title="Student Photo"
+                maxWidth="max-w-xl"
+            >
+                <div className="relative aspect-square w-full overflow-hidden rounded-lg">
+                    {student.photoUrl && (
+                        <Image
+                            src={student.photoUrl}
+                            alt={student.name}
+                            fill
+                            className="object-contain"
+                        />
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 }
