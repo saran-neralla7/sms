@@ -19,11 +19,13 @@ export async function POST(request: Request) {
             departmentId,
             subjectId,
             periodId,
+            periodIds, // Added support for multiple periods
             students // Array of { rollNumber, name, mobile, status, ... }
         } = body;
 
-        // Validation
-        if (!date || !year || !semester || !sectionId || !departmentId || !periodId || !students) {
+        // Validation - Date, Year, Sem, Section, Dept, Students are mandatory.
+        // Needs EITHER periodId OR periodIds
+        if (!date || !year || !semester || !sectionId || !departmentId || (!periodId && (!periodIds || periodIds.length === 0)) || !students) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
@@ -37,6 +39,11 @@ export async function POST(request: Request) {
             }
         }
 
+        // Normalize periods to array
+        const finalPeriodIds: string[] = periodIds && periodIds.length > 0
+            ? periodIds
+            : [periodId];
+
         // Format Details JSON
         const details = JSON.stringify(students.map((s: any) => ({
             "Roll Number": s.rollNumber,
@@ -46,28 +53,32 @@ export async function POST(request: Request) {
         })));
 
         // Determine Overall Status
-        const status = "Marked Present"; // or calculate based on absentees? Usually just a label. 
-        // Let's use "Marked" or stick to what history page shows. 
+        const status = "Marked Present"; // or calculate based on absentees? Usually just a label.
+        // Let's use "Marked" or stick to what history page shows.
         // History page checks for "Marked Absent" color.
 
-        // Save to Database
-        const record = await prisma.attendanceHistory.create({
-            data: {
-                date: new Date(date), // Should include time? Or just date? API usually sends date string.
-                year,
-                semester,
-                sectionId,
-                departmentId,
-                periodId,
-                subjectId: subjectId || null,
-                status: "Completed",
-                fileName: "Manual Entry",
-                downloadedBy: (session.user as any).id,
-                details
-            }
-        });
+        // Save to Database (Transaction to ensure all or nothing)
+        const records = await prisma.$transaction(
+            finalPeriodIds.map(pid =>
+                prisma.attendanceHistory.create({
+                    data: {
+                        date: new Date(date),
+                        year,
+                        semester,
+                        sectionId,
+                        departmentId,
+                        periodId: pid,
+                        subjectId: subjectId || null,
+                        status: "Completed",
+                        fileName: "Manual Entry",
+                        downloadedBy: (session.user as any).id,
+                        details
+                    }
+                })
+            )
+        );
 
-        return NextResponse.json({ success: true, id: record.id });
+        return NextResponse.json({ success: true, count: records.length });
 
     } catch (error) {
         console.error("Attendance Submission Error:", error);
