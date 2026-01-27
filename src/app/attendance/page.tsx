@@ -124,18 +124,24 @@ export default function AttendancePage() {
     };
 
     const handleFetchStudents = async () => {
-        // Validation
-        if (!selectedDept || !year || !semester || !selectedSection || selectedPeriods.length === 0 || !date) {
-            setMessage("Please fill all required fields (Year, Sem, Section, Date, and at least one Period).");
-            return;
-        }
-
         const role = (session?.user?.role || "").toUpperCase();
         const isAcademic = ["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes(role);
 
-        if (isAcademic && !selectedSubject) {
-            setMessage("Subject is required for Academic Attendance.");
-            return;
+        if (isAcademic) {
+            if (!selectedDept || !year || !semester || !selectedSection || selectedPeriods.length === 0 || !date) {
+                setMessage("Please fill all required fields (Year, Sem, Section, Date, and at least one Period).");
+                return;
+            }
+            if (!selectedSubject) {
+                setMessage("Subject is required for Academic Attendance.");
+                return;
+            }
+        } else {
+            // USER Role (SMS) - Only basic fields required
+            if (!selectedDept || !year || !semester || !selectedSection || !date) {
+                setMessage("Please fill all required fields.");
+                return;
+            }
         }
 
         setLoading(true);
@@ -462,34 +468,39 @@ export default function AttendancePage() {
                                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm" />
                             </div>
 
-                            <div>
-                                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Subject</label>
-                                <select
-                                    value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}
-                                    className="block w-full rounded-md border border-slate-300 p-2 text-sm"
-                                >
-                                    <option value="">Select Subject {["USER"].includes((session?.user?.role || "").toUpperCase()) ? "(Optional)" : ""}</option>
-                                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Periods (Select Multiple)</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {periods.map(p => (
-                                        <button
-                                            key={p.id}
-                                            onClick={() => handlePeriodToggle(p.id)}
-                                            className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${selectedPeriods.includes(p.id)
-                                                ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                                                : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
-                                                }`}
+                            {/* Subject & Period - Only for Academic Roles or if user wants to see them? User said "do not need". */}
+                            {!["USER"].includes((session?.user?.role || "").toUpperCase()) && (
+                                <>
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Subject</label>
+                                        <select
+                                            value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}
+                                            className="block w-full rounded-md border border-slate-300 p-2 text-sm"
                                         >
-                                            {p.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                                            <option value="">Select Subject</option>
+                                            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Periods (Select Multiple)</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {periods.map(p => (
+                                                <button
+                                                    key={p.id}
+                                                    onClick={() => handlePeriodToggle(p.id)}
+                                                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${selectedPeriods.includes(p.id)
+                                                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                                                        : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
+                                                        }`}
+                                                >
+                                                    {p.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="flex flex-col items-center justify-center gap-2">

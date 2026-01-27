@@ -24,8 +24,7 @@ export async function POST(request: Request) {
         } = body;
 
         // Validation - Date, Year, Sem, Section, Dept, Students are mandatory.
-        // Needs EITHER periodId OR periodIds
-        if (!date || !year || !semester || !sectionId || !departmentId || (!periodId && (!periodIds || periodIds.length === 0)) || !students) {
+        if (!date || !year || !semester || !sectionId || !departmentId || !students) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
@@ -40,9 +39,10 @@ export async function POST(request: Request) {
         }
 
         // Normalize periods to array
-        const finalPeriodIds: string[] = periodIds && periodIds.length > 0
+        // If NO periods provided, we create one record with null period (General Attendance)
+        const finalPeriodIds: (string | null)[] = (periodIds && periodIds.length > 0)
             ? periodIds
-            : [periodId];
+            : (periodId ? [periodId] : [null]);
 
         // Format Details JSON
         const details = JSON.stringify(students.map((s: any) => ({
@@ -51,11 +51,6 @@ export async function POST(request: Request) {
             "Status": s.status, // "Present" or "Absent"
             "Mobile": s.mobile
         })));
-
-        // Determine Overall Status
-        const status = "Marked Present"; // or calculate based on absentees? Usually just a label.
-        // Let's use "Marked" or stick to what history page shows.
-        // History page checks for "Marked Absent" color.
 
         // Save to Database (Transaction to ensure all or nothing)
         const records = await prisma.$transaction(
@@ -67,7 +62,7 @@ export async function POST(request: Request) {
                         semester,
                         sectionId,
                         departmentId,
-                        periodId: pid,
+                        periodId: pid, // Can be null now
                         subjectId: subjectId || null,
                         status: "Completed",
                         fileName: "Manual Entry",
