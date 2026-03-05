@@ -11,7 +11,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { studentIds, targetYear, targetSemester, isAlumni } = body;
+        const { studentIds, targetYear, targetSemester, targetBatchId, isAlumni } = body;
 
         if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
             return NextResponse.json({ error: "No students selected" }, { status: 400 });
@@ -44,13 +44,20 @@ export async function POST(request: Request) {
                 });
             });
         } else {
-            // Standard Promotion
+            // Standard Promotion / Transfer
+            const updateData: any = {
+                year: String(targetYear),
+                semester: String(targetSemester),
+            };
+
+            // Only update batch if explicitly provided (allows transferring batches)
+            if (targetBatchId) {
+                updateData.batchId = targetBatchId;
+            }
+
             await prisma.student.updateMany({
                 where: { id: { in: studentIds } },
-                data: {
-                    year: String(targetYear),
-                    semester: String(targetSemester),
-                },
+                data: updateData,
             });
         }
 

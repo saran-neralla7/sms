@@ -22,8 +22,12 @@ export default function SubjectsPage() {
     const [filterYear, setFilterYear] = useState("");
     const [filterSem, setFilterSem] = useState("");
 
+    const [error, setError] = useState("");
+    const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
+
     // Form State
     const [name, setName] = useState("");
+    const [shortName, setShortName] = useState("");
     const [code, setCode] = useState("");
     const [year, setYear] = useState("1");
     const [semester, setSemester] = useState("1");
@@ -82,23 +86,29 @@ export default function SubjectsPage() {
         }
     };
 
+    const showError = (msg: string) => {
+        setError(msg);
+        setIsErrorModalOpen(true);
+    };
+
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             const res = await fetch("/api/subjects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, code, year, semester, type, departmentId, regulation, electiveSlot })
+                body: JSON.stringify({ name, shortName, code, year, semester, type, departmentId, regulation, electiveSlot })
             });
             if (res.ok) {
                 fetchSubjects();
                 setIsAddModalOpen(false);
                 resetForm();
             } else {
-                alert("Failed to create subject");
+                const data = await res.json();
+                showError(data.error || "Failed to create subject");
             }
-        } catch (error) {
-            alert("Error creating subject");
+        } catch (error: any) {
+            showError(error.message || "Error creating subject");
         }
     };
 
@@ -109,7 +119,7 @@ export default function SubjectsPage() {
             const res = await fetch(`/api/subjects/${selectedSubject.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, code, year, semester, type, departmentId, regulation, electiveSlot })
+                body: JSON.stringify({ name, shortName, code, year, semester, type, departmentId, regulation, electiveSlot })
             });
             if (res.ok) {
                 fetchSubjects();
@@ -117,10 +127,10 @@ export default function SubjectsPage() {
                 resetForm();
             } else {
                 const data = await res.json();
-                alert(data.error || "Failed to update subject");
+                showError(data.error || "Failed to update subject");
             }
         } catch (error: any) {
-            alert(error.message || "Error updating subject");
+            showError(error.message || "Error updating subject");
         }
     };
 
@@ -133,16 +143,63 @@ export default function SubjectsPage() {
                 setIsDeleteModalOpen(false);
                 setSelectedSubject(null);
             } else {
-                alert("Failed to delete subject");
+                const data = await res.json();
+                showError(data.error || "Failed to delete subject");
             }
-        } catch (error) {
-            alert("Error deleting subject");
+        } catch (error: any) {
+            showError(error.message || "Error deleting subject");
         }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.[0]) return;
+
+        const file = e.target.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        setLoading(true);
+        try {
+            const res = await fetch("/api/subjects/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                if (data.report.errors.length > 0) {
+                    // Show success with partial errors
+                    showError(`Upload processed with warnings:\nSuccess: ${data.report.success}\nErrors:\n${data.report.errors.join("\n").substring(0, 500)}...`);
+                } else {
+                    alert(`Upload Successful!\n${data.message}`);
+                }
+                fetchSubjects();
+            } else {
+                showError(data.error || "Upload failed");
+            }
+        } catch (error: any) {
+            console.error(error);
+            showError(error.message || "Upload failed");
+        } finally {
+            setLoading(false);
+            // Reset input
+            e.target.value = "";
+        }
+    };
+
+    const handleExport = () => {
+        const params = new URLSearchParams();
+        if (filterDept) params.append("departmentId", filterDept);
+        if (filterYear) params.append("year", filterYear);
+        if (filterSem) params.append("semester", filterSem);
+        window.open(`/api/subjects/export?${params.toString()}`);
     };
 
     const openEditModal = (subject: any) => {
         setSelectedSubject(subject);
         setName(subject.name);
+        setShortName(subject.shortName || "");
         setCode(subject.code);
         setYear(subject.year);
         setSemester(subject.semester);
@@ -155,6 +212,7 @@ export default function SubjectsPage() {
 
     const resetForm = () => {
         setName("");
+        setShortName("");
         setCode("");
         setYear("1");
         setSemester("1");
@@ -172,12 +230,30 @@ export default function SubjectsPage() {
                     <h1 className="text-2xl font-bold text-slate-800">Manage Subjects</h1>
                     <p className="text-slate-500">Add and manage curriculum subjects</p>
                 </div>
-                <button
-                    onClick={() => { resetForm(); setIsAddModalOpen(true); }}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg"
-                >
-                    <FaPlus /> Add Subject
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => window.open("/api/subjects/template")}
+                        className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        Template
+                    </button>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        Import
+                        <input type="file" className="hidden" accept=".xlsx" onChange={handleFileUpload} />
+                    </label>
+                    <button
+                        onClick={handleExport}
+                        className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        Export
+                    </button>
+                    <button
+                        onClick={() => { resetForm(); setIsAddModalOpen(true); }}
+                        className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg"
+                    >
+                        <FaPlus /> Add Subject
+                    </button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -200,53 +276,80 @@ export default function SubjectsPage() {
             </div>
 
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Code</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Name</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Type</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Class</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Reg</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {loading ? (
-                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
-                        ) : subjects.length === 0 ? (
-                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No subjects found.</td></tr>
-                        ) : (
-                            subjects.map((subject) => (
-                                <tr key={subject.id} className="hover:bg-slate-50/50">
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">{subject.code}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">{subject.name}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">
-                                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${subject.type === "LAB" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"}`}>
-                                            {subject.type}
-                                            {subject.electiveSlotRelation?.name && <span className="ml-1 text-xs opacity-75">({subject.electiveSlotRelation.name})</span>}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{subject.year}-{subject.semester}</td>
-                                    <td className="p-4">{subject.type}</td>
-                                    <td className="p-4">{subject.electiveSlotRelation?.name || "-"}</td>
-                                    <td className="p-4">{subject.regulation?.name || "-"}</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button onClick={() => openEditModal(subject)} className="rounded p-2 text-blue-600 hover:bg-blue-50 transition-colors">
-                                                <FaEdit />
-                                            </button>
-                                            <button onClick={() => { setSelectedSubject(subject); setIsDeleteModalOpen(true); }} className="rounded p-2 text-red-600 hover:bg-red-50 transition-colors">
-                                                <FaTrash />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Code</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Short Name</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Name</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Type</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Class</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Reg</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {loading ? (
+                                <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
+                            ) : subjects.length === 0 ? (
+                                <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500">No subjects found.</td></tr>
+                            ) : (
+                                subjects.map((subject) => (
+                                    <tr key={subject.id} className="hover:bg-slate-50/50">
+                                        <td className="px-6 py-4 text-sm font-medium text-slate-900">{subject.code}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-700">{subject.shortName || "-"}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-slate-900">{subject.name}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-500">
+                                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${subject.type === "LAB" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"}`}>
+                                                {subject.type}
+                                                {subject.electiveSlotRelation?.name && <span className="ml-1 text-xs opacity-75">({subject.electiveSlotRelation.name})</span>}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-500">{subject.year}-{subject.semester}</td>
+                                        <td className="p-4">{subject.type}</td>
+                                        <td className="p-4">{subject.electiveSlotRelation?.name || "-"}</td>
+                                        <td className="p-4">{subject.regulation?.name || "-"}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => openEditModal(subject)} className="rounded p-2 text-blue-600 hover:bg-blue-50 transition-colors">
+                                                    <FaEdit />
+                                                </button>
+                                                <button onClick={() => { setSelectedSubject(subject); setIsDeleteModalOpen(true); }} className="rounded p-2 text-red-600 hover:bg-red-50 transition-colors">
+                                                    <FaTrash />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
+
+            {/* Error Modal */}
+            {isErrorModalOpen && (
+                <Modal isOpen={true} onClose={() => setIsErrorModalOpen(false)} title="Error">
+                    <div className="p-2">
+                        <div className="mb-4 flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800">
+                            <div className="text-3xl">⚠️</div>
+                            <div>
+                                <h3 className="font-bold">Something went wrong</h3>
+                                <p className="text-sm">Please check the details below.</p>
+                            </div>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto rounded bg-slate-100 p-4 text-sm font-mono text-slate-700">
+                            {error}
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                            <button onClick={() => setIsErrorModalOpen(false)} className="rounded-lg bg-slate-800 px-4 py-2 text-white hover:bg-slate-900">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
 
             {/* Add/Edit Modal Content */}
             {(isAddModalOpen || isEditModalOpen) && (
@@ -262,6 +365,16 @@ export default function SubjectsPage() {
                                     onChange={(e) => setCode(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                     required
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-sm font-semibold text-slate-700">Short Name (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. PPS"
+                                    value={shortName}
+                                    onChange={(e) => setShortName(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                 />
                             </div>
                             <div>

@@ -80,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 fs.renameSync(file.filepath, targetPath);
 
                 // Update DB
-                const photoUrl = `/student-photos/${cleanFileName}`;
+                const photoUrl = `/api/student-photos/${cleanFileName}`;
                 await prisma.student.update({
                     where: { id: student.id },
                     data: { photoUrl }

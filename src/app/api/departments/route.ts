@@ -3,9 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        const { searchParams } = new URL(request.url);
+        const showAll = searchParams.get("all") === "true";
+
+        const where: any = {};
+        if (!showAll) {
+            where.isAcademic = true;
+        }
+
         const departments = await prisma.department.findMany({
+            where,
             include: { sections: true },
             orderBy: { name: 'asc' }
         });
@@ -29,6 +38,7 @@ export async function POST(request: Request) {
             data: {
                 name: body.name,
                 code: body.code,
+                isAcademic: body.isAcademic !== undefined ? body.isAcademic : true,
                 sections: {
                     connect: sectionConnect
                 }

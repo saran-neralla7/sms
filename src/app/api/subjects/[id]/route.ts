@@ -12,7 +12,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 
     try {
         const body = await request.json();
-        const { name, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
+        const { name, shortName, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
 
         const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
@@ -44,6 +44,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
             where: { id: params.id },
             data: {
                 name,
+                shortName: shortName || null,
                 code,
                 year,
                 semester,
@@ -74,6 +75,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
         });
         return NextResponse.json({ success: true });
     } catch (error) {
+        console.error("Error deleting subject:", error);
         return NextResponse.json({ error: "Failed to delete subject" }, { status: 500 });
     }
 }

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
                 await writeFile(filePath, buffer);
 
                 // Update DB
-                const photoUrl = `/student-photos/${cleanFileName}`;
+                const photoUrl = `/api/student-photos/${cleanFileName}`;
                 const data: any = { photoUrl };
                 await prisma.student.update({
                     where: { id: student.id },

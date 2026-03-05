@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,7 +12,10 @@ import {
     FaUserGraduate,
     FaBook,
     FaCalendarCheck,
-    FaArrowLeft
+    FaArrowLeft,
+    FaCalendarAlt,
+    FaGraduationCap,
+    FaKey
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -21,11 +25,63 @@ export default function AdminDashboardPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
 
+    const [backupStatus, setBackupStatus] = useState<any>(null);
+    const [dismissBanner, setDismissBanner] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        if (status === "authenticated" && session?.user && ["ADMIN", "DIRECTOR"].includes((session.user as any).role)) {
+            fetch("/api/system/backup-status")
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.error && data.status) setBackupStatus(data);
+                })
+                .catch(console.error);
+        }
+    }, [status, session]);
+
     if (status === "loading") {
         return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
     }
 
     const modules = [
+        {
+            title: "Academic Years",
+            icon: <FaCalendarAlt className="h-6 w-6" />,
+            description: "Manage academic years and active sessions.",
+            href: "/admin/academic-years",
+            color: "bg-emerald-50 text-emerald-600"
+        },
+        {
+            title: "Batches",
+            icon: <FaGraduationCap className="h-6 w-6" />,
+            description: "Manage student batches (e.g., 2024-2028).",
+            href: "/admin/batches",
+            color: "bg-violet-50 text-violet-600"
+        },
+        {
+            title: "Lab Batches",
+            icon: <FaLayerGroup className="h-6 w-6" />,
+            description: "Manage practical/lab batches per section.",
+            href: "/admin/batches/lab",
+            color: "bg-fuchsia-50 text-fuchsia-600"
+        },
+        {
+            title: "Password Requests",
+            icon: <FaKey className="h-6 w-6" />,
+            description: "Manage user password reset requests.",
+            href: "/admin/requests",
+            color: "bg-orange-50 text-orange-600",
+            badge: (
+                <div className="absolute right-6 top-6">
+                    <span className="flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                </div>
+            )
+        },
         {
             title: "Users",
             icon: <FaUsers className="h-6 w-6" />,
@@ -94,6 +150,48 @@ export default function AdminDashboardPage() {
     return (
         <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">
+
+                {/* Backup Status Banner */}
+                {mounted && (
+                    <AnimatePresence mode="wait">
+                        {!dismissBanner && backupStatus && backupStatus.status !== "unknown" && (
+                            <motion.div
+                                key="backup-banner-admin"
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                                className="mb-6 overflow-hidden"
+                            >
+                                <div className={`relative flex items-center justify-between rounded-xl border p-4 shadow-sm ${backupStatus.status === "success"
+                                    ? "border-green-200 bg-green-50 text-green-800"
+                                    : "border-red-200 bg-red-50 text-red-800"
+                                    }`}>
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/60">
+                                            {backupStatus.status === "success" ? "✅" : "⚠️"}
+                                        </span>
+                                        <div>
+                                            <p className="font-semibold">
+                                                {backupStatus.status === "success" ? "Database Backup Successful" : "Database Backup Failed"}
+                                            </p>
+                                            <p className="text-sm opacity-90">
+                                                {backupStatus.message}
+                                                {backupStatus.timestamp && ` • ${new Date(backupStatus.timestamp).toLocaleString()}`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setDismissBanner(true)}
+                                        className="rounded-lg p-2 hover:bg-black/5 transition-colors absolute sm:static top-2 right-2 sm:top-auto sm:right-auto"
+                                        title="Dismiss"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                )}
 
                 {/* Header */}
                 <motion.div

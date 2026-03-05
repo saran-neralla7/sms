@@ -21,7 +21,7 @@ export default function DepartmentsPage() {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deptToDelete, setDeptToDelete] = useState<Department | null>(null);
 
-    const [formData, setFormData] = useState({ name: "", code: "", sectionIds: [] as string[] });
+    const [formData, setFormData] = useState({ name: "", code: "", sectionIds: [] as string[], isAcademic: true });
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
     const [loading, setLoading] = useState(false);
 
@@ -31,7 +31,7 @@ export default function DepartmentsPage() {
     }, []);
 
     const fetchDepartments = async () => {
-        const res = await fetch("/api/departments");
+        const res = await fetch("/api/departments?all=true");
         if (res.ok) setDepartments(await res.json());
     };
 
@@ -42,14 +42,16 @@ export default function DepartmentsPage() {
 
     const openAddModal = () => {
         setEditingDepartment(null);
-        setFormData({ name: "", code: "", sectionIds: [] });
+        setFormData({ name: "", code: "", sectionIds: [], isAcademic: true });
         setIsModalOpen(true);
     };
 
     const openEditModal = (dept: any) => {
         setEditingDepartment(dept);
         const linkedSectionIds = dept.sections ? dept.sections.map((s: any) => s.id) : [];
-        setFormData({ name: dept.name, code: dept.code, sectionIds: linkedSectionIds });
+        // Handle case where isAcademic might be undefined in old records (default true)
+        const isAcademic = dept.isAcademic !== undefined ? dept.isAcademic : true;
+        setFormData({ name: dept.name, code: dept.code, sectionIds: linkedSectionIds, isAcademic });
         setIsModalOpen(true);
     };
 
@@ -79,7 +81,7 @@ export default function DepartmentsPage() {
 
             if (res.ok) {
                 setStatus({ type: "success", message: `Department ${editingDepartment ? "updated" : "created"} successfully!` });
-                setFormData({ name: "", code: "", sectionIds: [] });
+                setFormData({ name: "", code: "", sectionIds: [], isAcademic: true });
                 setEditingDepartment(null);
                 fetchDepartments();
                 setTimeout(() => {
@@ -156,6 +158,11 @@ export default function DepartmentsPage() {
                             <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
                                 {dept.code}
                             </span>
+                            {dept.isAcademic === false && (
+                                <span className="ml-2 inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                                    Faculty Only
+                                </span>
+                            )}
                             <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 <button
                                     onClick={() => openEditModal(dept)}
@@ -241,6 +248,22 @@ export default function DepartmentsPage() {
                             ))}
                         </div>
                         <p className="mt-1 text-xs text-slate-400">Select sections applicable to this department.</p>
+                    </div>
+
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="isAcademic"
+                                checked={formData.isAcademic}
+                                onChange={e => setFormData({ ...formData, isAcademic: e.target.checked })}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <label htmlFor="isAcademic" className="text-sm font-medium text-slate-700">Academic Department</label>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500 ml-6">
+                            Uncheck for Faculty-only departments (e.g. BSH). Visible in student dropdowns only if checked.
+                        </p>
                     </div>
 
                     <div className="flex justify-end pt-4">

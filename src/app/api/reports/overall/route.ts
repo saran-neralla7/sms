@@ -34,27 +34,50 @@ export async function GET(request: Request) {
             orderBy: { name: 'asc' }
         });
 
-        // 2. Fetch all students in the section
-        const students = await prisma.student.findMany({
-            where: {
-                year,
-                semester,
-                sectionId,
-                departmentId: departmentId || undefined
-            },
-            orderBy: { rollNumber: 'asc' },
-            select: { id: true, rollNumber: true, name: true }
-        });
-
         // 3. Fetch all history records for this range
         const history = await prisma.attendanceHistory.findMany({
             where: {
                 sectionId,
                 date: { gte: start, lte: end },
-                user: { role: { not: "USER" } }
+                user: { role: { not: "USER" } },
+                type: "ACADEMIC"
             },
             include: { subject: true }
         });
+
+        // 2. Fetch Students (Dynamic based on History)
+        const activeRollNumbers = new Set<string>();
+        history.forEach(record => {
+            try {
+                const details = JSON.parse(record.details);
+                details.forEach((s: any) => {
+                    const roll = s["Roll Number"] || s["rollNumber"];
+                    if (roll) activeRollNumbers.add(roll);
+                });
+            } catch (e) { }
+        });
+
+        let students;
+        if (activeRollNumbers.size > 0) {
+            students = await prisma.student.findMany({
+                where: {
+                    rollNumber: { in: Array.from(activeRollNumbers) }
+                },
+                orderBy: { rollNumber: 'asc' },
+                select: { id: true, rollNumber: true, name: true }
+            });
+        } else {
+            students = await prisma.student.findMany({
+                where: {
+                    year,
+                    semester,
+                    sectionId,
+                    departmentId: departmentId || undefined
+                },
+                orderBy: { rollNumber: 'asc' },
+                select: { id: true, rollNumber: true, name: true }
+            });
+        }
 
         // Data Structure: 
         // studentStats = { [studentId]: { details: student, subjects: { [subjectId]: { present: 0, total: 0 } } } }
@@ -103,14 +126,16 @@ export async function GET(request: Request) {
             try {
                 const details = JSON.parse(record.details);
                 details.forEach((s: any) => {
-                    const roll = s["Roll Number"];
-                    if (studentMap[roll]) {
+                    const roll = s["Roll Number"] || s["rollNumber"];
+                    const status = s["Status"] || s["status"];
+
+                    if (roll && studentMap[roll]) {
                         if (studentMap[roll].subjects[subName] === undefined) {
                             studentMap[roll].subjects[subName] = 0;
                         }
 
                         // We only count PRESENT classes now
-                        if (s["Status"] === "Present") {
+                        if (status === "Present" || status === "present") {
                             studentMap[roll].subjects[subName] += 1;
                         }
                     }

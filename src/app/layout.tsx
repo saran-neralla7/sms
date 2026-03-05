@@ -17,22 +17,35 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const currentYearId = cookieStore.get("academic-year-id")?.value;
+
+  // Fetch years for selector
+  let years: { id: string; name: string; isCurrent: boolean }[] = [];
+  try {
+    const allYears = await prisma.academicYear.findMany({
+      orderBy: { startDate: "desc" },
+      select: { id: true, name: true, isCurrent: true } // Only select needed fields
+    });
+    years = allYears;
+  } catch (error) {
+    console.error("Failed to fetch academic years in layout:", error);
+  }
+
   return (
     <html lang="en">
       <body className={`${inter.className} relative min-h-screen flex flex-col`} suppressHydrationWarning>
         <Providers>
           {/* Watermark */}
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none opacity-5">
-            {/* Using standard img for external URL without config issues, or Next Image if domain allowlisted. 
-                 Since I can't easily change next.config.js specifically for this domain without checking, 
-                 and user gave a direct URL, I'll use a regular img tag or a div with background. 
-                 A centered img is requested. "watermark for the whole site". 
-                 Usually means a background logo. */}
             <img
               src="https://gvpcdpgc.edu.in/gvplogo.jpg"
               alt="Watermark"
@@ -41,7 +54,7 @@ export default function RootLayout({
           </div>
 
           <div className="relative z-10 flex flex-col flex-grow pt-16">
-            <Navbar />
+            <Navbar years={years} currentYearId={currentYearId} />
             <main className="container mx-auto flex-grow py-8 px-4">{children}</main>
 
             <footer className="mt-auto border-t border-slate-200 bg-white/80 py-6 text-center text-sm text-slate-600 backdrop-blur-sm">

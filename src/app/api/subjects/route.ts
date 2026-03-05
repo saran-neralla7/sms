@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { name, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
+        const { name, shortName, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
 
         const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
         const subject = await prisma.subject.create({
             data: {
                 name,
+                shortName: shortName || null,
                 code,
                 year,
                 semester,
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
         });
         return NextResponse.json(subject);
     } catch (error) {
+        console.error("Error creating subject:", error);
         return NextResponse.json({ error: "Failed to create subject" }, { status: 500 });
     }
 }

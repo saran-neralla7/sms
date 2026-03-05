@@ -24,7 +24,15 @@ export interface Student {
     department?: Department; // Relation
     photoUrl?: string; // Optional URL
     regulationId?: string;
-    regulation?: string | any; // Allow object or string for now to avoid breaking legacy code
+    regulation?: string | any;
+    batchId?: string | null;
+    batch?: { id: string; name: string };
+    isDetained?: boolean;
+    isLateralEntry?: boolean;
+    originalBatchId?: string | null;
+    originalBatch?: { id: string; name: string };
+    labBatchId?: string | null;
+    labBatch?: { id: string; name: string };
 
     // Extended
     hallTicketNumber?: string;
@@ -97,4 +105,29 @@ export interface Period {
     name: string;
     startTime: string;
     endTime: string;
+}
+
+export interface Faculty {
+    id: string;
+    empCode: string;
+    empName: string;
+    shortName: string | null;
+    dob: string; // ISO
+    gender: string;
+    joinDate: string; // ISO
+    resignDate: string | null;
+    departmentId: string;
+    department?: Department; // Relation
+    designation: string;
+    mobile: string;
+    email: string | null;
+    bloodGroup: string | null;
+    basicSalary: number | null;
+    fatherName: string | null;
+    motherName: string | null;
+    address: string | null;
+    qualification: string | null;
+    aadharNo: string | null;
+    panNo: string | null;
+    user?: User | null;
 }

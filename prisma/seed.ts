@@ -55,8 +55,47 @@ async function main() {
     })
     console.log('Users created.')
 
-    // 4. Create Students (Specifically 2nd Semester as requested)
-    // We will create students for Years 1-4, all in Semester 2 (Even semester context)
+    // 4. Create Academic Year
+    const currentAcademicYear = await prisma.academicYear.upsert({
+        where: { name: '2024-2025' },
+        update: { isCurrent: true },
+        create: {
+            name: '2024-2025',
+            startDate: new Date('2024-06-01'),
+            endDate: new Date('2025-05-31'),
+            isCurrent: true
+        }
+    })
+    console.log('Academic Year created.')
+
+    // 5. Create Batches
+    const batchesData = [
+        { name: '2021-2025', start: 2021, end: 2025 },
+        { name: '2022-2026', start: 2022, end: 2026 },
+        { name: '2023-2027', start: 2023, end: 2027 },
+        { name: '2024-2028', start: 2024, end: 2028 },
+    ]
+    const batchMap: Record<string, string> = {} // Maps startYear (string) to batchId
+
+    for (const b of batchesData) {
+        const batch = await prisma.batch.upsert({
+            where: { name: b.name },
+            update: {},
+            create: { name: b.name, startYear: b.start, endYear: b.end }
+        })
+        batchMap[b.start.toString()] = batch.id
+    }
+    console.log('Batches created.')
+
+    // 6. Create Students (Specifically 2nd Semester as requested)
+    const currentYearStart = 2024 // Based on 2024-2025 academic year
+
+    // Helper to get batch ID based on current student year
+    const getBatchIdForYear = (studentYear: string) => {
+        const yearInt = parseInt(studentYear)
+        const joinYear = currentYearStart - (yearInt - 1)
+        return batchMap[joinYear.toString()]
+    }
 
     const studentData = [
         // Year 1 (Batch 2024)
@@ -85,7 +124,8 @@ async function main() {
                 year: stud.year,
                 semester: '2', // Force 2nd Sem
                 departmentId: stud.dept,
-                sectionId: sectionMap[stud.sec]
+                sectionId: sectionMap[stud.sec],
+                batchId: getBatchIdForYear(stud.year)
             },
             create: {
                 rollNumber: stud.roll,
@@ -94,7 +134,8 @@ async function main() {
                 year: stud.year,
                 semester: '2',
                 departmentId: stud.dept,
-                sectionId: sectionMap[stud.sec]
+                sectionId: sectionMap[stud.sec],
+                batchId: getBatchIdForYear(stud.year)
             }
         })
     }

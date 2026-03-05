@@ -34,13 +34,16 @@ export default function AdminUsersPage() {
 
     useEffect(() => {
         fetchUsers();
-        fetchDepartments();
+    }, []);
+
+    useEffect(() => {
+        fetchDepartments(true);
     }, []);
 
     // ... (fetchDepartments and fetchUsers same as before) ...
-    const fetchDepartments = async () => {
+    const fetchDepartments = async (showAll: boolean = true) => {
         try {
-            const res = await fetch("/api/departments");
+            const res = await fetch(`/api/departments${showAll ? '?all=true' : ''}`);
             if (res.ok) {
                 const data = await res.json();
                 setDepartments(data);
@@ -261,7 +264,9 @@ export default function AdminUsersPage() {
                                                     ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20"
                                                     : user.role === "HOD"
                                                         ? "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20"
-                                                        : "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20"
+                                                        : user.role === "SMS_USER"
+                                                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+                                                            : "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20"
                                                     }`}>
                                                     {user.role}
                                                 </span>
@@ -315,7 +320,6 @@ export default function AdminUsersPage() {
                             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 placeholder:text-slate-400"
                             required
-                            disabled={!!editingUser}
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -337,12 +341,10 @@ export default function AdminUsersPage() {
                                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                             >
-                                <option value="USER">USER - Standard Access</option>
                                 <option value="FACULTY">FACULTY - Attendance & History</option>
                                 <option value="HOD">HOD - Dept Admin</option>
                                 <option value="ADMIN">ADMIN - Super Admin</option>
-                                <option value="DIRECTOR">DIRECTOR - Global Admin</option>
-                                <option value="PRINCIPAL">PRINCIPAL - Global Admin</option>
+                                <option value="SMS_USER">SMS USER - Alerts Only</option>
                             </select>
                         </div>
 

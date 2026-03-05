@@ -98,8 +98,55 @@ export async function PUT(
 
         const student = await prisma.student.update({
             where: { id: params.id },
-            data: body,
+            data: {
+                name: body.name,
+                mobile: body.mobile,
+                year: body.year,
+                semester: body.semester,
+                sectionId: body.sectionId,
+                departmentId: body.departmentId,
+                regulationId: body.regulationId,
+                batchId: body.batchId || null,
+                isDetained: body.isDetained || false,
+                originalBatchId: body.originalBatchId || null,
+                hallTicketNumber: body.hallTicketNumber || null,
+                eamcetRank: body.eamcetRank || null,
+                dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
+                dateOfReporting: body.dateOfReporting ? new Date(body.dateOfReporting) : null,
+                gender: body.gender || null,
+                caste: body.caste || null,
+                casteName: body.casteName || null,
+                category: body.category || null,
+                admissionType: body.admissionType || null,
+                fatherName: body.fatherName || null,
+                motherName: body.motherName || null,
+                address: body.address || null,
+                studentContactNumber: body.studentContactNumber || null,
+                emailId: body.emailId || null,
+                aadharNumber: body.aadharNumber || null,
+                abcId: body.abcId || null,
+                reimbursement: body.reimbursement === true || body.reimbursement === "true",
+                certificatesSubmitted: body.certificatesSubmitted === true || body.certificatesSubmitted === "true",
+                domainMailId: body.rollNumber ? `${body.rollNumber.toUpperCase()}@gvpcdpgc.edu.in` : null
+            },
         });
+
+        // Audit Log for UPDATE
+        const performerId = session.user.id;
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    action: "UPDATE",
+                    entity: "Student",
+                    entityId: student.rollNumber,
+                    details: JSON.stringify({ rollNumber: student.rollNumber, name: student.name, changes: "Student Profile Updated" }),
+                    performedBy: performerId
+                }
+            });
+        } catch (logError) {
+            console.error("Failed to log update:", logError);
+        }
+
         return NextResponse.json(student);
     } catch (error: any) {
         console.error("Student Update Error:", error);
@@ -142,6 +189,23 @@ export async function DELETE(
         await prisma.student.delete({
             where: { id: params.id },
         });
+
+        // Audit Log for DELETE
+        const performerId = session.user.id;
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    action: "DELETE",
+                    entity: "Student",
+                    entityId: params.id,
+                    details: JSON.stringify({ studentId: params.id }),
+                    performedBy: performerId
+                }
+            });
+        } catch (logError) {
+            console.error("Failed to log delete:", logError);
+        }
+
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: "Failed to delete student" }, { status: 500 });

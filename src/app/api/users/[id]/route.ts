@@ -60,7 +60,13 @@ export async function DELETE(
             where: { id: params.id },
         });
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
+        console.error("Delete Error:", error);
+        if (error.code === 'P2003' || error.message?.includes('violates RESTRICT setting')) {
+            return NextResponse.json({
+                error: "Cannot delete this user because they have linked records (e.g. downloaded attendance). Please deactivate them instead."
+            }, { status: 400 });
+        }
         return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
     }
 }

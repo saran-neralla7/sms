@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AttendanceHistory } from "@/types";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { FaCalendarAlt, FaFileExcel, FaFilter, FaHistory, FaTrash, FaUserCircle, FaEye, FaDownload, FaTimes } from "react-icons/fa";
+import { FaCalendarAlt, FaFileExcel, FaFilter, FaHistory, FaTrash, FaUserCircle, FaEye, FaDownload, FaTimes, FaEdit } from "react-icons/fa";
 
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
@@ -207,15 +207,89 @@ export default function HistoryPage() {
 
     const filteredHistory = getFilteredHistory();
 
+
+
+    // Edit Modal State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editRecord, setEditRecord] = useState<any>(null); // Details parsed
+    const [editRecordId, setEditRecordId] = useState<string>("");
+    const [saving, setSaving] = useState(false);
+
+    const handleEdit = (record: AttendanceHistory) => {
+        if (!record.details || record.details === "[]") {
+            setStatus({ type: "error", message: "No details available to edit." });
+            return;
+        }
+        try {
+            const data = JSON.parse(record.details);
+            // Add internal ID for tracking if not present, though status toggle relies on RollNo/Id usually
+            // Map to standard format if needed, but we keep original structure to save back
+            setEditRecord(data);
+            setEditRecordId(record.id);
+            setIsEditModalOpen(true);
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Error reading record details." });
+        }
+    };
+
+    const toggleEditStatus = (index: number) => {
+        if (!editRecord) return;
+        const updated = [...editRecord];
+        const current = updated[index];
+        // Toggle Status
+        const newStatus = (current["Status"] || current.status) === "Present" ? "Absent" : "Present";
+
+        // Handle both casing conventions effectively
+        if (current["Status"]) current["Status"] = newStatus;
+        else current.status = newStatus;
+
+        setEditRecord(updated);
+    };
+
+    const saveEdit = async () => {
+        if (!editRecordId || !editRecord) return;
+        setSaving(true);
+        try {
+            // Recalculate summary status potentially? 
+            // The record 'status' field (Completed) usually stays same. 
+            // But 'details' definitely updates.
+
+            const res = await fetch(`/api/attendance/history/${editRecordId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    details: editRecord
+                })
+            });
+
+            if (res.ok) {
+                setStatus({ type: "success", message: "Attendance updated successfully" });
+                setIsEditModalOpen(false);
+                fetchHistory(); // Refresh list
+            } else {
+                setStatus({ type: "error", message: "Failed to update attendance" });
+            }
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Error saving changes" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="mx-auto max-w-7xl">
-            {status.message && !isDeleteModalOpen && (
+            {status.message && !isDeleteModalOpen && !isViewModalOpen && !isEditModalOpen && (
                 <div className={`mb-4 rounded-md p-4 text-sm font-medium ${status.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
                     }`}>
                     {status.message}
                 </div>
             )}
 
+            {/* ... Existing Headers & Filters ... */}
+
+            {/* Header Area */}
             <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
@@ -310,7 +384,7 @@ export default function HistoryPage() {
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">View</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Downloaded By</th>
-                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>}
+                                <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -323,8 +397,7 @@ export default function HistoryPage() {
                                     <tr key={record.id} className="group hover:bg-slate-50/80 transition-colors">
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
                                             {new Date(record.date).toLocaleDateString("en-IN", {
-                                                day: 'numeric', month: 'short', year: 'numeric',
-                                                hour: '2-digit', minute: '2-digit'
+                                                day: 'numeric', month: 'short', year: 'numeric'
                                             })}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
@@ -376,17 +449,30 @@ export default function HistoryPage() {
                                                 <span>{record.user?.username || "Unknown"}</span>
                                             </div>
                                         </td>
-                                        {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
-                                            <td className="whitespace-nowrap px-6 py-4 text-right">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); confirmDelete(record); }}
-                                                    className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                    title="Delete Record"
-                                                >
-                                                    <FaTrash size={14} />
-                                                </button>
-                                            </td>
-                                        )}
+                                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                {/* Edit Button */}
+                                                {["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes((session?.user.role || "").toUpperCase()) && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleEdit(record); }}
+                                                        className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                                        title="Edit Attendance"
+                                                    >
+                                                        <FaHistory size={14} /> {/* Using History icon for Edit as placeholder or Pen if available */}
+                                                    </button>
+                                                )}
+
+                                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); confirmDelete(record); }}
+                                                        className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                                        title="Delete Record"
+                                                    >
+                                                        <FaTrash size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -405,11 +491,12 @@ export default function HistoryPage() {
                     }
                 }}
                 title="Delete Record"
-                message={`Are you sure you want to delete the attendance report for ${recordToDelete ? new Date(recordToDelete.date).toLocaleDateString() : ''}?`}
+                message={`Are you sure you want to delete the attendance report for ${recordToDelete ? new Date(recordToDelete.date).toLocaleDateString() : 'this record'}?`}
                 confirmText="Delete"
                 isDangerous={true}
             />
 
+            {/* View Modal */}
             {viewRecord && (
                 <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Attendance Report">
                     <div className="p-4">
@@ -425,7 +512,7 @@ export default function HistoryPage() {
                                     <div>
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
                                         <span className="font-medium text-slate-900">
-                                            Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
+                                            Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name || 'N/A'}
                                         </span>
                                     </div>
                                     <div className="col-span-2 my-2 border-t border-slate-200"></div>
@@ -467,6 +554,62 @@ export default function HistoryPage() {
                     </div>
                 </Modal>
             )}
+
+            {/* Edit Modal */}
+            <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Attendance">
+                <div className="p-4 h-[80vh] flex flex-col">
+                    <div className="flex-1 overflow-y-auto mb-4 border rounded-lg">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 sticky top-0">
+                                <tr>
+                                    <th className="px-4 py-2 font-semibold text-slate-500">Roll No</th>
+                                    <th className="px-4 py-2 font-semibold text-slate-500">Name</th>
+                                    <th className="px-4 py-2 font-semibold text-slate-500 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {editRecord && editRecord.map((s: any, idx: number) => {
+                                    const status = s["Status"] || s.status;
+                                    return (
+                                        <tr
+                                            key={idx}
+                                            onClick={() => toggleEditStatus(idx)}
+                                            className={`cursor-pointer transition-colors ${status === "Absent" ? "bg-red-50 hover:bg-red-100" : "hover:bg-slate-50"}`}
+                                        >
+                                            <td className="px-4 py-3 font-medium text-slate-700">{s["Roll Number"] || s.rollNumber}</td>
+                                            <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]">{s["Name"] || s.name}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${status === "Absent"
+                                                    ? "bg-red-200 text-red-800"
+                                                    : "bg-green-100 text-green-700"}`}>
+                                                    {status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setIsEditModalOpen(false)}
+                            disabled={saving}
+                            className="flex-1 px-4 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 font-medium"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={saveEdit}
+                            disabled={saving}
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md disabled:opacity-70"
+                        >
+                            {saving ? "Saving..." : "Save Changes"}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }

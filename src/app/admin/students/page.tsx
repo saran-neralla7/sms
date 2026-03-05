@@ -57,6 +57,30 @@ export default function StudentsPage() {
     const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
     const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
 
+    // SMS Logs Modal State
+    const [isSmsLogModalOpen, setIsSmsLogModalOpen] = useState(false);
+    const [smsLogData, setSmsLogData] = useState<{ student: any, absentDates: any[] } | null>(null);
+    const [smsLogLoading, setSmsLogLoading] = useState(false);
+
+    const openSmsLogs = async (studentId: string) => {
+        setIsSmsLogModalOpen(true);
+        setSmsLogLoading(true);
+        setSmsLogData(null);
+        try {
+            const res = await fetch(`/api/students/${studentId}/sms-logs`);
+            if (res.ok) {
+                const data = await res.json();
+                setSmsLogData(data);
+            } else {
+                setSmsLogData({ student: null, absentDates: [] }); // Error state
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setSmsLogLoading(false);
+        }
+    };
+
     // Filters
     const searchParams = useSearchParams();
     const pathname = usePathname();
@@ -68,7 +92,7 @@ export default function StudentsPage() {
     const [filterDepartmentId, setFilterDepartmentId] = useState(searchParams?.get("dept") || "");
 
     // Search State
-    const [searchQuery, setSearchQuery] = useState(searchParams?.get("q") || "");
+    const [searchTerm, setSearchTerm] = useState(searchParams?.get("q") || "");
     const { data: session } = useSession();
     // The original loading state for fetchStudents is now replaced by the new `loading` state,
     // but its initial value was `false`. The new `loading` state starts as `true`.
@@ -83,6 +107,7 @@ export default function StudentsPage() {
     const [departments, setDepartments] = useState<any[]>([]);
     const [sections, setSections] = useState<any[]>([]);
     const [regulations, setRegulations] = useState<any[]>([]);
+    const [batches, setBatches] = useState<any[]>([]); // Added batches
 
     // Form State
     const [formData, setFormData] = useState({
@@ -93,7 +118,11 @@ export default function StudentsPage() {
         semester: "1",
         departmentId: "",
         sectionId: "",
-        regulation: "R22"
+        regulation: "R22",
+        batchId: "", // Added batchId
+        isDetained: false,
+        isLateralEntry: false,
+        originalBatchId: ""
     });
 
     const fetchDepartments = async () => {
@@ -103,6 +132,13 @@ export default function StudentsPage() {
                 const data = await res.json();
                 setDepartments(data);
             }
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchBatches = async () => {
+        try {
+            const res = await fetch("/api/batches");
+            if (res.ok) setBatches(await res.json());
         } catch (e) { console.error(e); }
     };
 
@@ -128,9 +164,6 @@ export default function StudentsPage() {
         const params = new URLSearchParams(searchParams?.toString());
         if (value) params.set(key, value);
         else params.delete(key);
-
-        // Reset page or other dependent vars if needed? 
-        // For now just shallow push
         router.push(`${pathname || "/"}?${params.toString()}`);
     };
 
@@ -140,8 +173,34 @@ export default function StudentsPage() {
         setSemester(searchParams?.get("semester") || "");
         setSection(searchParams?.get("section") || "");
         setFilterDepartmentId(searchParams?.get("dept") || "");
-        setSearchQuery(searchParams?.get("q") || "");
+
+        // Sync search only if it differs significantly or on initial load
+        // But we want to avoid overwriting user typing if they are typing.
+        // Usually initial load is enough.
+        const q = searchParams?.get("q") || "";
+        if (q !== searchTerm) {
+            setSearchTerm(q);
+        }
     }, [searchParams]);
+
+    // Debounce Logic for Search
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            const currentQ = searchParams?.get("q") || "";
+            if (searchTerm !== currentQ) {
+                updateFilters("q", searchTerm);
+            }
+        }, 500); // 500ms delay
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [searchTerm]);
+
+    // Pagination State
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(20);
+    const [total, setTotal] = useState(0);
 
     const fetchStudents = async () => {
         setLoading(true);
@@ -153,11 +212,24 @@ export default function StudentsPage() {
             if (section) query.set("sectionId", section);
             if (filterDepartmentId) query.set("departmentId", filterDepartmentId);
 
+            // Search & Pagination
+            if (searchTerm) query.set("q", searchTerm);
+            query.set("page", page.toString());
+            query.set("limit", limit.toString());
+
             const res = await fetch(`/api/students?${query.toString()}`);
             if (res.ok) {
-                const data = await res.json();
-                setStudents(data);
-                setSelectedStudentIds(new Set()); // Reset selection on fresh fetch
+                const json = await res.json();
+                // Handle new response structure { data, meta }
+                // Fallback for safety if API reverts or glitch
+                if (Array.isArray(json)) {
+                    setStudents(json);
+                    setTotal(json.length);
+                } else {
+                    setStudents(json.data);
+                    setTotal(json.meta.total);
+                }
+                setSelectedStudentIds(new Set());
             }
         } catch (error) {
             console.error(error);
@@ -167,12 +239,27 @@ export default function StudentsPage() {
         }
     };
 
+    // Client-side filtering is NO LONGER needed as API does it.
+    // We just point filterStudents to students for compatibility with rest of UI
+    const filteredStudents = students;
+
+    // Effect to re-fetch students when filters change
+    useEffect(() => {
+        // Reset to page 1 when filters change (except page itself)
+        setPage(1);
+    }, [year, semester, section, filterDepartmentId, searchTerm, limit]);
+
+    useEffect(() => {
+        fetchDepartments();
+        fetchSections(); // Initial fetch
+        fetchRegulations();
+        fetchBatches();
+    }, []);
+
     useEffect(() => {
         fetchStudents();
-        fetchDepartments();
-        fetchSections();
-        fetchRegulations();
-    }, [year, semester, section, filterDepartmentId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, year, semester, section, filterDepartmentId, searchTerm, limit]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -194,7 +281,7 @@ export default function StudentsPage() {
                 const successMessage = editingStudent ? "Student updated successfully" : "Student created successfully";
                 setStatus({ type: "success", message: successMessage });
                 setEditingStudent(null);
-                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22" });
+                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "" });
                 fetchStudents();
                 setTimeout(() => {
                     setIsModalOpen(false);
@@ -258,11 +345,7 @@ export default function StudentsPage() {
         }
     };
 
-    // Filter students based on search query
-    const filteredStudents = students.filter(student =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.rollNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+
 
     const toggleSelectAll = () => {
         if (selectedStudentIds.size === filteredStudents.length && filteredStudents.length > 0) {
@@ -280,12 +363,12 @@ export default function StudentsPage() {
     };
 
     const clearFilters = () => {
-        router.push(pathname || "/"); // Clear all params
+        router.push(pathname || "/");
     };
 
     const openAddModal = () => {
         setEditingStudent(null);
-        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22" });
+        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "" }); // Reset
         setIsModalOpen(true);
     };
 
@@ -299,10 +382,35 @@ export default function StudentsPage() {
             semester: student.semester,
             departmentId: student.departmentId || "",
             sectionId: student.sectionId || "",
-            regulation: student.regulation || "R22"
+            regulation: student.regulation || "R22",
+            batchId: student.batchId || "",
+            isDetained: student.isDetained || false,
+            isLateralEntry: student.isLateralEntry || false,
+            originalBatchId: student.originalBatchId || ""
         });
         setIsModalOpen(true);
     };
+
+    // ... (rest of file) ...
+    // ...
+    // But I must include the Batch UI in the render logic too.
+    // I will use replace_file_content carefully. 
+    // Wait, the previous views didn't show the student.batchId property usage in openEditModal because I didn't add it in the first view.
+    // I will assume `openEditModal` logic was just shown and I can validly replace it if I match correctly.
+    // The main block I am replacing is from `// Dropdown Data` all the way to `openEditModal`.
+    // Wait, that's a HUGE block.
+    // The previous view ended at line 800. The code snippet I have goes from 82 to 305.
+    // I will replace `// Dropdown Data` (line 82) to `openEditModal` closing brace (line 305).
+    // And I'll need to update the JSX form later.
+    // Let's do the state/logic update first.
+
+    // Actually, I can do it in two chunks or one.
+    // Chunk 1: State & Fetchers & Handlers (lines 82-211)
+    // Chunk 2: JSX Form (lines 879-998)
+
+    // Chunk 1 replacement:
+
+
 
     // Import Status State
     const [importStatus, setImportStatus] = useState<{
@@ -321,11 +429,55 @@ export default function StudentsPage() {
         errors: []
     });
 
+
+    // --- STANDARDIZED EXCEL HEADERS ---
+    // Single Source of Truth for Column Names (checking aliases for Import)
+    const HEADERS = {
+        ROLL_NUMBER: ["Roll Number", "Roll", "rollNumber"],
+        NAME: ["Name", "Student Name", "STUDENT NAME"],
+        PARENT_MOBILE: ["Parent Mobile Number", "Mobile (Parent)", "Mobile", "Phone", "Parent Contact Number", "PARENT CONTACT NUMBER", "parent mobile number"],
+        YEAR: ["Year", "year"],
+        SEMESTER: ["Semester", "Sem", "semester"],
+        SECTION: ["Section", "SectionId", "Sec", "section"],
+        DEPARTMENT: ["Department", "DepartmentId", "Dept", "department"],
+        HALL_TICKET: ["Hall Ticket Number", "Hall Ticket", "HALL TICKET NUMBER"],
+        EAMCET_RANK: ["EAMCET Rank", "EAMCET RANK", "Rank"],
+        DOB: ["Date of Birth", "DOB", "DATE OF BIRTH"],
+        DATE_OF_REPORTING: ["Date of Reporting", "Joining Date", "DATE OF REPORTING"],
+        GENDER: ["Gender", "GENDER"],
+        CASTE: ["Caste", "CASTE"],
+        CASTE_NAME: ["Caste Name", "CASTE NAME", "Sub Caste"],
+        CATEGORY: ["Category", "CATEGORY"],
+        ADMISSION_TYPE: ["Admission Type", "ADMISSION TYPE"],
+        FATHER_NAME: ["Father Name", "FATHER NAME"],
+        MOTHER_NAME: ["Mother Name", "MOTHER NAME"],
+        ADDRESS: ["Address", "ADDRESS"],
+        STUDENT_MOBILE: ["Student Contact Number", "Student Mobile", "STUDENT CONTACT NUMBER"],
+        EMAIL: ["Email ID", "Email", "EMAIL ID"],
+        AADHAR: ["Aadhar Number", "Aadhar", "AADHAR NUMBER"],
+        ABC_ID: ["ABC ID", "ABC Id", "ABC id"],
+        REIMBURSEMENT: ["Reimbursement", "REIMBURSEMENT"],
+        CERTIFICATES_SUBMITTED: ["Certificates Submitted", "CERTIFICATES SUBMITTED"],
+        DOMAIN_MAIL: ["Domain Mail ID", "DOMAIN MAIL ID"],
+        BATCH_NAME: ["Batch Name", "BATCH NAME", "Batch"],
+        IS_DETAINED: ["Is Detained", "IS DETAINED"],
+        LATERAL_ENTRY: ["Lateral Entry", "LATERAL ENTRY", "Is Lateral"],
+        ORIGINAL_BATCH: ["Original Batch", "ORIGINAL BATCH"]
+    };
+
+    // Helper to get value from row using multiple aliases
+    const getValue = (row: any, aliases: string[]) => {
+        for (const alias of aliases) {
+            if (row[alias] !== undefined && row[alias] !== null) return row[alias];
+        }
+        return undefined;
+    };
+
+
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Reset and Open Modal
         setImportStatus({
             isOpen: true,
             loading: true,
@@ -335,7 +487,6 @@ export default function StudentsPage() {
             errors: []
         });
 
-        // Use setTimeout to allow UI to render the modal before heavy processing blocks thread
         setTimeout(() => {
             const reader = new FileReader();
             reader.onload = async (evt) => {
@@ -351,39 +502,21 @@ export default function StudentsPage() {
                     let failCount = 0;
                     const importErrors: string[] = [];
 
-                    // Helper to parse dates from Excel (Serial or String)
                     const parseExcelDate = (val: any): string | null => {
                         if (!val) return null;
-
-                        // If number (Excel Serial Date)
                         if (typeof val === 'number') {
-                            const date = new Date((val - (25567 + 2)) * 86400 * 1000); // 25567 is offset, 2 is leap year bug adjust? 
-                            // Actually XLSX utils usually handles this if we use cellDates: true, but manual:
-                            // The standard formula for JS date from Excel serial is: new Date(Math.round((serial - 25569)*86400*1000));
-                            // 25569 = 1970/1/1 in Excel days
-                            const epoch = new Date(Math.round((val - 25569) * 86400 * 1000));
-                            if (!isNaN(epoch.getTime())) return epoch.toISOString();
+                            const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+                            if (!isNaN(date.getTime())) return date.toISOString();
                         }
-
-                        // If string
                         if (typeof val === 'string') {
-                            // Try basic Date parse
                             const d = new Date(val);
                             if (!isNaN(d.getTime())) return d.toISOString();
-
-                            // Try parsing DD-MM-YYYY or DD/MM/YYYY manually if standard fails or assuming strict format
-                            // "15-05-2003"
                             const parts = val.split(/[-/]/);
                             if (parts.length === 3) {
-                                // Assume DD-MM-YYYY if first part > 12? Or simply DD-MM-YYYY preference?
-                                // Let's try to detect.
                                 const p1 = parseInt(parts[0]);
                                 const p2 = parseInt(parts[1]);
                                 const p3 = parseInt(parts[2]);
-
-                                // if p3 is year (4 digits)
                                 if (p3 > 1000) {
-                                    // d-m-y
                                     const dmy = new Date(p3, p2 - 1, p1);
                                     if (!isNaN(dmy.getTime())) return dmy.toISOString();
                                 }
@@ -393,11 +526,9 @@ export default function StudentsPage() {
                     };
 
                     for (const row of data) {
-                        // Map Names to IDs
-                        const deptName = row['Department'] || row['DepartmentId'] || row['Dept'] || row['department'] || "";
-                        const secName = row['Section'] || row['SectionId'] || row['Sec'] || row['section'] || "";
+                        const deptName = String(getValue(row, HEADERS.DEPARTMENT) || "");
+                        const secName = String(getValue(row, HEADERS.SECTION) || "");
 
-                        // Find ID by Name (Case Insensitive)
                         const deptId = departments.find(d =>
                             d.name.toLowerCase() === deptName.toLowerCase() ||
                             d.code.toLowerCase() === deptName.toLowerCase()
@@ -411,43 +542,76 @@ export default function StudentsPage() {
                         const finalSecId = secId || (secName.length > 10 ? secName : "");
 
                         if (!finalDeptId || !finalSecId) {
-                            const rowName = String(row['Name'] || row['name'] || "Unknown");
-                            const errorMsg = `Row ${row['Roll Number'] || '?'}: Invalid Dept '${deptName}' or Section '${secName}'`;
-                            if (failCount < 20) importErrors.push(errorMsg); // Limit displayed errors
+                            const roll = getValue(row, HEADERS.ROLL_NUMBER) || '?';
+                            if (failCount < 20) importErrors.push(`Row ${roll}: Invalid Dept '${deptName}' or Section '${secName}'`);
                             failCount++;
                             continue;
                         }
 
                         const studentPayload = {
-                            rollNumber: String(row['Roll Number'] || row['Roll'] || row['rollNumber']),
-                            name: String(row['Name'] || row['name'] || row['Student Name'] || row['STUDENT NAME']),
-                            mobile: String(row['Parent Mobile Number'] || row['Mobile'] || row['Phone'] || row['Parent Contact Number'] || row['PARENT CONTACT NUMBER'] || row['parent mobile number']),
-                            year: String(row['Year'] || row['year']),
-                            semester: String(row['Semester'] || row['Sem'] || row['semester']),
+                            rollNumber: String(getValue(row, HEADERS.ROLL_NUMBER) || ""),
+                            name: String(getValue(row, HEADERS.NAME) || ""),
+                            mobile: String(getValue(row, HEADERS.PARENT_MOBILE) || ""),
+                            year: String(getValue(row, HEADERS.YEAR) || ""),
+                            semester: String(getValue(row, HEADERS.SEMESTER) || ""),
                             sectionId: finalSecId,
                             departmentId: finalDeptId,
 
                             // Extended Fields
-                            hallTicketNumber: String(row['Hall Ticket Number'] || row['HALL TICKET NUMBER'] || ""),
-                            eamcetRank: String(row['EAMCET Rank'] || row['EAMCET RANK'] || ""),
-                            dateOfBirth: parseExcelDate(row['Date of Birth'] || row['DATE OF BIRTH']),
-                            dateOfReporting: parseExcelDate(row['Date of Reporting'] || row['DATE OF REPORTING']),
-                            gender: String(row['Gender'] || row['GENDER'] || ""),
-                            caste: String(row['Caste'] || row['CASTE'] || ""),
-                            casteName: String(row['Caste Name'] || row['CASTE NAME'] || ""),
-                            category: String(row['Category'] || row['CATEGORY'] || ""),
-                            admissionType: String(row['Admission Type'] || row['ADMISSION TYPE'] || ""),
-                            fatherName: String(row['Father Name'] || row['FATHER NAME'] || ""),
-                            motherName: String(row['Mother Name'] || row['MOTHER NAME'] || ""),
-                            address: String(row['Address'] || row['ADDRESS'] || ""),
-                            studentContactNumber: String(row['Student Contact Number'] || row['STUDENT CONTACT NUMBER'] || ""),
-                            emailId: String(row['Email ID'] || row['EMAIL ID'] || ""),
-                            aadharNumber: String(row['Aadhar Number'] || row['AADHAR NUMBER'] || ""),
-                            abcId: String(row['ABC ID'] || row['ABC Id'] || ""),
-                            reimbursement: String(row['Reimbursement'] || row['REIMBURSEMENT'] || "false").toLowerCase() === "true",
-                            certificatesSubmitted: String(row['Certificates Submitted'] || row['CERTIFICATES SUBMITTED'] || "false").toLowerCase() === "true",
-                            domainMailId: String(row['Domain Mail ID'] || row['DOMAIN MAIL ID'] || "")
+                            hallTicketNumber: String(getValue(row, HEADERS.HALL_TICKET) || ""),
+                            eamcetRank: String(getValue(row, HEADERS.EAMCET_RANK) || ""),
+                            dateOfBirth: parseExcelDate(getValue(row, HEADERS.DOB)),
+                            dateOfReporting: parseExcelDate(getValue(row, HEADERS.DATE_OF_REPORTING)),
+                            gender: String(getValue(row, HEADERS.GENDER) || ""),
+                            caste: String(getValue(row, HEADERS.CASTE) || ""),
+                            casteName: String(getValue(row, HEADERS.CASTE_NAME) || ""), // Sub-caste
+                            category: String(getValue(row, HEADERS.CATEGORY) || ""),
+                            admissionType: String(getValue(row, HEADERS.ADMISSION_TYPE) || ""),
+                            fatherName: String(getValue(row, HEADERS.FATHER_NAME) || ""),
+                            motherName: String(getValue(row, HEADERS.MOTHER_NAME) || ""),
+                            address: String(getValue(row, HEADERS.ADDRESS) || ""),
+                            studentContactNumber: String(getValue(row, HEADERS.STUDENT_MOBILE) || ""),
+                            emailId: String(getValue(row, HEADERS.EMAIL) || ""),
+                            aadharNumber: String(getValue(row, HEADERS.AADHAR) || ""),
+                            abcId: String(getValue(row, HEADERS.ABC_ID) || ""),
+                            reimbursement: ["true", "y", "yes"].includes(String(getValue(row, HEADERS.REIMBURSEMENT) || "false").toLowerCase()),
+                            certificatesSubmitted: ["true", "y", "yes"].includes(String(getValue(row, HEADERS.CERTIFICATES_SUBMITTED) || "false").toLowerCase()),
+                            domainMailId: String(getValue(row, HEADERS.DOMAIN_MAIL) || "")
                         };
+
+                        // Batch Logic
+                        const batchName = String(getValue(row, HEADERS.BATCH_NAME) || "");
+                        const isDetainedStr = String(getValue(row, HEADERS.IS_DETAINED) || "N").toUpperCase();
+                        const isLateralStr = String(getValue(row, HEADERS.LATERAL_ENTRY) || "N").toUpperCase();
+                        const originalBatchName = String(getValue(row, HEADERS.ORIGINAL_BATCH) || "");
+
+                        if (batchName) {
+                            const foundBatch = batches.find(b => b.name === batchName);
+                            if (foundBatch) (studentPayload as any).batchId = foundBatch.id;
+                        }
+
+                        if (!(studentPayload as any).batchId) {
+                            const roll = getValue(row, HEADERS.ROLL_NUMBER) || '?';
+                            if (failCount < 20) importErrors.push(`Row ${roll}: Invalid or missing Batch '${batchName}'`);
+                            failCount++;
+                            continue;
+                        }
+
+                        if (isLateralStr === 'Y' || isLateralStr === 'YES' || isLateralStr === 'TRUE') {
+                            (studentPayload as any).isLateralEntry = true;
+                        } else {
+                            (studentPayload as any).isLateralEntry = false;
+                        }
+
+                        if (isDetainedStr === 'Y' || isDetainedStr === 'YES') {
+                            (studentPayload as any).isDetained = true;
+                            if (originalBatchName) {
+                                const foundOriginal = batches.find(b => b.name === originalBatchName);
+                                if (foundOriginal) (studentPayload as any).originalBatchId = foundOriginal.id;
+                            }
+                        } else {
+                            (studentPayload as any).isDetained = false;
+                        }
 
                         if (!studentPayload.rollNumber) {
                             failCount++;
@@ -461,11 +625,7 @@ export default function StudentsPage() {
                         });
                         if (res.ok) {
                             const data = await res.json();
-                            if (data.action === "updated") {
-                                updatedCount++;
-                            } else {
-                                successCount++;
-                            }
+                            if (data.action === "updated") updatedCount++; else successCount++;
                         } else {
                             failCount++;
                             const data = await res.json();
@@ -475,7 +635,7 @@ export default function StudentsPage() {
 
                     setImportStatus({
                         isOpen: true,
-                        loading: false, // Done
+                        loading: false,
                         successCount,
                         updatedCount,
                         failCount,
@@ -483,7 +643,6 @@ export default function StudentsPage() {
                     });
 
                     fetchStudents();
-                    // Clear file input
                     e.target.value = "";
                 } catch (error) {
                     console.error("Import error:", error);
@@ -493,7 +652,7 @@ export default function StudentsPage() {
                         successCount: 0,
                         updatedCount: 0,
                         failCount: 0,
-                        errors: ["Critial error reading file. Please check format."]
+                        errors: ["Critial error reading file."]
                     });
                 }
             };
@@ -504,37 +663,21 @@ export default function StudentsPage() {
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
-
         setUploadStatus({ loading: true, results: [], successCount: 0, failCount: 0 });
         setIsUploadModalOpen(true);
-
         const formData = new FormData();
-        Array.from(files).forEach((file) => {
-            formData.append("files", file);
-        });
-
+        Array.from(files).forEach((file) => formData.append("files", file));
         try {
-            // Use Pages API Route for large file support (bypassing App Router limits)
-            const res = await fetch("/api/upload-photos", {
-                method: "POST",
-                body: formData,
-            });
-
+            const res = await fetch("/api/upload-photos", { method: "POST", body: formData });
             if (res.ok) {
                 const data = await res.json();
-                setUploadStatus({
-                    loading: false,
-                    results: data.results || [],
-                    successCount: data.successCount || 0,
-                    failCount: data.failCount || 0
-                });
+                setUploadStatus({ loading: false, results: data.results || [], successCount: data.successCount || 0, failCount: data.failCount || 0 });
                 fetchStudents();
             } else {
                 const errData = await res.json();
                 setUploadStatus({ loading: false, results: [{ status: "error", message: errData.error || "Upload failed" }], successCount: 0, failCount: 1 });
             }
         } catch (error) {
-            console.error(error);
             setUploadStatus({ loading: false, results: [{ status: "error", message: "Network error" }], successCount: 0, failCount: 1 });
         }
     };
@@ -551,31 +694,23 @@ export default function StudentsPage() {
                 "Admission Type": "Convener", "Father Name": "Father Doe", "Mother Name": "Mother Doe",
                 "Address": "Visakhapatnam, AP", "Student Contact Number": "8888888888",
                 "Email ID": "john.doe@example.com", "Aadhar Number": "123412341234",
-                "ABC ID": "ABC123XYZ", "Reimbursement": "true", "Certificates Submitted": "true",
-                "Domain Mail ID": "21131A0501@gvpcdpgc.edu.in"
+                "ABC ID": "ABC123XYZ", "Reimbursement": "Y", "Certificates Submitted": "Y",
+                "Domain Mail ID": "21131A0501@gvpcdpgc.edu.in",
+                "Batch Name": "2023-2027", "Is Detained": "N", "Lateral Entry": "N", "Original Batch": "2023-2027"
             }
         ];
         const ws = XLSX.utils.json_to_sheet(headers);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Template");
-        XLSX.writeFile(wb, "student_import_template_v3.xlsx");
+        XLSX.writeFile(wb, "student_import_template_v4.xlsx");
     };
 
-    // ... (fetchStudentStats, fetchStudentResults kept same or removed if used in new page) ...
-    // Assuming we keep them for backward compat or if needed, but here simplifying
-
-    // Export Modal State
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-    const [exportFilters, setExportFilters] = useState({ year: "", semester: "", sectionId: "" });
+    const [exportFilters, setExportFilters] = useState({ year: "", semester: "", sectionId: "", departmentId: "" });
     const [exportLoading, setExportLoading] = useState(false);
 
     const handleExportClick = () => {
-        // Pre-fill with current page filters
-        setExportFilters({
-            year: year || "",
-            semester: semester || "",
-            sectionId: section || ""
-        });
+        setExportFilters({ year: year || "", semester: semester || "", sectionId: section || "", departmentId: filterDepartmentId || "" });
         setIsExportModalOpen(true);
     };
 
@@ -586,41 +721,58 @@ export default function StudentsPage() {
         }
 
         setExportLoading(true);
-        setStatus({ type: null, message: "" }); // Clear main status
-
+        setStatus({ type: null, message: "" });
         try {
             const query = new URLSearchParams();
             query.set("year", exportFilters.year);
             query.set("semester", exportFilters.semester);
+            query.set("limit", "-1");
             if (exportFilters.sectionId) query.set("sectionId", exportFilters.sectionId);
-            if (filterDepartmentId) query.set("departmentId", filterDepartmentId); // Respect admin dept filter
+            if (exportFilters.departmentId) query.set("departmentId", exportFilters.departmentId);
+            else if (filterDepartmentId) query.set("departmentId", filterDepartmentId);
 
             const res = await fetch(`/api/students?${query.toString()}`);
             if (res.ok) {
-                const studentsData = await res.json();
+                const result = await res.json();
+                const studentsToExport = Array.isArray(result) ? result : (result.data || []);
 
-                if (studentsData.length === 0) {
-                    setStatus({ type: "error", message: "No students found for the selected criteria." });
+                if (!studentsToExport || studentsToExport.length === 0) {
+                    setStatus({ type: "error", message: "No students found." });
                     setExportLoading(false);
-                    setIsExportModalOpen(false);
                     return;
                 }
 
-                const data = studentsData.map((s: any) => ({
+                const data = studentsToExport.map((s: any) => ({
                     "Roll Number": s.rollNumber,
                     "Name": s.name,
-                    "Mobile (Parent)": s.mobile,
-                    "Student Mobile": s.studentContactNumber || "",
+                    "Parent Mobile Number": s.mobile,
                     "Year": s.year,
                     "Semester": s.semester,
                     "Section": (typeof s.section === 'object' ? (s.section as any)?.name : s.section) || "",
                     "Department": (typeof s.department === 'object' ? (s.department as any)?.code : s.department) || "",
-                    "Hall Ticket": s.hallTicketNumber || "",
+                    "Hall Ticket Number": s.hallTicketNumber || "",
                     "EAMCET Rank": s.eamcetRank || "",
-                    "DOB": s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString() : "",
-                    "Email": s.emailId || "",
-                    "Aadhar": s.aadharNumber || "",
-                    "Address": s.address || ""
+                    "Date of Birth": s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString() : "",
+                    "Date of Reporting": s.dateOfReporting ? new Date(s.dateOfReporting).toLocaleDateString() : "",
+                    "Gender": s.gender || "",
+                    "Caste": s.caste || "",
+                    "Caste Name": s.casteName || "",
+                    "Category": s.category || "",
+                    "Admission Type": s.admissionType || "",
+                    "Father Name": s.fatherName || "",
+                    "Mother Name": s.motherName || "",
+                    "Address": s.address || "",
+                    "Student Contact Number": s.studentContactNumber || "",
+                    "Email ID": s.emailId || "",
+                    "Aadhar Number": s.aadharNumber || "",
+                    "ABC ID": s.abcId || "",
+                    "Reimbursement": s.reimbursement ? "Y" : "N",
+                    "Certificates Submitted": s.certificatesSubmitted ? "Y" : "N",
+                    "Domain Mail ID": s.domainMailId || "",
+                    "Batch Name": s.batchString || "", // Using batchString from DB if available
+                    "Is Detained": s.isDetained ? "Y" : "N",
+                    "Lateral Entry": s.isLateralEntry ? "Y" : "N"
+                    // Original batch not easily available in flat export unless joined, skipping for now or adding if critical
                 }));
 
                 const ws = XLSX.utils.json_to_sheet(data);
@@ -631,15 +783,15 @@ export default function StudentsPage() {
                 setIsExportModalOpen(false);
                 setStatus({ type: "success", message: "Export downloaded successfully." });
             } else {
-                setStatus({ type: "error", message: "Failed to fetch data for export." });
+                setStatus({ type: "error", message: "Failed to fetch export data." });
             }
         } catch (error) {
-            console.error(error);
-            setStatus({ type: "error", message: "Error during export." });
+            setStatus({ type: "error", message: "Export failed." });
         } finally {
             setExportLoading(false);
         }
     };
+
 
 
     return (
@@ -702,7 +854,7 @@ export default function StudentsPage() {
                         </button>
                     )}
 
-                    {selectedStudentIds.size > 0 && !["FACULTY", "USER"].includes((session?.user as any)?.role) && (
+                    {selectedStudentIds.size > 0 && (session?.user as any)?.role === "ADMIN" && (
                         <button
                             onClick={() => setIsBulkDeleteModalOpen(true)}
                             className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors"
@@ -758,8 +910,8 @@ export default function StudentsPage() {
                     <input
                         type="text"
                         placeholder="Search by Name or Roll Number..."
-                        value={searchQuery}
-                        onChange={(e) => updateFilters("q", e.target.value)}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 shadow-sm transition-all"
                     />
                 </div>
@@ -813,6 +965,7 @@ export default function StudentsPage() {
                                                         src={student.photoUrl}
                                                         alt={student.name}
                                                         fill
+                                                        sizes="40px"
                                                         className="object-cover"
                                                     />
                                                 ) : (
@@ -846,12 +999,21 @@ export default function StudentsPage() {
                                                         <FaEdit size={16} />
                                                     </button>
                                                     <button
-                                                        onClick={() => confirmDelete(student)}
-                                                        className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                        title="Delete"
+                                                        onClick={() => openSmsLogs(student.id)}
+                                                        className="rounded-md p-1.5 text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                                                        title="View SMS Absent Logs"
                                                     >
-                                                        <FaTrash size={16} />
+                                                        <FaLayerGroup size={16} />
                                                     </button>
+                                                    {(session?.user as any)?.role === "ADMIN" && (
+                                                        <button
+                                                            onClick={() => confirmDelete(student)}
+                                                            className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                                            title="Delete"
+                                                        >
+                                                            <FaTrash size={16} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
@@ -859,12 +1021,54 @@ export default function StudentsPage() {
                                 ))}
                             {!loading && filteredStudents.length === 0 && (
                                 <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                    {searchQuery ? "No matching students found" : "No students found"}
+                                    {searchTerm ? "No matching students found" : "No students found"}
                                 </td></tr>
                             )}
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="mt-4 flex flex-col items-center justify-between gap-4 sm:flex-row">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-600">Rows per page:</span>
+                    <select
+                        value={limit}
+                        onChange={(e) => setLimit(parseInt(e.target.value))}
+                        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500"
+                    >
+                        <option value="20">20</option>
+                        <option value="40">40</option>
+                        <option value="60">60</option>
+                        <option value="-1">All</option>
+                    </select>
+                    <span className="text-sm text-slate-500">
+                        {limit === -1 ? `Showing all ${total} students` : `Showing ${(page - 1) * limit + 1} - ${Math.min(page * limit, total)} of ${total}`}
+                    </span>
+                </div>
+
+                {limit !== -1 && (
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setPage(page - 1)}
+                            disabled={page === 1}
+                            className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Previous
+                        </button>
+                        <span className="text-sm font-medium text-slate-600">
+                            Page {page} of {Math.ceil(total / limit) || 1}
+                        </span>
+                        <button
+                            onClick={() => setPage(page + 1)}
+                            disabled={page * limit >= total}
+                            className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Next
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Add/Edit Modal */}
@@ -936,7 +1140,56 @@ export default function StudentsPage() {
                             </select>
                         </div>
                     </div>
-                    <div>
+
+                    {/* Lateral Entry Logic */}
+                    <div className="flex items-center gap-2 mt-4 ml-1">
+                        <input
+                            type="checkbox"
+                            checked={formData.isLateralEntry}
+                            onChange={(e) => setFormData({ ...formData, isLateralEntry: e.target.checked })}
+                            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                            id="isLateralEntryCheck"
+                        />
+                        <label htmlFor="isLateralEntryCheck" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
+                            Is Lateral Entry? (Starts from 2nd Year)
+                        </label>
+                    </div>
+
+                    {/* Detained Student Logic */}
+                    <div className="flex items-center gap-2 mt-4 ml-1">
+                        <input
+                            type="checkbox"
+                            checked={formData.isDetained}
+                            onChange={(e) => setFormData({ ...formData, isDetained: e.target.checked })}
+                            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                            id="isDetainedCheck"
+                        />
+                        <label htmlFor="isDetainedCheck" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
+                            Is Detained Student?
+                        </label>
+                    </div>
+
+                    {formData.isDetained && (
+                        <div className="mt-4 bg-red-50 p-4 rounded-md border border-red-100">
+                            <p className="text-xs text-red-600 mb-2">
+                                <strong>Note:</strong> Select the student's <strong>Current Operational Batch</strong> above.
+                                Below, select their <strong>Original Batch</strong> (when they first joined).
+                            </p>
+                            <label className="text-sm font-medium text-slate-700">Original Batch (History)</label>
+                            <select
+                                value={formData.originalBatchId}
+                                onChange={(e) => setFormData({ ...formData, originalBatchId: e.target.value })}
+                                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500"
+                            >
+                                <option value="">Select Original Batch</option>
+                                {batches.map((b: any) => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    <div className="mt-4">
                         <label className="text-sm font-medium text-slate-700">Regulation</label>
                         <select
                             value={formData.regulation}
@@ -946,6 +1199,19 @@ export default function StudentsPage() {
                             <option value="">Select Regulation</option>
                             {regulations.map((r: any) => (
                                 <option key={r.id} value={r.name}>{r.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-slate-700">Batch</label>
+                        <select
+                            value={formData.batchId}
+                            onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
+                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                        >
+                            <option value="">Select Batch (Optional)</option>
+                            {batches.map((b: any) => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
                             ))}
                         </select>
                     </div>
@@ -1156,6 +1422,25 @@ export default function StudentsPage() {
                     <p className="text-sm text-slate-600">Select criteria for student export. Year and Semester are mandatory.</p>
 
                     <div className="space-y-3">
+                        {["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD", "FACULTY"].includes((session?.user as any)?.role?.toUpperCase()) && (
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Department</label>
+                                <select
+                                    value={exportFilters.departmentId}
+                                    onChange={(e) => setExportFilters({ ...exportFilters, departmentId: e.target.value })}
+                                    className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white"
+                                // Disable data modification for non-admins if we wanted to lock it, but user requested options.
+                                // API restricts access anyway if they try to access other dept data (for HOD/Faculty).
+                                // For Admin, it allows selection.
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map((d: any) => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 mb-1">Year <span className="text-red-500">*</span></label>
                             <select
@@ -1188,9 +1473,42 @@ export default function StudentsPage() {
                                 className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white"
                             >
                                 <option value="">All Sections</option>
-                                {sections.map((s: any) => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
+                                {(() => {
+                                    // Dynamic filtering for modal
+                                    const selectedDeptId = exportFilters.departmentId;
+                                    let availableSections: any[] = [];
+
+                                    if (selectedDeptId) {
+                                        // Specific Department Selected
+                                        const selectedDept = departments.find(d => d.id === selectedDeptId);
+                                        if (selectedDept?.sections) {
+                                            // Sections belong to this department explicitly
+                                            availableSections = selectedDept.sections.map((s: any) => ({ ...s, _deptName: selectedDept.name }));
+                                        }
+                                    } else {
+                                        // All Departments Selected
+                                        // Flatten all sections from all departments and tag them
+                                        // Note: Same section ID might appear multiple times if shared (M-to-M), but we list them to be clear.
+                                        availableSections = departments.flatMap(d =>
+                                            (d.sections || []).map((s: any) => ({ ...s, _deptName: d.name }))
+                                        );
+                                    }
+
+                                    // Remove duplicates (by ID) IF validation suggests, but strict M-to-M implies context matters.
+                                    // However, for filter dropdown, user might just want unique section names?
+                                    // Actually, duplicate values in <select> is bad UX/invalid HTML.
+                                    // Let's unique by (id + dept) if showing all? 
+                                    // But since value is ID, duplicates are problematic.
+
+                                    // If we show duplicates with same ID, picking one picks all.
+                                    // Let's just list them.
+
+                                    return availableSections.map((s: any, idx: number) => (
+                                        <option key={`${s.id}-${idx}`} value={s.id}>
+                                            {s.name} {selectedDeptId ? "" : `(${s._deptName})`}
+                                        </option>
+                                    ));
+                                })()}
                             </select>
                         </div>
                     </div>
@@ -1242,6 +1560,73 @@ export default function StudentsPage() {
                                 <FaUser size={64} />
                             </div>
                         )}
+                    </div>
+                </div>
+            </Modal>
+            {/* SMS Logs Modal */}
+            <Modal
+                isOpen={isSmsLogModalOpen}
+                onClose={() => setIsSmsLogModalOpen(false)}
+                title="SMS Absent Logs"
+            >
+                <div className="space-y-4">
+                    {smsLogLoading ? (
+                        <div className="flex justify-center py-8">
+                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+                        </div>
+                    ) : smsLogData ? (
+                        <div>
+                            <div className="mb-4 rounded-md bg-slate-50 p-3">
+                                <p className="text-sm font-semibold text-slate-800">{smsLogData.student?.name}</p>
+                                <p className="text-xs text-slate-500">{smsLogData.student?.rollNumber}</p>
+                            </div>
+
+                            {smsLogData.absentDates.length === 0 ? (
+                                <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg border border-slate-100">
+                                    <p className="font-medium">No Absent Records</p>
+                                    <p className="text-xs mt-1">Student present for all SMS sessions.</p>
+                                </div>
+                            ) : (
+                                <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500 sticky top-0">
+                                            <tr>
+                                                <th className="px-4 py-2 border-b border-slate-200">Date</th>
+                                                <th className="px-4 py-2 border-b border-slate-200 text-right">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {smsLogData.absentDates.map((record: any) => (
+                                                <tr key={record.recordId} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-2 text-slate-700">
+                                                        {new Date(record.date).toLocaleDateString(undefined, {
+                                                            weekday: 'short',
+                                                            year: 'numeric',
+                                                            month: 'short',
+                                                            day: 'numeric'
+                                                        })}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right">
+                                                        <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">Absent</span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="text-center text-red-500">Failed to load data.</p>
+                    )}
+
+                    <div className="flex justify-end pt-2">
+                        <button
+                            onClick={() => setIsSmsLogModalOpen(false)}
+                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                        >
+                            Close
+                        </button>
                     </div>
                 </div>
             </Modal>

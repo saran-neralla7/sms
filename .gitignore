@@ -49,3 +49,24 @@ public/workbox-*.js
 # User Content
 public/student-photos/
 backup.sql
+
+# Backups and Scripts
+*.log
+*.sh
+backups/
+backup_status.json
+test_log.js
+debug*.ts
+debug*.js
+reset*.js
+fix*.js
+check*.js
+seed*.js
+verify*.js
+assign*.js
+force*.js
+migrate*.js
+remove*.js
+update_academic_year.js
+scripts/
+BACKUP_GUIDE.md

@@ -14,54 +14,51 @@ export async function GET(
 
     try {
         const { id } = await params;
-        const url = new URL(request.url);
-        const startDate = url.searchParams.get("startDate");
-        const endDate = url.searchParams.get("endDate");
 
-        // 1. Fetch Student Details
+        // Fetch Student
         const student = await prisma.student.findUnique({
-            where: { id },
-            include: {
-                section: true,
-                department: true,
-                subjects: true, // Include enrolled electives
-            }
+            where: { id: id }, // Assuming ID is UUID. If rollNumber passed as ID, adjust. Current route is [id], usually ID.
+            include: { department: true }
         });
 
         if (!student) {
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
         }
 
-        // 2. Fetch All Subjects for this Student's Context
+        const url = new URL(request.url);
+        const startDate = url.searchParams.get("startDate");
+        const endDate = url.searchParams.get("endDate");
+        const targetYear = url.searchParams.get("year") || student.year;
+        const targetSemester = url.searchParams.get("semester") || student.semester;
+
+        // 2. Fetch All Subjects for this Student's Context (Current or Past)
         let subjects = await prisma.subject.findMany({
             where: {
-                year: student.year,
-                semester: student.semester,
+                year: targetYear,
+                semester: targetSemester,
                 departmentId: student.departmentId
             }
         });
 
-        // Filter out non-selected Electives
-        // If subject is ELECTIVE (PE/OE), only show if student is enrolled
-        subjects = subjects.filter(sub => {
-            const isElective = ["PROFESSIONAL_ELECTIVE", "OPEN_ELECTIVE", "ELECTIVE"].includes(sub.type);
-            if (isElective) {
-                // Check if student has this subject in their enrolled list
-                return student.subjects.some(enrolled => enrolled.id === sub.id);
-            }
-            return true; // Always show Core subjects
-        });
+        // ... sub filtering ...
 
         const subjectMap = new Map<string, string>();
         subjects.forEach(s => subjectMap.set(s.id, s.name));
 
         // 3. Build Where Clause
+        // If we are looking at the current year/sem, we can optimize with sectionId.
+        // If looking at past, we ignore sectionId to account for section changes/merges.
+        const isCurrentContext = targetYear === student.year && targetSemester === student.semester;
+
         const whereClause: any = {
-            year: student.year,
-            semester: student.semester,
-            sectionId: student.sectionId,
+            year: targetYear,
+            semester: targetSemester,
             departmentId: student.departmentId,
         };
+
+        if (isCurrentContext) {
+            whereClause.sectionId = student.sectionId;
+        }
 
         if (startDate && endDate) {
             whereClause.date = {
@@ -74,7 +71,8 @@ export async function GET(
         const attendanceRecords = await prisma.attendanceHistory.findMany({
             where: {
                 ...whereClause,
-                user: { role: { not: "USER" } } // Exclude SMS/Notification attendance
+                user: { role: { not: "USER" } }, // Exclude SMS/Notification attendance (redundant if using type, but safe)
+                type: "ACADEMIC"
             },
             include: {
                 subject: true
@@ -116,6 +114,8 @@ export async function GET(
 
             // Parse Details
             let isPresent = false;
+            let recordAppliesToStudent = false;
+
             try {
                 const details = JSON.parse(record.details);
                 const studentRecord = details.find((d: any) =>
@@ -124,21 +124,90 @@ export async function GET(
                 );
 
                 if (studentRecord) {
+                    recordAppliesToStudent = true;
+                    // Check status
                     const status = String(studentRecord["Status"] || studentRecord["status"]).toLowerCase();
                     if (status === "present") {
                         isPresent = true;
                     }
+                } else {
+                    // Student not in list. 
+                    // Case: Record is type "Marked Absent" (Only absentees saved).
+                    // If so, student is implied Present.
+                    // Note: 'status' field on record tells us the mode.
+                    if (record.status === "Marked Absent") {
+                        recordAppliesToStudent = true;
+                        isPresent = true;
+                    }
+                    // Else: "Manual Save" or "Marked Present" (Full list saved).
+                    // If missing from full list, they were not part of this class (e.g. Lab Batch or Wrong Dept).
+                    // keep recordAppliesToStudent = false
                 }
             } catch (e) {
-                // Ignore parse errors
+                // Ignore parse errors, assume doesn't apply? Or count as total but not present?
+                // Safer to ignore to prevent inflation.
             }
 
-            subjectStats[key].total++;
-            if (isPresent) subjectStats[key].attended++;
+            if (recordAppliesToStudent) {
+                subjectStats[key].total++;
+                if (isPresent) subjectStats[key].attended++;
 
-            overallTotal++;
-            if (isPresent) overallAttended++;
+                overallTotal++;
+                if (isPresent) overallAttended++;
+            }
         }
+
+        // 6. Calculate Monthly Trend
+        const monthlyStats: Record<string, { total: number; attended: number; date: Date }> = {};
+
+        for (const record of attendanceRecords) {
+            const date = new Date(record.date);
+            const monthKey = `${date.getFullYear()}-${date.getMonth()}`; // e.g. "2025-0" for Jan 2025
+
+            if (!monthlyStats[monthKey]) {
+                monthlyStats[monthKey] = { total: 0, attended: 0, date: date };
+            }
+
+            // Re-check student status for this record (optimization: could store earlier)
+            let isPresent = false;
+            let recordAppliesToStudent = false;
+
+            try {
+                const details = JSON.parse(record.details);
+                const studentRecord = details.find((d: any) =>
+                    d["Roll Number"] === student.rollNumber ||
+                    d["rollNumber"] === student.rollNumber
+                );
+
+                if (studentRecord) {
+                    recordAppliesToStudent = true;
+                    const status = String(studentRecord["Status"] || studentRecord["status"]).toLowerCase();
+                    if (status === "present") isPresent = true;
+                } else {
+                    if (record.status === "Marked Absent") {
+                        recordAppliesToStudent = true;
+                        isPresent = true;
+                    }
+                }
+            } catch (e) { }
+
+            if (recordAppliesToStudent) {
+                monthlyStats[monthKey].total++;
+                if (isPresent) monthlyStats[monthKey].attended++;
+            }
+        }
+
+        const monthlyTrend = Object.values(monthlyStats)
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+            .map(stat => {
+                const percentage = stat.total > 0 ? Math.round((stat.attended / stat.total) * 100) : 0;
+                return {
+                    month: stat.date.toLocaleString('default', { month: 'short', year: 'numeric' }), // "Jan 2025"
+                    percentage,
+                    total: stat.total,
+                    attended: stat.attended
+                };
+            });
 
         // Format Response
         const subjectList = Object.values(subjectStats).map(stat => ({
@@ -158,7 +227,8 @@ export async function GET(
                 attended: overallAttended,
                 percentage: overallPercentage
             },
-            subjects: subjectList
+            subjects: subjectList,
+            monthlyTrend
         });
 
     } catch (error) {

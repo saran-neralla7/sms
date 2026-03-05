@@ -129,40 +129,42 @@ export default function RegulationsPage() {
             </div>
 
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/50">
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Regulation Name</th>
-                            <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {loading ? (
-                            <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
-                        ) : regulations.length === 0 ? (
-                            <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500">No regulations found.</td></tr>
-                        ) : (
-                            regulations.map(reg => (
-                                <tr key={reg.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">{reg.name}</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-3">
-                                            <button onClick={() => openEditModal(reg)} className="text-slate-400 hover:text-blue-600 transition-colors">
-                                                <FaEdit size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => { setRegulationToDelete(reg); setIsDeleteModalOpen(true); }}
-                                                className="text-slate-400 hover:text-red-600 transition-colors"
-                                            >
-                                                <FaTrash size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-slate-200 bg-slate-50/50">
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500">Regulation Name</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase text-slate-500 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {loading ? (
+                                <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
+                            ) : regulations.length === 0 ? (
+                                <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-500">No regulations found.</td></tr>
+                            ) : (
+                                regulations.map(reg => (
+                                    <tr key={reg.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 text-sm font-medium text-slate-900">{reg.name}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-3">
+                                                <button onClick={() => openEditModal(reg)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                                                    <FaEdit size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => { setRegulationToDelete(reg); setIsDeleteModalOpen(true); }}
+                                                    className="text-slate-400 hover:text-red-600 transition-colors"
+                                                >
+                                                    <FaTrash size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingRegulation ? "Edit Regulation" : "Add Regulation"}>

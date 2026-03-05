@@ -27,6 +27,8 @@ export async function GET(request: Request) {
         end.setHours(23, 59, 59); // Include the entire end date
 
         // 1. Fetch History Records for the range
+        console.log(`[DEBUG REPORT] Fetching consolidated. Dept: ${departmentId}, Sec: ${sectionId}, Sem: ${semester}, Start: ${start.toISOString()}, End: ${end.toISOString()}`);
+
         const history = await prisma.attendanceHistory.findMany({
             where: {
                 semester,
@@ -36,14 +38,18 @@ export async function GET(request: Request) {
                 date: {
                     gte: start,
                     lte: end
-                }
+                },
+                type: "ACADEMIC" // Exclude SMS logs
             },
             select: {
+                id: true,
                 details: true,
                 date: true,
                 status: true
             }
         });
+
+        console.log(`[DEBUG REPORT] Found ${history.length} records.`);
 
         // 2. Aggregate Data
         const studentStats: Record<string, {
@@ -55,21 +61,46 @@ export async function GET(request: Request) {
             absent: number
         }> = {};
 
-        // If no classes happened, we might still want to list students? 
-        // For now, let's build from history to ensure we only count students who were actually part of the class.
-        // Alternatively, fetch all students in section to show 0/0 for those never marked? 
-        // Let's stick to history first for accuracy of "what happened". 
-        // Actually, better to fetch current students to ensure everyone is listed.
-
-        const students = await prisma.student.findMany({
-            where: {
-                year,
-                semester,
-                sectionId,
-                departmentId: departmentId || undefined
-            },
-            select: { id: true, rollNumber: true, name: true }
+        // Extract Roll Numbers involved in this history
+        const activeRollNumbers = new Set<string>();
+        history.forEach(record => {
+            try {
+                const details = JSON.parse(record.details);
+                details.forEach((s: any) => {
+                    const roll = s["Roll Number"] || s["rollNumber"];
+                    if (roll) activeRollNumbers.add(roll);
+                });
+            } catch (e) { }
         });
+
+        let students;
+        if (activeRollNumbers.size > 0) {
+            // Case A: Historical Report - Fetch students who were actually in the logs
+            // BUT filter by the selected Department/Year/Sem to exclude "rogue" records from other depts (Shared Section IDs)
+            students = await prisma.student.findMany({
+                where: {
+                    rollNumber: { in: Array.from(activeRollNumbers) },
+                    departmentId: departmentId || undefined,
+                    year: year || undefined,
+                    semester: semester || undefined,
+                    sectionId: sectionId || undefined
+                },
+                select: { id: true, rollNumber: true, name: true },
+                orderBy: { rollNumber: "asc" }
+            });
+        } else {
+            // Case B: No Logs (Empty Report) - Fallback to current students matches
+            students = await prisma.student.findMany({
+                where: {
+                    year,
+                    semester,
+                    sectionId,
+                    departmentId: departmentId || undefined
+                },
+                select: { id: true, rollNumber: true, name: true },
+                orderBy: { rollNumber: "asc" }
+            });
+        }
 
         // Initialize everyone with 0
         students.forEach(s => {
@@ -83,18 +114,21 @@ export async function GET(request: Request) {
             };
         });
 
-        history.forEach(record => {
+        history.forEach((record, index) => {
             try {
                 const details = JSON.parse(record.details);
                 // details is either Full List (Manual Save) or Partial List (Marked Absent)
                 // We must map it for quick lookup
                 const recordStatusMap = new Map<string, string>();
                 details.forEach((s: any) => {
-                    recordStatusMap.set(s["Roll Number"], s["Status"]);
+                    // normalize keys: manual uses camelCase, bulk/old uses Title Case
+                    const roll = s["Roll Number"] || s["rollNumber"];
+                    const status = s["Status"] || s["status"];
+                    if (roll) recordStatusMap.set(roll, status);
                 });
 
                 // Iterate over ALL students in the section to update their stats for this record
-                Object.values(studentStats).forEach(stat => {
+                Object.values(studentStats).forEach((stat, sIdx) => {
                     const roll = stat.rollNumber;
 
                     // Increment total classes for everyone since the class happened for the section
@@ -103,7 +137,7 @@ export async function GET(request: Request) {
                     if (recordStatusMap.has(roll)) {
                         // Explicit status found
                         const status = recordStatusMap.get(roll);
-                        if (status === "Present") {
+                        if (status === "Present" || status === "present") {
                             stat.present += 1;
                         } else {
                             stat.absent += 1;

@@ -21,6 +21,17 @@ export async function GET(request: Request) {
     const sectionId = searchParams.get("sectionId");
     const sectionIds = searchParams.get("sectionIds"); // Comma separated
 
+    const page = parseInt(searchParams.get("page") || "1");
+    const limitParam = searchParams.get("limit");
+    // If limit is not provided, default to 20. If provided, parse it.
+    // If limit is -1, it means "All", so we set effectively infinite or handle logic.
+    const limit = limitParam ? parseInt(limitParam) : 20;
+
+    // Pagination Logic
+    const isAll = limit === -1;
+    const skip = isAll ? 0 : (page - 1) * limit;
+    const take = isAll ? undefined : limit;
+
     const where: any = {};
     if (year) where.year = year;
     if (semester) where.semester = semester;
@@ -31,42 +42,85 @@ export async function GET(request: Request) {
         where.sectionId = sectionId;
     }
 
+    const batchId = searchParams.get("batchId");
+    if (batchId) {
+        where.batchId = batchId;
+    }
+
+    // Search Query Support (Server-Side)
+    const searchQuery = searchParams.get("q");
+    if (searchQuery) {
+        where.OR = [
+            { name: { contains: searchQuery, mode: "insensitive" } },
+            { rollNumber: { contains: searchQuery, mode: "insensitive" } }
+        ];
+    }
+
     // Scoping
     const userRole = (session.user as any).role;
     const userDeptId = (session.user as any).departmentId;
     const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole);
 
-    if (!isGlobalAdmin) {
-        // If Role is User/Faculty/HOD, they must have a department
-        // However, USER role (student) might effectively catch all? 
-        // Wait, USER role usually doesn't have dept ID in session? 
-        // Logic: if not global admin, STRICTLY filter by user's department.
+    const queryDeptId = searchParams.get("departmentId");
 
-        if (!userDeptId) {
-            // If a Faculty/User/HOD has no department, they can't see anything.
-            // or maybe we return empty list?
-            return NextResponse.json({ error: "User has no department assigned" }, { status: 403 });
-        }
-        where.departmentId = userDeptId;
+    if (queryDeptId) {
+        // If explicitly requested, use it (Allowed for all roles now to support BSH/Cross-dept attendance)
+        where.departmentId = queryDeptId;
     } else {
-        // Global Admin can filter by dept if passed
-        const departmentId = searchParams.get("departmentId");
-        if (departmentId) where.departmentId = departmentId;
+        // Default behavior if no department specified
+        if (isGlobalAdmin) {
+            // Admin sees all if no filter
+        } else {
+            // Faculty/HOD defaults to their own department
+            if (userDeptId) {
+                where.departmentId = userDeptId;
+            } else {
+                return NextResponse.json({ error: "User has no department assigned" }, { status: 403 });
+            }
+        }
     }
 
     const includeSubjects = searchParams.get("includeSubjects") === "true";
 
+    // DEBUG: Log filters
+    console.log("FETCH STUDENTS DEBUG:", {
+        year,
+        semester,
+        sectionId,
+        departmentId: where.departmentId,
+        batchId,
+        searchQuery
+    });
+
     try {
-        const students = await prisma.student.findMany({
-            where,
-            include: {
-                section: true,
-                department: true,
-                subjects: includeSubjects ? { select: { id: true } } : false
-            },
-            orderBy: { rollNumber: "asc" },
+        console.log("FINAL WHERE:", JSON.stringify(where, null, 2));
+
+        const [total, students] = await prisma.$transaction([
+            prisma.student.count({ where }),
+            prisma.student.findMany({
+                where,
+                include: {
+                    section: true,
+                    department: true,
+                    subjects: includeSubjects ? { select: { id: true } } : false
+                },
+                orderBy: { rollNumber: "asc" },
+                skip,
+                take,
+            })
+        ]);
+
+        console.log(`FOUND ${total} STUDENTS`);
+
+        return NextResponse.json({
+            data: students,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: isAll ? 1 : Math.ceil(total / limit)
+            }
         });
-        return NextResponse.json(students);
     } catch (error) {
         console.error(error);
         return NextResponse.json({ error: "Failed to fetch students" }, { status: 500 });
@@ -133,6 +187,8 @@ export async function POST(request: Request) {
                     sectionId: body.sectionId,
                     departmentId: body.departmentId,
                     regulationId: regulationId,
+                    batchId: body.batchId || null,
+                    isLateralEntry: body.isLateralEntry || false,
                     // Extended Fields
                     hallTicketNumber: body.hallTicketNumber || null,
                     eamcetRank: body.eamcetRank || null,
@@ -168,6 +224,10 @@ export async function POST(request: Request) {
                     sectionId: body.sectionId,
                     departmentId: body.departmentId,
                     regulationId: regulationId,
+                    batchId: body.batchId || null,
+                    isDetained: body.isDetained || false,
+                    isLateralEntry: body.isLateralEntry || false,
+                    originalBatchId: body.originalBatchId || null,
                     // Extended Fields
                     hallTicketNumber: body.hallTicketNumber || null,
                     eamcetRank: body.eamcetRank || null,
@@ -191,6 +251,24 @@ export async function POST(request: Request) {
                 },
             });
             action = "created";
+        }
+
+        // Audit Log
+        const performerId = session.user.id;
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    action: action === "created" ? "CREATE" : "UPDATE",
+                    entity: "Student",
+                    entityId: result.rollNumber, // Using RollNo as ID reference for readability or result.id
+                    details: JSON.stringify({ rollNumber: result.rollNumber, name: result.name, departmentId: result.departmentId }),
+                    performedBy: performerId
+                }
+            });
+        } catch (logError) {
+            console.error("Failed to create audit log", logError);
+            // Don't fail the request just because logging failed? 
+            // Strict audit requirements would say YES, fail. But for now let's just log error.
         }
 
         return NextResponse.json({ ...result, action }); // Return action status

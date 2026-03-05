@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 
 // ... imports
 
+import { cookies } from "next/headers";
+
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -21,29 +23,38 @@ export async function GET(request: Request) {
         const userRole = session.user.role;
         const userId = session.user.id;
 
+        // Academic Year Filter
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+
+        if (!academicYearId) {
+            const currentYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+            if (currentYear) academicYearId = currentYear.id;
+        }
+
+        // Search logic...
+
         let whereClause: any = {
+            academicYearId: academicYearId || undefined,
             year: year || undefined,
             semester: semester || undefined,
             sectionId: sectionId || undefined,
             departmentId: departmentId || undefined,
         };
 
-        if (userRole === "USER") {
-            // USER: Strictly sees ONLY what they uploaded (SMS History)
+        if (userRole === "SMS_USER" || userRole === "FACULTY") {
+            // SMS_USER & FACULTY: Strictly sees ONLY what they uploaded
             whereClause.downloadedBy = userId;
         } else {
-            // ACADEMIC (Admin/HOD/Faculty): 
-            // 1. See Academic Attendance (NOT marked by USER role)
-            // 2. Filter by Dept if HOD
-
+            // ACADEMIC (Admin/HOD): 
             const mode = searchParams.get("mode");
 
-            if (mode === "sms" && userRole === "ADMIN") {
-                // View SMS Log History (attendance marked by USER role)
-                whereClause.user = { role: "USER" };
+            if (mode === "sms") {
+                // View SMS Log History
+                whereClause.type = "SMS";
             } else {
-                // Default: View Academic Attendance (NOT marked by USER role)
-                whereClause.user = { role: { not: "USER" } };
+                // Default: View Academic Attendance
+                whereClause.type = "ACADEMIC";
             }
 
             if (userRole === "HOD") {
@@ -55,8 +66,6 @@ export async function GET(request: Request) {
                     whereClause.departmentId = userProfile.departmentId;
                 }
             }
-            // FACULTY can see all academic history or just their own? 
-            // Usually academic history is open to Staff. Let's keep it open for now but excluding 'USER' SMS logs.
         }
 
         const history = await prisma.attendanceHistory.findMany({

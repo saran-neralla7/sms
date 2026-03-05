@@ -47,13 +47,17 @@ export default function ElectivesPage() {
 
     const fetchDepartments = async () => {
         const res = await fetch("/api/departments");
-        if (res.ok) setDepartments(await res.json());
+        if (res.ok) {
+            const json = await res.json();
+            setDepartments(Array.isArray(json) ? json : (json.data || []));
+        }
     };
 
     const fetchSubjects = async () => {
-        const res = await fetch(`/api/subjects?departmentId=${departmentId}&year=${year}&semester=${semester}`);
+        const res = await fetch(`/api/subjects?departmentId=${departmentId}&year=${year}&semester=${semester}&limit=-1`);
         if (res.ok) {
-            const allSubjects = await res.json();
+            const json = await res.json();
+            const allSubjects = Array.isArray(json) ? json : (json.data || []);
             // Filter all ELECTIVE types
             setSubjects(allSubjects.filter((s: any) =>
                 ["ELECTIVE", "PROFESSIONAL_ELECTIVE", "OPEN_ELECTIVE"].includes(s.type)
@@ -62,8 +66,11 @@ export default function ElectivesPage() {
     };
 
     const fetchSections = async () => {
-        const res = await fetch(`/api/sections?departmentId=${departmentId}`);
-        if (res.ok) setSections(await res.json());
+        const res = await fetch(`/api/sections?departmentId=${departmentId}&limit=-1`);
+        if (res.ok) {
+            const json = await res.json();
+            setSections(Array.isArray(json) ? json : (json.data || []));
+        }
     };
 
     const fetchStudentsAndEnrollment = async () => {
@@ -71,10 +78,11 @@ export default function ElectivesPage() {
         try {
             const sectionIdsStr = Array.from(selectedSectionIds).join(",");
             // Fetch All Students in sections
-            const studentsRes = await fetch(`/api/students?departmentId=${departmentId}&year=${year}&semester=${semester}&sectionIds=${sectionIdsStr}&includeSubjects=true`);
+            const studentsRes = await fetch(`/api/students?departmentId=${departmentId}&year=${year}&semester=${semester}&sectionIds=${sectionIdsStr}&includeSubjects=true&limit=-1`);
 
             if (studentsRes.ok) {
-                const studentsData = await studentsRes.json();
+                const resJson = await studentsRes.json();
+                const studentsData = Array.isArray(resJson) ? resJson : (resJson.data || []);
                 setStudents(studentsData);
 
                 // Determine who is already enrolled in THIS subject
@@ -151,8 +159,11 @@ export default function ElectivesPage() {
     };
 
     const filteredStudents = students.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-            s.rollNumber.toLowerCase().includes(search.toLowerCase());
+        const name = s.name || "";
+        const roll = s.rollNumber || "";
+        const searchTerm = search.toLowerCase();
+        const matchesSearch = name.toLowerCase().includes(searchTerm) ||
+            roll.toLowerCase().includes(searchTerm);
         const matchesEnrollment = showEnrolledOnly ? enrolledStudentIds.has(s.id) : true;
         return matchesSearch && matchesEnrollment;
     });

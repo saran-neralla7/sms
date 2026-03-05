@@ -777,12 +777,16 @@ export default function ReportsPage() {
                                                         </button>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <button onClick={() => openEditModal(record)} className="mr-3 text-blue-600 hover:text-blue-800" title="Edit">
-                                                            <FaEdit />
-                                                        </button>
-                                                        <button onClick={() => { setRecordToDelete(record); setIsDeleteModalOpen(true); }} className="text-red-600 hover:text-red-800" title="Delete">
-                                                            <FaTrash />
-                                                        </button>
+                                                        {["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes((session?.user?.role || "").toUpperCase()) && (
+                                                            <>
+                                                                <button onClick={() => openEditModal(record)} className="mr-3 text-blue-600 hover:text-blue-800" title="Edit">
+                                                                    <FaEdit />
+                                                                </button>
+                                                                <button onClick={() => { setRecordToDelete(record); setIsDeleteModalOpen(true); }} className="text-red-600 hover:text-red-800" title="Delete">
+                                                                    <FaTrash />
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}

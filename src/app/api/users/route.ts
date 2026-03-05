@@ -97,8 +97,14 @@ export async function DELETE(request: Request) {
         });
 
         return NextResponse.json({ message: "Users deleted successfully" });
-    } catch (error) {
-        console.error(error);
+    } catch (error: any) {
+        console.error("Delete Error:", error);
+        // P2003 is Prisma's error for Foreign Key Constraint Violation
+        if (error.code === 'P2003' || error.message?.includes('violates RESTRICT setting')) {
+            return NextResponse.json({
+                error: "Cannot delete users who have linked data (e.g., downloaded attendance, faculty records). Please deactivate the user or remove linked data first."
+            }, { status: 400 });
+        }
         return NextResponse.json({ error: "Failed to delete users" }, { status: 500 });
     }
 }
