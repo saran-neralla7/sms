@@ -24,6 +24,9 @@ export default function ExamApplicationPage() {
     const [activeSemesters, setActiveSemesters] = useState<SemesterData[]>([]);
     const [expandedSemester, setExpandedSemester] = useState<string | null>(null);
 
+    const [editModalAppId, setEditModalAppId] = useState<string | null>(null);
+    const [editReason, setEditReason] = useState("");
+
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [existingApps, setExistingApps] = useState<any[]>([]);
@@ -123,88 +126,166 @@ export default function ExamApplicationPage() {
         });
     };
 
-    const generatePDF = (submittedApps: any[]) => {
+    const handleEditRequest = async (appId: string, reason: string) => {
+        try {
+            const res = await fetch(`/api/exam-applications/${appId}/edit-request`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reason })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setExistingApps(prev => prev.map(a => a.id === appId ? data.application : a));
+                alert("Edit request submitted successfully. Please wait for office approval.");
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to request edit");
+            }
+        } catch (err) {
+            alert("Something went wrong");
+        }
+    };
+
+    const generatePDF = async (submittedApps: any[]) => {
         if (!submittedApps || submittedApps.length === 0) return;
         
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
+        try {
+            const getImageType = (base64: string) => {
+                if (base64.startsWith("data:image/png")) return "PNG";
+                if (base64.startsWith("data:image/webp")) return "WEBP";
+                return "JPEG";
+            };
 
-        // Header
-        doc.setFontSize(18);
-        doc.setFont("helvetica", "bold");
-        doc.text("GVPCDPGC(A)", pageWidth / 2, 20, { align: "center" });
-        doc.setFontSize(14);
-        doc.text("Exam Application Receipt", pageWidth / 2, 30, { align: "center" });
-
-        doc.setDrawColor(200);
-        doc.line(15, 35, pageWidth - 15, 35);
-
-        // Student Info
-        doc.setFontSize(11);
-        let y = 45;
-        const app1 = submittedApps[0]; // Use first for general info
-        
-        const addRow = (label: string, value: string) => {
-            doc.setFont("helvetica", "bold");
-            doc.text(label + ":", 20, y);
-            doc.setFont("helvetica", "normal");
-            doc.text(value, 60, y);
-            y += 8;
-        };
-
-        addRow("Name", student?.name || app1.rollNumber);
-        addRow("Roll Number", app1.rollNumber);
-        addRow("Department", app1.department);
-        addRow("Date", new Date().toLocaleDateString("en-IN"));
-
-        y += 5;
-        doc.line(15, y, pageWidth - 15, y);
-        y += 10;
-
-        // Applications per semester
-        submittedApps.forEach((app, idx) => {
-            if (y > 250) {
-                doc.addPage();
-                y = 20;
+            let logoBase64: string | null = null;
+            try {
+                const res = await fetch("/logo.png");
+                const blob = await res.blob();
+                logoBase64 = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
+            } catch(e) { console.error("Could not load logo", e); }
+            
+            let photoBase64: string | null = null;
+            if (student?.photoUrl) {
+                try {
+                    const res = await fetch(student.photoUrl);
+                    const blob = await res.blob();
+                    photoBase64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.readAsDataURL(blob);
+                    });
+                } catch(e) { console.error("Could not load photo", e); }
             }
+
+            const doc = new jsPDF();
+            const pageWidth = doc.internal.pageSize.getWidth();
+
+            // Applications per semester
+            submittedApps.forEach((app, idx) => {
+                if (idx > 0) doc.addPage();
+                
+                let y = 15;
+                
+                // Header
+                if (logoBase64) {
+                   try { doc.addImage(logoBase64, getImageType(logoBase64), 15, y, 22, 22); } catch(e) { console.warn("Failed to add logo to PDF"); }
+                }
+                
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", 42, y + 6, { align: "left" });
+                doc.setFontSize(12);
+                doc.text("ENGINEERING AND TECHNOLOGY PROGRAM", 42, y + 13, { align: "left" });
+                doc.text("RUSHIKONDA, VISAKHAPATNAM", 42, y + 20, { align: "left" });
+                
+                y += 30;
+                doc.setDrawColor(200);
+                doc.line(15, y, pageWidth - 15, y);
+                y += 10;
+                
+                doc.setFontSize(14);
+                doc.text("Exam Application Form", pageWidth / 2, y, { align: "center" });
+                y += 15;
+
+                // Student Info
+                doc.setFontSize(11);
+                
+                // Photo placement
+                if (photoBase64) {
+                    try { doc.addImage(photoBase64, getImageType(photoBase64), pageWidth - 45, y, 30, 40); } catch(e) { console.warn("Failed to add photo to PDF"); }
+                } else {
+                    doc.rect(pageWidth - 45, y, 30, 40);
+                    doc.setFontSize(8);
+                    doc.text("Affix Photo", pageWidth - 30, y + 20, { align: "center" });
+                    doc.setFontSize(11);
+                }
+
+            const addRow = (label: string, value: string) => {
+                doc.setFont("helvetica", "bold");
+                doc.text(label + ":", 15, y);
+                doc.setFont("helvetica", "normal");
+                doc.text(value, 50, y);
+                y += 8;
+            };
+
+            addRow("Name", student?.name || app.rollNumber);
+            addRow("Roll Number", app.rollNumber);
+            addRow("Department", app.department);
+            addRow("Date", new Date().toLocaleDateString("en-IN"));
+            addRow("Year", app.year);
+            addRow("Semester", app.semester);
+            
+            y = Math.max(y + 10, y - (8 * 6) + 40 + 10); // ensure we clear photo height
+            
+            doc.line(15, y, pageWidth - 15, y);
+            y += 10;
 
             doc.setFontSize(12);
             doc.setFont("helvetica", "bold");
-            doc.text(`Year ${app.year} - Semester ${app.semester}`, 20, y);
-            y += 7;
-
+            doc.text("Payment Details", 15, y);
+            y += 8;
+            
             doc.setFontSize(10);
             doc.setFont("helvetica", "normal");
-            doc.text(`UTR Number: ${app.utrNumber}`, 25, y);
+            doc.text(`UTR Number: ${app.utrNumber}`, 20, y);
             y += 6;
-            doc.text(`Amount Paid: ₹${app.amountPaid || "0"}`, 25, y);
-            y += 6;
-            doc.text(`Status: ${app.status}`, 25, y);
-            y += 8;
+            doc.text(`Amount Paid: ₹${app.amountPaid || "0"}`, 20, y);
+            y += 12;
 
+            doc.setFontSize(12);
             doc.setFont("helvetica", "bold");
-            doc.text("Subjects:", 25, y);
-            y += 6;
+            doc.text("Subjects Applied:", 15, y);
+            y += 8;
             
+            doc.setFontSize(10);
             doc.setFont("helvetica", "normal");
             (app.subjects || []).forEach((s: any) => {
                 const name = s.subject?.name || s.subjectId;
                 const code = s.subject?.code || "";
-                doc.text(`• ${code} - ${name}`, 30, y);
+                doc.text(`• ${code} - ${name}`, 20, y);
                 y += 6;
             });
-            y += 5;
+
+            // Signatures at the bottom
+            const pageHeight = doc.internal.pageSize.getHeight();
+            y = pageHeight - 30; // 30 units from bottom
+            
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10);
+            doc.text("Signature of student", 15, y);
+            doc.text("Signature of Mentor", pageWidth / 2, y, { align: "center" });
+            doc.text("Signature of HOD", pageWidth - 15, y, { align: "right" });
         });
 
-        y += 5;
-        doc.setDrawColor(200);
-        doc.line(15, y, pageWidth - 15, y);
-        y += 8;
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        doc.text("This is a system-generated receipt. Please submit a xerox copy of the transaction screenshot in the office.", 20, y);
-
-        doc.save(`exam_receipt_${app1.rollNumber}.pdf`);
+            const app1 = submittedApps[0];
+            doc.save(`exam_receipt_${app1.rollNumber}.pdf`);
+        } catch (error) {
+            console.error("PDF Generation Error:", error);
+            alert("Failed to generate PDF. Please try again.");
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -298,10 +379,19 @@ export default function ExamApplicationPage() {
                                             {app.status === "REJECTED" && <FaTimesCircle className="text-red-600" size={16} />}
                                             {app.status === "PENDING" && <FaClock className="text-yellow-600" size={16} />}
                                             <span className="font-bold text-slate-800 text-sm">Year {app.year} - Sem {app.semester}</span>
+                                            {app.editRequested && (
+                                                <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-0.5 rounded-full ml-1">Edit Requested</span>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-4">
                                             <span className="text-xs font-semibold text-slate-600">{app.status}</span>
-                                            <button onClick={() => generatePDF([app])} className="text-red-600 hover:text-red-800" title="Download Receipt"><FaDownload /></button>
+                                            {!app.editRequested && (
+                                                <button type="button" onClick={() => {
+                                                    setEditReason("");
+                                                    setEditModalAppId(app.id);
+                                                }} className="text-xs text-slate-400 hover:text-slate-800 underline">Request Edit</button>
+                                            )}
+                                            <button type="button" onClick={() => generatePDF([app])} className="text-red-600 hover:text-red-800" title="Download Receipt"><FaDownload /></button>
                                         </div>
                                     </div>
                                     <div className="p-4 text-sm grid sm:grid-cols-2 gap-4">
@@ -318,6 +408,11 @@ export default function ExamApplicationPage() {
                                         {app.remarks && (
                                             <div className="sm:col-span-2 rounded bg-red-50 p-2 text-xs text-red-700 border border-red-100">
                                                 <strong>Remarks:</strong> {app.remarks}
+                                            </div>
+                                        )}
+                                        {app.editRequested && app.editRequestReason && (
+                                            <div className="sm:col-span-2 rounded bg-orange-50 p-2 text-xs text-orange-700 border border-orange-100">
+                                                <strong>Edit Reason:</strong> {app.editRequestReason}
                                             </div>
                                         )}
                                     </div>
@@ -478,6 +573,44 @@ export default function ExamApplicationPage() {
                         </form>
                     </div>
                 )}
+
+                {/* Edit Request Modal */}
+                <AnimatePresence>
+                    {editModalAppId && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditModalAppId(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+                                <h3 className="mb-2 text-lg font-bold text-slate-900">Request Edit</h3>
+                                <p className="mb-4 text-sm text-slate-500">Please provide a reason for editing this application.</p>
+                                <textarea
+                                    value={editReason}
+                                    onChange={e => setEditReason(e.target.value)}
+                                    rows={3}
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                                    placeholder="e.g., I selected the wrong elective subject..."
+                                />
+                                <div className="mt-6 flex justify-end gap-3">
+                                    <button onClick={() => setEditModalAppId(null)} className="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            if (editReason.trim()) {
+                                                handleEditRequest(editModalAppId, editReason);
+                                                setEditModalAppId(null);
+                                                setEditReason("");
+                                            }
+                                        }} 
+                                        disabled={!editReason.trim()}
+                                        className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                                    >
+                                        Submit Request
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
             </motion.div>
         </div>
     );

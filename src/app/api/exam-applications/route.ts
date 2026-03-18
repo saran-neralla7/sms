@@ -48,9 +48,28 @@ export async function GET(request: Request) {
                 subjects: { include: { subject: { select: { id: true, name: true, code: true } } } },
                 student: { select: { name: true, photoUrl: true } }
             },
-            orderBy: { submittedAt: "desc" }
         });
-        return NextResponse.json(applications);
+
+        const enrichedApplications = await Promise.all(applications.map(async (app) => {
+            if (app.duplicateUtr) {
+                const original = await prisma.examApplication.findFirst({
+                    where: { utrNumber: app.utrNumber, id: { not: app.id } },
+                    include: { student: { select: { name: true } } }
+                });
+                return {
+                    ...app,
+                    duplicateDetails: original ? {
+                        rollNumber: original.rollNumber,
+                        name: original.student?.name,
+                        year: original.year,
+                        semester: original.semester
+                    } : null
+                };
+            }
+            return app;
+        }));
+
+        return NextResponse.json(enrichedApplications);
     } catch (error) {
         console.error("Fetch exam applications error:", error);
         return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });

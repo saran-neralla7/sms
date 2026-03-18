@@ -352,6 +352,8 @@ model ExamApplication {
   amountPaid        Float?
   student           Student                  @relation(fields: [studentId], references: [id])
   subjects          ExamApplicationSubject[]
+  editRequested     Boolean                  @default(false)
+  editRequestReason String?
 }
 
 model ExamApplicationSubject {

@@ -38,7 +38,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Failed to update" }, { status: 500 });
     }
 }
-// DELETE: Delete an exam application (admin only)
+// DELETE: Delete an exam application (admin/office)
 export async function DELETE(
     request: Request,
     props: { params: Promise<{ id: string }> }
@@ -47,7 +47,7 @@ export async function DELETE(
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const role = (session.user as any).role;
-    if (!["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) {
+    if (!["OFFICE", "ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

@@ -27,16 +27,26 @@ export default function OfficeExamApplicationsPage() {
     const [rejectModal, setRejectModal] = useState<{ id: string; open: boolean }>({ id: "", open: false });
     const [remarks, setRemarks] = useState("");
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [duplicateModal, setDuplicateModal] = useState<any | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ id: string, open: boolean } | null>(null);
 
     useEffect(() => {
         fetch("/api/exam-applications/stats")
             .then(r => r.ok ? r.json() : [])
             .then(data => { setStats(data); setLoading(false); });
+
+        const handlePopState = () => {
+            setSelectedCard(null);
+            setApplications([]);
+        };
+        window.addEventListener("popstate", handlePopState);
+        return () => window.removeEventListener("popstate", handlePopState);
     }, []);
 
     const loadApplications = async (card: StatCard) => {
         setSelectedCard(card);
         setLoading(true);
+        window.history.pushState({ view: "details" }, "", `?view=details`);
         const params = new URLSearchParams({ department: card.department, year: card.year, semester: card.semester });
         const res = await fetch(`/api/exam-applications?${params}`);
         const data = await res.ok ? await res.json() : [];
@@ -68,6 +78,16 @@ export default function OfficeExamApplicationsPage() {
         setActionLoading(null);
     };
 
+    const handleApproveEdit = async (id: string) => {
+        setActionLoading(id);
+        const res = await fetch(`/api/exam-applications/${id}`, { method: "DELETE" });
+        if (res.ok) {
+            setApplications(prev => prev.filter(a => a.id !== id));
+        }
+        setActionLoading(null);
+        setConfirmModal(null);
+    };
+
     const handleExport = () => {
         const params = new URLSearchParams();
         if (selectedCard) {
@@ -79,7 +99,10 @@ export default function OfficeExamApplicationsPage() {
         window.open(`/api/exam-applications/export?${params}`, "_blank");
     };
 
-    const filtered = filter === "ALL" ? applications : applications.filter(a => a.status === filter);
+    const filtered = filter === "ALL" ? applications : 
+                     filter === "DUPLICATE" ? applications.filter(a => a.duplicateUtr) :
+                     filter === "EDIT_REQUESTS" ? applications.filter(a => a.editRequested) :
+                     applications.filter(a => a.status === filter);
 
     if (loading && !selectedCard) {
         return <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>;
@@ -92,7 +115,15 @@ export default function OfficeExamApplicationsPage() {
                 <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
                     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <button onClick={() => { setSelectedCard(null); setApplications([]); }} className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 mb-2">
+                            <button onClick={() => { 
+                                setSelectedCard(null); 
+                                setApplications([]); 
+                                if (window.history.state?.view === "details") {
+                                    window.history.back();
+                                } else {
+                                    window.history.replaceState(null, "", window.location.pathname);
+                                }
+                            }} className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 mb-2">
                                 <FaArrowLeft /> Back to Overview
                             </button>
                             <h1 className="text-2xl font-extrabold text-slate-900">{selectedCard.department}</h1>
@@ -104,7 +135,8 @@ export default function OfficeExamApplicationsPage() {
                                 <option value="PENDING">Pending ({applications.filter(a => a.status === "PENDING").length})</option>
                                 <option value="APPROVED">Approved ({applications.filter(a => a.status === "APPROVED").length})</option>
                                 <option value="REJECTED">Rejected ({applications.filter(a => a.status === "REJECTED").length})</option>
-                                <option value="DUPLICATE">Duplicate UTRs ({applications.filter(a => a.duplicateUtr).length})</option>
+                                <option value="DUPLICATE">Duplicate ({applications.filter(a => a.duplicateUtr).length})</option>
+                                <option value="EDIT_REQUESTS">Edit Requests ({applications.filter(a => a.editRequested).length})</option>
                             </select>
                             <button onClick={handleExport} className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors">
                                 <FaDownload /> Export Excel
@@ -123,13 +155,13 @@ export default function OfficeExamApplicationsPage() {
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                                     <tr>
-                                        <th className="px-4 py-3">Roll No</th>
-                                        <th className="px-4 py-3">Student Name</th>
-                                        <th className="px-4 py-3">Subjects</th>
-                                        <th className="px-4 py-3">UTR</th>
-                                        <th className="px-4 py-3">Amount Paid</th>
-                                        <th className="px-4 py-3">Status</th>
-                                        <th className="px-4 py-3">Actions</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Roll No</th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[150px]">Student Name</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Subjects</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">UTR</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Amount Paid</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -147,27 +179,50 @@ export default function OfficeExamApplicationsPage() {
                                             <td className="px-4 py-3">
                                                 <span className="font-mono text-xs">{app.utrNumber}</span>
                                                 {app.duplicateUtr && (
-                                                    <div className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 border border-red-200 whitespace-nowrap">
-                                                        <FaExclamationTriangle /> DUPLICATE {app.duplicateUtrRollNo ? `(${app.duplicateUtrRollNo})` : ""}
-                                                    </div>
+                                                    <button onClick={() => setDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
+                                                        <FaExclamationTriangle /> DUPLICATE
+                                                    </button>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className="text-sm font-medium text-slate-700">{app.amountPaid ? `₹${app.amountPaid}` : "—"}</span>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                                    app.status === "APPROVED" ? "bg-green-100 text-green-700" :
-                                                    app.status === "REJECTED" ? "bg-red-100 text-red-700" :
-                                                    "bg-yellow-100 text-yellow-700"
-                                                }`}>
-                                                    {app.status === "APPROVED" && <FaCheckCircle />}
-                                                    {app.status === "REJECTED" && <FaTimesCircle />}
-                                                    {app.status === "PENDING" && <FaClock />}
-                                                    {app.status}
-                                                </span>
+                                                <div className="flex flex-col gap-2 min-w-[140px]">
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold w-fit ${
+                                                        app.status === "APPROVED" ? "bg-green-100 text-green-700" :
+                                                        app.status === "REJECTED" ? "bg-red-100 text-red-700" :
+                                                        "bg-yellow-100 text-yellow-700"
+                                                    }`}>
+                                                        {app.status === "APPROVED" && <FaCheckCircle />}
+                                                        {app.status === "REJECTED" && <FaTimesCircle />}
+                                                        {app.status === "PENDING" && <FaClock />}
+                                                        {app.status}
+                                                    </span>
+                                                    {app.editRequested && (
+                                                        <div className="flex flex-col gap-1 w-full max-w-[200px]">
+                                                            <span className="inline-flex rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800 border border-orange-200 w-fit">
+                                                                EDIT REQUESTED
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500 line-clamp-2" title={app.editRequestReason}>
+                                                                {app.editRequestReason}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3">
+                                                <div className="flex gap-2 flex-wrap min-w-[150px]">
+                                                {app.editRequested && (
+                                                    <button
+                                                        onClick={() => setConfirmModal({ id: app.id, open: true })}
+                                                        disabled={actionLoading === app.id}
+                                                        className="rounded-lg bg-orange-100 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-200 disabled:opacity-50 whitespace-nowrap outline-none"
+                                                        title="Delete application & allow resubmit"
+                                                    >
+                                                        Approve Edit
+                                                    </button>
+                                                )}
                                                 {app.status === "PENDING" ? (
                                                     <div className="flex gap-2">
                                                         <button
@@ -188,6 +243,7 @@ export default function OfficeExamApplicationsPage() {
                                                 ) : (
                                                     <span className="text-xs text-slate-400">{app.approvedBy ? `by ${app.approvedBy}` : "—"}</span>
                                                 )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -196,6 +252,44 @@ export default function OfficeExamApplicationsPage() {
                         </div>
                     )}
                 </motion.div>
+
+                {/* Duplicate UTR Modal */}
+                <AnimatePresence>
+                    {duplicateModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDuplicateModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+                                <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-red-600">
+                                    <FaExclamationTriangle /> Duplicate UTR Detected
+                                </h3>
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <p className="mb-3 text-sm text-slate-600">This UTR number (<span className="font-mono font-bold text-slate-900">{duplicateModal.utrNumber}</span>) was also submitted by:</p>
+                                    <div className="space-y-3">
+                                        <div className="flex flex-col border-b border-slate-200 pb-2">
+                                            <span className="text-xs font-semibold uppercase text-slate-500">Student Name</span>
+                                            <span className="text-sm font-bold text-slate-900">{duplicateModal.duplicateDetails?.name || "Unknown"}</span>
+                                        </div>
+                                        <div className="flex flex-col border-b border-slate-200 pb-2">
+                                            <span className="text-xs font-semibold uppercase text-slate-500">Roll Number</span>
+                                            <span className="text-sm font-bold text-slate-900">{duplicateModal.duplicateDetails?.rollNumber || duplicateModal.duplicateUtrRollNo || "Unknown"}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-semibold uppercase text-slate-500">Original Submission</span>
+                                            <span className="text-sm font-bold text-slate-900">
+                                                {duplicateModal.duplicateDetails ? `Year ${duplicateModal.duplicateDetails.year}, Semester ${duplicateModal.duplicateDetails.semester}` : "Unknown"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-6 flex justify-end">
+                                    <button onClick={() => setDuplicateModal(null)} className="rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-300 transition-colors">
+                                        Close
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
 
                 {/* Reject Remarks Modal */}
                 <AnimatePresence>
@@ -229,6 +323,29 @@ export default function OfficeExamApplicationsPage() {
                             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative max-w-lg max-h-[80vh] rounded-xl bg-white p-2 shadow-2xl">
                                 <button onClick={() => setPreviewImage(null)} className="absolute -top-3 -right-3 rounded-full bg-white p-2 shadow-lg text-slate-600 hover:text-slate-900"><FaTimes /></button>
                                 <img src={previewImage} alt="Payment Screenshot" className="max-h-[75vh] rounded-lg object-contain" />
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* Approve Edit Confirmation Modal */}
+                <AnimatePresence>
+                    {confirmModal?.open && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                                <h3 className="mb-2 text-center text-lg font-bold text-slate-900">Approve Edit Request?</h3>
+                                <p className="mb-6 text-center text-sm text-slate-500">
+                                    This will permanently discard the current application and allow the student to submit a fresh one. This action cannot be undone.
+                                </p>
+                                <div className="flex justify-center gap-3">
+                                    <button onClick={() => setConfirmModal(null)} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button onClick={() => handleApproveEdit(confirmModal.id)} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
+                                        {actionLoading === confirmModal.id ? <LogoSpinner fullScreen={false} /> : "Approve Edit"}
+                                    </button>
+                                </div>
                             </motion.div>
                         </div>
                     )}
