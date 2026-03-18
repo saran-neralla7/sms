@@ -73,6 +73,7 @@ export async function GET(request: Request) {
             include: {
                 section: true,
                 subject: true,
+                department: { select: { name: true } },
                 user: { select: { username: true, role: true } } // Include role to verify
             },
             orderBy: { date: 'desc' }
@@ -98,6 +99,19 @@ export async function POST(request: Request) {
             // ACADEMIC Roles: Must select Subject
             if (!body.subjectId) {
                 return NextResponse.json({ error: "Subject selection is mandatory for Academic Attendance" }, { status: 400 });
+            }
+
+            // Verify Subject matches the provided Year and Semester
+            if (body.subjectId && body.year && body.semester) {
+                const subject = await prisma.subject.findUnique({ where: { id: body.subjectId } });
+                if (!subject) {
+                    return NextResponse.json({ error: "Invalid Subject selected" }, { status: 400 });
+                }
+                if (subject.year !== String(body.year) || subject.semester !== String(body.semester)) {
+                    return NextResponse.json({
+                        error: `Subject '${subject.name}' belongs to Year ${subject.year} - Sem ${subject.semester}, but you are trying to post for Year ${body.year} - Sem ${body.semester}. Please refresh the page and select the correct subject.`
+                    }, { status: 400 });
+                }
             }
         }
 

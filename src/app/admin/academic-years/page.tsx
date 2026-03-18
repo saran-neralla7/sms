@@ -6,6 +6,7 @@ import { FaCalendarAlt, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaRegCircle } fr
 import Modal from "@/components/Modal";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { useRouter } from "next/navigation";
+import { formatISTDate } from "@/lib/dateUtils";
 
 interface AcademicYear {
     id: string;
@@ -184,8 +185,8 @@ export default function AcademicYearsPage() {
                         </div>
                         <h3 className="text-lg font-bold text-slate-900">{year.name}</h3>
                         <div className="mt-2 text-sm text-slate-500">
-                            <p>Start: {new Date(year.startDate).toLocaleDateString()}</p>
-                            <p>End: {new Date(year.endDate).toLocaleDateString()}</p>
+                            <p>Start: {formatISTDate(year.startDate)}</p>
+                            <p>End: {formatISTDate(year.endDate)}</p>
                         </div>
                     </div>
                 ))}

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { FaUser, FaIdCard, FaBuilding, FaPhone, FaEnvelope, FaBirthdayCake, FaTint, FaMapMarkerAlt } from "react-icons/fa";
 import Image from "next/image";
+import { formatISTDate } from "@/lib/dateUtils";
 
 export default async function FacultyProfilePage() {
     const session = await getServerSession(authOptions);
@@ -36,11 +37,7 @@ export default async function FacultyProfilePage() {
 
     // Helper to format date
     const formatDate = (date: Date) => {
-        return new Date(date).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "long",
-            year: "numeric"
-        });
+        return formatISTDate(date);
     };
 
     return (

@@ -54,6 +54,7 @@ export interface Student {
     reimbursement?: boolean;
     certificatesSubmitted?: boolean;
     domainMailId?: string;
+    subjects?: any[];
 }
 
 export interface Subject {
@@ -64,6 +65,7 @@ export interface Subject {
     semester: string;
     type: string;
     isElective: boolean;
+    shortName?: string | null;
     electiveSlot?: string | null;
     regulation?: string;
     departmentId: string;
@@ -76,6 +78,7 @@ export interface User {
     role: string;
     departmentId?: string | null;
     department?: Department;
+    createdAt: Date;
 }
 
 export interface AttendanceHistory {

@@ -55,7 +55,7 @@ export default async function RootLayout({
 
           <div className="relative z-10 flex flex-col flex-grow pt-16">
             <Navbar years={years} currentYearId={currentYearId} />
-            <main className="container mx-auto flex-grow py-8 px-4">{children}</main>
+            <main className="flex-grow">{children}</main>
 
             <footer className="mt-auto border-t border-slate-200 bg-white/80 py-6 text-center text-sm text-slate-600 backdrop-blur-sm">
               <p>Created by <span className="font-semibold text-slate-900">Saran Neralla</span>, Department of CSE, GVPCDPGC(A)</p>

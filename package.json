@@ -16,7 +16,7 @@
     "bcryptjs": "^3.0.3",
     "formidable": "^3.5.4",
     "framer-motion": "^12.23.26",
-    "jspdf": "^4.0.0",
+    "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "next": "16.0.10",
     "next-auth": "^4.24.13",

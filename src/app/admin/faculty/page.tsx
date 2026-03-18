@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Faculty, Department } from "@/types";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
-import { FaEdit, FaPlus, FaTrash, FaSearch, FaUserTie, FaEnvelope, FaPhone, FaFileImport, FaDownload, FaTimes, FaCheck, FaExclamationTriangle } from "react-icons/fa";
+import { FaEdit, FaPlus, FaTrash, FaSearch, FaUserTie, FaEnvelope, FaPhone, FaFileImport, FaDownload, FaTimes, FaCheck, FaExclamationTriangle, FaFilter } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import Image from "next/image";
 
@@ -14,8 +14,10 @@ export default function FacultyPage() {
     const { data: session } = useSession();
     const [facultyList, setFacultyList] = useState<Faculty[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [hasLoaded, setHasLoaded] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedDepartment, setSelectedDepartment] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingFaculty, setEditingFaculty] = useState<Faculty | null>(null);
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
@@ -58,15 +60,18 @@ export default function FacultyPage() {
     });
 
     useEffect(() => {
-        fetchFaculty();
         fetchDepartments();
     }, []);
 
     const fetchFaculty = async () => {
+        setLoading(true);
+        setStatus({ type: null, message: "" });
         try {
-            const res = await fetch("/api/faculty");
+            const url = selectedDepartment ? `/api/faculty?departmentId=${selectedDepartment}` : "/api/faculty";
+            const res = await fetch(url);
             if (res.ok) {
                 setFacultyList(await res.json());
+                setHasLoaded(true);
             }
         } catch (error) {
             console.error(error);
@@ -372,16 +377,41 @@ export default function FacultyPage() {
             </div>
 
             {/* Filters */}
-            <div className="mb-6">
-                <div className="relative max-w-md">
-                    <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="Search by Name or Emp Code..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 shadow-sm"
-                    />
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="flex w-full max-w-xs flex-col gap-1">
+                    <label className="text-xs font-semibold text-slate-500">Department Filter</label>
+                    <select
+                        value={selectedDepartment}
+                        onChange={(e) => setSelectedDepartment(e.target.value)}
+                        className="rounded-lg border border-slate-300 p-2.5 text-sm text-slate-700 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                    >
+                        <option value="">All Departments</option>
+                        {departments.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="flex w-full items-end gap-3 sm:w-auto">
+                    <button
+                        onClick={fetchFaculty}
+                        disabled={loading}
+                        className="mt-5 flex h-10 items-center gap-2 rounded-lg bg-slate-800 px-6 font-bold text-white shadow-sm transition-colors hover:bg-slate-700 disabled:opacity-50"
+                    >
+                        {loading ? <FaFilter className="animate-spin" /> : <FaFilter />}
+                        Load Faculty
+                    </button>
+                    <div className="relative mt-5 flex-1 sm:w-64">
+                        <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Search Name or Code..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            disabled={!hasLoaded}
+                            className="h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-4 text-sm outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-slate-50 disabled:text-slate-400"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -408,6 +438,8 @@ export default function FacultyPage() {
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
                                 <tr><td colSpan={5} className="py-12 text-center"><LogoSpinner /></td></tr>
+                            ) : !hasLoaded ? (
+                                <tr><td colSpan={5} className="py-12 text-center text-slate-500">Select a Department and click &quot;Load Faculty&quot; to view records.</td></tr>
                             ) : filteredFaculty.length === 0 ? (
                                 <tr><td colSpan={5} className="py-12 text-center text-slate-500">No faculty members found.</td></tr>
                             ) : (

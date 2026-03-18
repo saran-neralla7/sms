@@ -61,51 +61,22 @@ export async function GET(request: Request) {
             absent: number
         }> = {};
 
-        // Extract Roll Numbers involved in this history
-        const activeRollNumbers = new Set<string>();
-        history.forEach(record => {
-            try {
-                const details = JSON.parse(record.details);
-                details.forEach((s: any) => {
-                    const roll = s["Roll Number"] || s["rollNumber"];
-                    if (roll) activeRollNumbers.add(roll);
-                });
-            } catch (e) { }
+        // STRICT FETCH: Only get students mathematically enrolled in this specific class
+        const students = await prisma.student.findMany({
+            where: {
+                year,
+                semester,
+                sectionId,
+                departmentId: departmentId || undefined
+            },
+            select: { id: true, rollNumber: true, name: true },
+            orderBy: { rollNumber: "asc" }
         });
-
-        let students;
-        if (activeRollNumbers.size > 0) {
-            // Case A: Historical Report - Fetch students who were actually in the logs
-            // BUT filter by the selected Department/Year/Sem to exclude "rogue" records from other depts (Shared Section IDs)
-            students = await prisma.student.findMany({
-                where: {
-                    rollNumber: { in: Array.from(activeRollNumbers) },
-                    departmentId: departmentId || undefined,
-                    year: year || undefined,
-                    semester: semester || undefined,
-                    sectionId: sectionId || undefined
-                },
-                select: { id: true, rollNumber: true, name: true },
-                orderBy: { rollNumber: "asc" }
-            });
-        } else {
-            // Case B: No Logs (Empty Report) - Fallback to current students matches
-            students = await prisma.student.findMany({
-                where: {
-                    year,
-                    semester,
-                    sectionId,
-                    departmentId: departmentId || undefined
-                },
-                select: { id: true, rollNumber: true, name: true },
-                orderBy: { rollNumber: "asc" }
-            });
-        }
 
         // Initialize everyone with 0
         students.forEach(s => {
-            studentStats[s.rollNumber] = {
-                id: s.id as string,
+            studentStats[s.rollNumber.toLowerCase()] = {
+                id: s.id,
                 name: s.name,
                 rollNumber: s.rollNumber,
                 totalClasses: 0,
@@ -122,14 +93,17 @@ export async function GET(request: Request) {
                 const recordStatusMap = new Map<string, string>();
                 details.forEach((s: any) => {
                     // normalize keys: manual uses camelCase, bulk/old uses Title Case
-                    const roll = s["Roll Number"] || s["rollNumber"];
-                    const status = s["Status"] || s["status"];
-                    if (roll) recordStatusMap.set(roll, status);
+                    const rollRaw = s["Roll Number"] || s["rollNumber"];
+                    if (rollRaw) {
+                        const roll = String(rollRaw).toLowerCase();
+                        const status = s["Status"] || s["status"];
+                        recordStatusMap.set(roll, status);
+                    }
                 });
 
                 // Iterate over ALL students in the section to update their stats for this record
                 Object.values(studentStats).forEach((stat, sIdx) => {
-                    const roll = stat.rollNumber;
+                    const roll = stat.rollNumber.toLowerCase();
 
                     // Increment total classes for everyone since the class happened for the section
                     stat.totalClasses += 1;

@@ -88,9 +88,9 @@ export default function LandingPage() {
 
                         {/* Student Login Card */}
                         <Link href="/student-login" className="group relative block overflow-hidden rounded-2xl bg-white p-8 shadow-md transition-all hover:shadow-xl hover:-translate-y-1 ring-1 ring-slate-100">
-                            <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                            <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                             <div className="relative flex flex-col items-center gap-4">
-                                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors duration-300">
+                                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white transition-colors duration-300">
                                     <FaUserGraduate size={32} />
                                 </div>
                                 <div>

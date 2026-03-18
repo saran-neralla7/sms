@@ -13,6 +13,7 @@ import LogoSpinner from "@/components/LogoSpinner";
 import StudentHoverCard from "@/components/StudentHoverCard";
 import Link from "next/link";
 import Image from "next/image"; // Added Image import
+import { formatISTDate } from "@/lib/dateUtils";
 
 export default function StudentsPage() {
     const router = useRouter();
@@ -752,8 +753,8 @@ export default function StudentsPage() {
                     "Department": (typeof s.department === 'object' ? (s.department as any)?.code : s.department) || "",
                     "Hall Ticket Number": s.hallTicketNumber || "",
                     "EAMCET Rank": s.eamcetRank || "",
-                    "Date of Birth": s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString() : "",
-                    "Date of Reporting": s.dateOfReporting ? new Date(s.dateOfReporting).toLocaleDateString() : "",
+                    "Date of Birth": s.dateOfBirth ? formatISTDate(s.dateOfBirth) : "",
+                    "Date of Reporting": s.dateOfReporting ? formatISTDate(s.dateOfReporting) : "",
                     "Gender": s.gender || "",
                     "Caste": s.caste || "",
                     "Caste Name": s.casteName || "",
@@ -1599,12 +1600,7 @@ export default function StudentsPage() {
                                             {smsLogData.absentDates.map((record: any) => (
                                                 <tr key={record.recordId} className="hover:bg-slate-50">
                                                     <td className="px-4 py-2 text-slate-700">
-                                                        {new Date(record.date).toLocaleDateString(undefined, {
-                                                            weekday: 'short',
-                                                            year: 'numeric',
-                                                            month: 'short',
-                                                            day: 'numeric'
-                                                        })}
+                                                        {formatISTDate(record.date)}
                                                     </td>
                                                     <td className="px-4 py-2 text-right">
                                                         <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">Absent</span>

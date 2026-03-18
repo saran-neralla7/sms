@@ -16,7 +16,29 @@ export default withAuth(
             return;
         }
 
-        // Protected Admin Routes: /admin, /reports, /faculty, /fees, /timetables
+        // --- STUDENT ROLE RESTRICTION ---
+        // If the user is a STUDENT, completely trap them in the student portal
+        if (role === "STUDENT") {
+            if (!path.startsWith("/student") && !path.startsWith("/api") && path !== "/login") {
+                const url = req.nextUrl.clone();
+                url.pathname = "/student/dashboard";
+                return NextResponse.redirect(url);
+            }
+            return; // Let them access /student routes
+        }
+
+        // --- OFFICE ROLE RESTRICTION ---
+        if (role === "OFFICE") {
+            if (!path.startsWith("/office") && !path.startsWith("/api") && path !== "/login") {
+                const url = req.nextUrl.clone();
+                url.pathname = "/office/dashboard";
+                return NextResponse.redirect(url);
+            }
+            return;
+        }
+
+        // Protected Admin Routes: /admin, /reports, /faculty, /fees, /timetables, /student
+        // Notice we explicitly added /student here to prevent Admins/Faculty from needing to go there, though harmless.
         const adminRoutes = ["/admin", "/reports", "/faculty", "/fees", "/timetables"];
 
         if (adminRoutes.some(prefix => path.startsWith(prefix))) {
@@ -32,13 +54,13 @@ export default withAuth(
             }
         }
 
-        // /dashboard and /attendance are valid for all authenticated users (handled by authorized callback)
+        // /dashboard and /attendance are valid for all authenticated users EXCEPT STUDENT (handled above)
     },
     {
         callbacks: {
             authorized: ({ req, token }) => {
                 const path = req.nextUrl.pathname;
-                if (path === "/" || path === "/student-login") return true;
+                if (path === "/") return true;
                 return !!token;
             },
         },

@@ -9,8 +9,9 @@ import { FaCalendarAlt, FaFileExcel, FaFilter, FaTrash, FaEdit, FaUserCircle, Fa
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import { motion } from "framer-motion";
-import LogoSpinner from "@/components/LogoSpinner";
 import StudentHoverCard from "@/components/StudentHoverCard";
+import LogoSpinner from "@/components/LogoSpinner";
+import { formatISTDate, formatISTDateTime } from "@/lib/dateUtils";
 
 export default function ReportsPage() {
     const { data: session } = useSession();
@@ -398,8 +399,8 @@ export default function ReportsPage() {
 
                     // Right Side Details
                     doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
-                    doc.text(`From: ${new Date(startDate).toLocaleDateString()}`, pageWidth - 15, 48, { align: "right" });
-                    doc.text(`To: ${new Date(endDate).toLocaleDateString()}`, pageWidth - 15, 54, { align: "right" });
+                    doc.text(`From: ${formatISTDate(startDate)}`, pageWidth - 15, 48, { align: "right" });
+                    doc.text(`To: ${formatISTDate(endDate)}`, pageWidth - 15, 54, { align: "right" });
 
                     // Title
                     doc.setFont("times", "bold");
@@ -472,7 +473,7 @@ export default function ReportsPage() {
                         doc.setPage(i);
                         doc.setFontSize(8);
                         doc.text(`Page ${i} of ${pageCount}`, pageWidth - 20, doc.internal.pageSize.height - 10, { align: "right" });
-                        doc.text(`Generated on ${new Date().toLocaleDateString()}`, 15, doc.internal.pageSize.height - 10);
+                        doc.text(`Generated on ${formatISTDate(new Date())}`, 15, doc.internal.pageSize.height - 10);
                     }
 
                     console.log("PDF: Saving file...");
@@ -553,7 +554,11 @@ export default function ReportsPage() {
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-            XLSX.writeFile(wb, viewRecord.fileName || "Full_Report.xlsx");
+            const deptStr = viewRecord.department?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Dept";
+            const subjectStr = viewRecord.subject?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "SMS";
+            const dateStr = formatISTDate(viewRecord.date);
+            const filename = `Attendance_${deptStr}_Yr-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${subjectStr}_${dateStr}.xlsx`;
+            XLSX.writeFile(wb, filename);
         } catch (e) { console.error(e); }
     };
 
@@ -576,8 +581,10 @@ export default function ReportsPage() {
             const ws = XLSX.utils.json_to_sheet(absentees);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Absentees");
-            const baseName = viewRecord.fileName || "Report.xlsx";
-            const filename = baseName.replace("FullReport", "Absentees").replace("Attendance Report", "Absentees");
+            const deptStr = viewRecord.department?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Dept";
+            const subjectStr = viewRecord.subject?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "SMS";
+            const dateStr = formatISTDate(viewRecord.date);
+            const filename = `Absentees_${deptStr}_Yr-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${subjectStr}_${dateStr}.xlsx`;
             XLSX.writeFile(wb, filename);
         } catch (e) { console.error(e); }
     };
@@ -756,14 +763,13 @@ export default function ReportsPage() {
                                             history.map((record) => (
                                                 <tr key={record.id} className="hover:bg-slate-50/80">
                                                     <td className="px-6 py-4 text-sm text-slate-600">
-                                                        {new Date(record.date).toLocaleDateString("en-IN", {
-                                                            day: 'numeric', month: 'short', year: 'numeric',
-                                                            hour: '2-digit', minute: '2-digit'
-                                                        })}
+                                                        {formatISTDateTime(record.date)}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <div className="text-sm font-medium text-slate-900">Year {record.year} - Sem {record.semester}</div>
-                                                        <div className="text-xs text-slate-500">Sec {record.section?.name}</div>
+                                                        <div className="text-sm font-medium text-slate-900 truncate max-w-[150px] sm:max-w-[200px]" title={record.department?.name || "Unknown Dept"}>
+                                                            {record.department?.name || "Unknown Dept"}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500">Yr {record.year} - Sem {record.semester} - Sec {record.section?.name}</div>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${record.status?.includes("Absent") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
@@ -1084,8 +1090,8 @@ export default function ReportsPage() {
                                                 <tr key={dateKey} className="divide-x divide-slate-100 border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
                                                     <td className="bg-slate-50/50 px-4 py-4 text-sm font-semibold text-slate-700 sticky left-0 z-10 border-r w-32">
                                                         <div className="flex flex-col">
-                                                            <span>{dayName}</span>
-                                                            <span className="text-xs font-normal text-slate-400">{day.toLocaleDateString()}</span>
+                                                            <span>{day.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: 'long' })}</span>
+                                                            <span className="text-xs font-normal text-slate-400">{formatISTDate(day)}</span>
                                                         </div>
                                                     </td>
                                                     {periods.map((p, index) => {
@@ -1339,8 +1345,11 @@ export default function ReportsPage() {
                                         <div>
                                             <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
                                             <span className="font-medium text-slate-900">
-                                                Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
+                                                {viewRecord.department?.name || "Unknown Dept"}
                                             </span>
+                                            <div className="text-xs text-slate-500 mt-0.5">
+                                                Yr {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name}
+                                            </div>
                                         </div>
                                         <div className="col-span-2">
                                             <span className="block text-slate-500 text-xs uppercase font-bold">Subject</span>

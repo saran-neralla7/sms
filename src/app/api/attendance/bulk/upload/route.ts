@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
+import { formatISTDate } from "@/lib/dateUtils";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -18,6 +19,16 @@ export async function POST(request: Request) {
 
         if (!file || !sectionId || !departmentId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        // STRICT SECURITY: Prevent stale cookies / unauthorized department uploads
+        const dbUser = await prisma.user.findUnique({ where: { id: (session.user as any).id } });
+        if (dbUser?.role === "SMS_USER" && dbUser.departmentId) {
+            if (departmentId !== dbUser.departmentId) {
+                return NextResponse.json({
+                    error: "Access Denied: You cannot upload attendance for a different department. Please log out and back in to refresh your assigned department session."
+                }, { status: 403 });
+            }
         }
 
         const buffer = await file.arrayBuffer();
@@ -54,7 +65,7 @@ export async function POST(request: Request) {
         const errors: string[] = [];
 
         // Identify Valid Columns (Index >= 2)
-        const validColumns: { index: number; date: Date; periodId: string; subjectId: string }[] = [];
+        const validColumns: { index: number; date: Date; periodId: string; subjectId: string | null }[] = [];
 
         let lastValidDate: Date | null = null;
         let existingSessionCheck: Promise<any>[] = [];
@@ -93,31 +104,36 @@ export async function POST(request: Request) {
 
             if (!rawPeriod) continue; // Skip columns without Period (likely empty)
 
-            // Validate Subject (Strict)
+            // Validate Subject (Strict depending on Role)
             const subjStr = String(rawSubject || "").toLowerCase().trim();
+            let finalSubjectId: string | null = null;
 
-            if (!subjStr) {
-                // Check if this column has ANY attendance data filled in rows 3+
-                let hasData = false;
-                for (let k = 3; k < rawData.length; k++) {
-                    if (rawData[k][j]) {
-                        hasData = true;
-                        break;
+            // SMS Users should NEVER save subject data, even if it's accidentally in the Excel sheet.
+            if (dbUser?.role !== "SMS_USER" && dbUser?.role !== "USER") {
+                if (!subjStr) {
+                    // Check if this column has ANY attendance data filled in rows 3+
+                    let hasData = false;
+                    for (let k = 3; k < rawData.length; k++) {
+                        if (rawData[k][j]) {
+                            hasData = true;
+                            break;
+                        }
                     }
+
+                    if (hasData) {
+                        errors.push(`Column ${j + 1} (${formatISTDate(date)} - ${rawPeriod}): Subject Name missing.`);
+                    }
+                    // If subject is empty AND no data, we simply skip this column (it's unused)
+                    continue;
                 }
 
-                if (hasData) {
-                    errors.push(`Column ${j + 1} (${date.toLocaleDateString()} - ${rawPeriod}): Subject Name missing.`);
+                // Fuzzy match allowed, but MUST find a matching subject
+                const subject = validSubjects.find(s => s.name.toLowerCase().includes(subjStr) || s.code.toLowerCase().includes(subjStr));
+                if (!subject) {
+                    errors.push(`Column ${j + 1}: Subject '${rawSubject}' does not match any valid subject for this class.`);
+                    continue;
                 }
-                // If subject is empty AND no data, we simply skip this column (it's unused)
-                continue;
-            }
-
-            // Fuzzy match allowed, but MUST find a matching subject
-            const subject = validSubjects.find(s => s.name.toLowerCase().includes(subjStr) || s.code.toLowerCase().includes(subjStr));
-            if (!subject) {
-                errors.push(`Column ${j + 1}: Subject '${rawSubject}' does not match any valid subject for this class.`);
-                continue;
+                finalSubjectId = subject.id;
             }
 
             // Validate Period
@@ -151,7 +167,7 @@ export async function POST(request: Request) {
                 index: j,
                 date: date,
                 periodId: finalPeriod.id,
-                subjectId: subject.id
+                subjectId: finalSubjectId
             });
         }
 
@@ -163,7 +179,7 @@ export async function POST(request: Request) {
         const existingSessions = await Promise.all(existingSessionCheck);
         const duplicates = existingSessions.filter(s => s !== null);
         if (duplicates.length > 0) {
-            const dupErrors = duplicates.map(d => `Attendance already exists for ${new Date(d.date).toLocaleDateString()} - ${d.period.name}`);
+            const dupErrors = duplicates.map(d => `Attendance already exists for ${formatISTDate(d.date)} - ${d.period.name}`);
             return NextResponse.json({ error: "Duplicate Sessions Found", details: dupErrors }, { status: 409 });
         }
 
@@ -172,6 +188,20 @@ export async function POST(request: Request) {
         }
 
         // --- PHASE 2: TRANSACTIONAL INSERT ---
+
+        // Fetch valid students for this exact class
+        const validStudents = await prisma.student.findMany({
+            where: {
+                departmentId,
+                year,
+                semester,
+                sectionId
+            },
+            select: { rollNumber: true, name: true }
+        });
+
+        // Create a fast lookup Set for valid roll numbers
+        const validRollNumbers = new Set(validStudents.map(s => s.rollNumber.toLowerCase()));
 
         const operations = await prisma.$transaction(async (tx) => {
             let insertedCount = 0;
@@ -182,10 +212,19 @@ export async function POST(request: Request) {
                 // Iterate rows for this column
                 for (let i = 3; i < rawData.length; i++) {
                     const row = rawData[i];
-                    const rollNumber = String(row[0] || "");
-                    if (!rollNumber) continue;
+                    const rollNumberRaw = String(row[0] || "").trim();
+                    if (!rollNumberRaw) continue;
 
-                    const name = String(row[1] || "");
+                    const rollNumber = rollNumberRaw.toLowerCase();
+
+                    // VALIDATION CHECK: Is this student actually in this section?
+                    if (!validRollNumbers.has(rollNumber)) {
+                        continue; // Skip student - they don't belong here
+                    }
+
+                    // Look up correct name from DB or fallback to Excel name
+                    const matchingStudent = validStudents.find(s => s.rollNumber.toLowerCase() === rollNumber);
+                    const name = matchingStudent?.name || String(row[1] || "");
                     const statusRaw = row[col.index];
 
                     let status = "Absent";
@@ -195,7 +234,7 @@ export async function POST(request: Request) {
                     }
 
                     studentDetails.push({
-                        "Roll Number": rollNumber,
+                        "Roll Number": matchingStudent?.rollNumber || rollNumberRaw.toUpperCase(),
                         "Name": name,
                         "Status": status
                     });
@@ -212,6 +251,7 @@ export async function POST(request: Request) {
                             subjectId: col.subjectId,
                             periodId: col.periodId,
                             status: "Bulk Upload",
+                            type: dbUser?.role === "SMS_USER" ? "SMS" : "ACADEMIC",
                             fileName: file.name,
                             downloadedBy: session.user.id,
                             details: JSON.stringify(studentDetails)

@@ -20,6 +20,7 @@ export async function GET(request: Request) {
 
     const sectionId = searchParams.get("sectionId");
     const sectionIds = searchParams.get("sectionIds"); // Comma separated
+    const subjectId = searchParams.get("subjectId"); // Filter by enrolled subject
 
     const page = parseInt(searchParams.get("page") || "1");
     const limitParam = searchParams.get("limit");
@@ -45,6 +46,23 @@ export async function GET(request: Request) {
     const batchId = searchParams.get("batchId");
     if (batchId) {
         where.batchId = batchId;
+    }
+
+    if (subjectId) {
+        // Only apply explicit subject filtering if the subject is an Elective.
+        // Core subjects implicitly apply to the entire section, so they might not be manually mapped in StudentToSubject.
+        const subjectInfo = await prisma.subject.findUnique({
+            where: { id: subjectId },
+            select: { isElective: true, type: true }
+        });
+
+        if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
+            where.subjects = {
+                some: {
+                    id: subjectId
+                }
+            };
+        }
     }
 
     // Search Query Support (Server-Side)
@@ -250,6 +268,24 @@ export async function POST(request: Request) {
                     domainMailId: body.rollNumber ? `${body.rollNumber.toUpperCase()}@gvpcdpgc.edu.in` : null
                 },
             });
+
+            // Automatically provision a student login
+            const existingUser = await prisma.user.findUnique({
+                where: { username: body.rollNumber }
+            });
+
+            if (!existingUser) {
+                const bcrypt = require("bcrypt");
+                const hashedPassword = await bcrypt.hash(body.rollNumber, 10);
+                await prisma.user.create({
+                    data: {
+                        username: body.rollNumber,
+                        password: hashedPassword,
+                        role: "STUDENT",
+                        departmentId: body.departmentId
+                    }
+                });
+            }
             action = "created";
         }
 

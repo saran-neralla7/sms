@@ -15,7 +15,10 @@ import {
     FaArrowLeft,
     FaCalendarAlt,
     FaGraduationCap,
-    FaKey
+    FaKey,
+    FaMobileAlt,
+    FaSms,
+    FaFileAlt
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -26,6 +29,7 @@ export default function AdminDashboardPage() {
     const router = useRouter();
 
     const [backupStatus, setBackupStatus] = useState<any>(null);
+    const [pendingRequests, setPendingRequests] = useState<number>(0);
     const [dismissBanner, setDismissBanner] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -36,6 +40,13 @@ export default function AdminDashboardPage() {
                 .then(res => res.json())
                 .then(data => {
                     if (!data.error && data.status) setBackupStatus(data);
+                })
+                .catch(console.error);
+
+            fetch("/api/auth/forgot-password/pending")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.count !== undefined) setPendingRequests(data.count);
                 })
                 .catch(console.error);
         }
@@ -73,14 +84,13 @@ export default function AdminDashboardPage() {
             description: "Manage user password reset requests.",
             href: "/admin/requests",
             color: "bg-orange-50 text-orange-600",
-            badge: (
-                <div className="absolute right-6 top-6">
-                    <span className="flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            badge: pendingRequests > 0 ? (
+                <div className="absolute right-4 top-4">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow-sm ring-2 ring-white animate-pulse">
+                        {pendingRequests > 99 ? "99+" : pendingRequests}
                     </span>
                 </div>
-            )
+            ) : undefined
         },
         {
             title: "Users",
@@ -144,6 +154,27 @@ export default function AdminDashboardPage() {
             description: "Manage student elective choices.",
             href: "/admin/electives",
             color: "bg-cyan-50 text-cyan-600"
+        },
+        {
+            title: "SMS Logs",
+            icon: <FaSms className="h-6 w-6" />,
+            description: "View and audit all sent SMS messages.",
+            href: "/admin/sms-logs",
+            color: "bg-purple-50 text-purple-600"
+        },
+        {
+            title: "SMS Tester",
+            icon: <FaMobileAlt className="h-6 w-6" />,
+            description: "Test PlatinumSMS API configurations.",
+            href: "/admin/sms-test",
+            color: "bg-emerald-50 text-emerald-600"
+        },
+        {
+            title: "Exam Applications",
+            icon: <FaFileAlt className="h-6 w-6" />,
+            description: "Configure exam dates, create office accounts, and view statistics.",
+            href: "/admin/exam-applications",
+            color: "bg-amber-50 text-amber-600"
         }
     ];
 

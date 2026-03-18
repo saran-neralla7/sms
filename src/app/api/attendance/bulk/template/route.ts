@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
+import { formatISTDate } from "@/lib/dateUtils";
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -41,14 +45,13 @@ export async function GET(request: Request) {
         });
 
         const periods = await prisma.period.findMany({
-            orderBy: { startTime: 'asc' } // Or name if numeric sort needed
+            orderBy: { order: 'asc' }
         });
 
-        // Sort periods naturally if names represent numbers (1st, 2nd)
-        periods.sort((a, b) => {
-            const numA = parseInt(a.name.match(/\d+/)?.[0] || "0");
-            const numB = parseInt(b.name.match(/\d+/)?.[0] || "0");
-            return numA - numB;
+        // Fetch Timetables for Subject lookup
+        const timetables = await prisma.timetable.findMany({
+            where: { sectionId },
+            include: { subject: true, labBatch: true }
         });
 
         // Calculate Dates
@@ -73,7 +76,7 @@ export async function GET(request: Request) {
         let colIndex = 2; // Start after Roll, Name
 
         dates.forEach(date => {
-            const dateStr = date.toLocaleDateString("en-IN").replace(/\//g, "-");
+            const dateStr = formatISTDate(date);
 
             // Add Date Header (First cell gets value, rest empty for merge)
             headerRow1.push(dateStr);
@@ -87,13 +90,32 @@ export async function GET(request: Request) {
                 });
             }
 
-            // Add Subject Headers (Empty blanks for user input)
-            periods.forEach(() => headerRow2.push(""));
+            const jsDay = date.getDay();
+            const dbDay = jsDay === 0 ? 7 : jsDay;
 
-            // Add Period Headers
+            // Add Subject Headers and Period Headers dynamically from Timetable
             periods.forEach(p => {
                 headerRow3.push(p.name);
                 wscols.push({ wch: 15 });
+
+                const activeBlocks = timetables.filter(t => 
+                    t.dayOfWeek === dbDay && 
+                    t.periodId === p.id &&
+                    new Date(t.validFrom) <= date &&
+                    (!t.validTo || new Date(t.validTo) >= date)
+                );
+
+                if (activeBlocks.length > 0) {
+                    const blockNames = activeBlocks.map(b => {
+                        if (b.isLunch) return "LUNCH";
+                        let name = b.subject?.shortName || b.subject?.name || "";
+                        if (b.labBatch) name += `(${b.labBatch.name})`;
+                        return name;
+                    });
+                    headerRow2.push(blockNames.join(" / "));
+                } else {
+                    headerRow2.push("");
+                }
             });
 
             colIndex += periods.length;

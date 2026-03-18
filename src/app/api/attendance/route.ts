@@ -21,6 +21,7 @@ export async function POST(request: Request) {
             subjectId,
             periodId,
             periodIds,
+            labBatchId,
             students
         } = body;
 
@@ -33,13 +34,50 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // Department Enforcement
-        const userRole = (session.user as any).role;
-        const userDeptId = (session.user as any).departmentId;
+        // Block future dates
+        const submittedDate = new Date(date);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999); // Allow the full current day
+        if (submittedDate > today) {
+            return NextResponse.json({ error: "Cannot post attendance for future dates." }, { status: 400 });
+        }
 
-        if (!["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes(userRole)) {
+        // Department Enforcement
+        // Fetch LIVE User DB context to ensure stale cookies don't bypass security
+        const dbUser = await prisma.user.findUnique({
+            where: { id: (session.user as any).id },
+            select: { role: true, departmentId: true }
+        });
+
+        if (!dbUser) {
+            return NextResponse.json({ error: "User profile not found in database." }, { status: 403 });
+        }
+
+        const userRole = dbUser.role;
+        const userDeptId = dbUser.departmentId;
+
+        if (["SMS_USER", "USER"].includes(userRole)) {
             if (userDeptId && userDeptId !== departmentId) {
-                return NextResponse.json({ error: "You can only submit attendance for your own department" }, { status: 403 });
+                return NextResponse.json({ error: "Access Denied: You cannot submit attendance for a different department. Please refresh to lock your assigned department." }, { status: 403 });
+            }
+        }
+
+        // Prevent SMS_USER from ever attaching a Subject
+        let finalSubjectId = subjectId;
+        if (userRole === "SMS_USER" || userRole === "USER") {
+            finalSubjectId = null;
+        }
+
+        // Verify Subject matches the provided Year and Semester
+        if (finalSubjectId && year && semester) {
+            const subject = await prisma.subject.findUnique({ where: { id: finalSubjectId } });
+            if (!subject) {
+                return NextResponse.json({ error: "Invalid Subject selected" }, { status: 400 });
+            }
+            if (subject.year !== String(year) || subject.semester !== String(semester)) {
+                return NextResponse.json({
+                    error: `Subject '${subject.name}' belongs to Year ${subject.year} - Sem ${subject.semester}, but you are trying to post for Year ${year} - Sem ${semester}. Please refresh the page and select the correct subject.`
+                }, { status: 400 });
             }
         }
 
@@ -55,6 +93,25 @@ export async function POST(request: Request) {
         const activeYear = await prisma.academicYear.findFirst({
             where: { isCurrent: true }
         });
+
+        // Pre-fetch valid students for all target sections to prevent UI stale-state mixing
+        // CRITICAL: Filter by departmentId + year + semester to prevent cross-department mixing
+        // (Sections like "A" can be shared across multiple departments)
+        const validStudents = await prisma.student.findMany({
+            where: {
+                sectionId: { in: targetSectionIds },
+                departmentId,
+                year: String(year),
+                semester: String(semester)
+            },
+            select: { rollNumber: true, sectionId: true, name: true, mobile: true, studentContactNumber: true }
+        });
+
+        // Create a fast lookup Map of rollNumber -> student
+        const validStudentMap = new Map();
+        for (const vs of validStudents) {
+            validStudentMap.set(vs.rollNumber.toLowerCase(), vs);
+        }
 
         // Group students by section
         // Map<SectionID, Student[]>
@@ -86,15 +143,32 @@ export async function POST(request: Request) {
 
         // For each section, for each period, create a record
         for (const sid of targetSectionIds) {
-            const sectionStudents = studentsBySection.get(sid) || [];
+            const sectionStudentsRaw = studentsBySection.get(sid) || [];
+            const sectionStudents = [];
+
+            // Strict Validation: Only accept students natively enrolled in this section
+            for (const s of sectionStudentsRaw) {
+                const roll = String(s.rollNumber).toLowerCase();
+                const dbStudent = validStudentMap.get(roll);
+
+                // If student exists and their DB sectionId matches the target sid, accept them
+                if (dbStudent && dbStudent.sectionId === sid) {
+                    sectionStudents.push({
+                        "Roll Number": dbStudent.rollNumber,
+                        "Name": dbStudent.name,
+                        "Status": s.status || "Absent",
+                        "Mobile": dbStudent.mobile || dbStudent.studentContactNumber || s.mobile,
+                        "Subject ID": finalSubjectId || null,
+                        "Lab Batch ID": labBatchId || null
+                    });
+                }
+            }
+
+            // If the filtered list is empty, skip this section to prevent blank records
+            if (sectionStudents.length === 0) continue;
 
             // Serialize details for this section only
-            const details = JSON.stringify(sectionStudents.map((s: any) => ({
-                "Roll Number": s.rollNumber,
-                "Name": s.name,
-                "Status": s.status,
-                "Mobile": s.mobile
-            })));
+            const details = JSON.stringify(sectionStudents);
 
             // Create record for each period
             const userRole = (session.user as any).role;
@@ -106,7 +180,9 @@ export async function POST(request: Request) {
                     where: {
                         date: new Date(date),
                         sectionId: sid,
-                        periodId: pid
+                        periodId: pid,
+                        year: String(year),
+                        departmentId
                     }
                 });
 
@@ -129,11 +205,13 @@ export async function POST(request: Request) {
 
                     // Overwrite/Append with the newly submitted students (this covers Batch 2 adding to Batch 1)
                     sectionStudents.forEach((s: any) => {
-                        mergedMap.set(s.rollNumber, {
-                            "Roll Number": s.rollNumber,
-                            "Name": s.name,
-                            "Status": s.status,
-                            "Mobile": s.mobile
+                        mergedMap.set(s["Roll Number"], {
+                            "Roll Number": s["Roll Number"],
+                            "Name": s["Name"],
+                            "Status": s["Status"],
+                            "Mobile": s["Mobile"],
+                            "Subject ID": s["Subject ID"],
+                            "Lab Batch ID": s["Lab Batch ID"]
                         });
                     });
 
@@ -148,8 +226,9 @@ export async function POST(request: Request) {
                                 type: recordType,
                                 fileName: "Manual Entry Update",
                                 downloadedBy: (session.user as any).id,
-                                details: mergedDetailsJson,
-                                ...(subjectId ? { subjectId } : {})
+                                details: mergedDetailsJson
+                                // We purposefully do NOT overwrite the parent subjectId for mixed classes.
+                                // The individual student JSON "Subject ID" governs their attended subject.
                             }
                         })
                     );
@@ -166,7 +245,7 @@ export async function POST(request: Request) {
                             departmentId,
                             academicYearId: activeYear?.id || null,
                             periodId: pid,
-                            subjectId: subjectId || null,
+                            subjectId: finalSubjectId || null,
                             status: "Completed",
                             type: recordType,
                             fileName: "Manual Entry",

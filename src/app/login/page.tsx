@@ -51,6 +51,8 @@ export default function LoginPage() {
                     router.push("/dashboard");
                 } else if (targetRole === "FACULTY") {
                     router.push("/faculty/dashboard");
+                } else if (targetRole === "OFFICE") {
+                    router.push("/office/dashboard");
                 } else {
                     router.push("/dashboard"); // Fallback
                 }

@@ -43,7 +43,8 @@ export async function POST(request: Request) {
         const isGlobalRole = GLOBAL_ROLES.includes(role);
 
         // Non-global roles MUST have a department (HOD, FACULTY, USER)
-        if (!isGlobalRole && !departmentId) {
+        // OFFICE role can optionally have a department (scoped) or no department (all departments)
+        if (!isGlobalRole && role !== "OFFICE" && !departmentId) {
             return NextResponse.json({ error: "Department is required for this role" }, { status: 400 });
         }
 
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
                 username,
                 password: hashedPassword,
                 role: role || "USER",
-                departmentId: isGlobalRole ? null : departmentId
+                departmentId: (isGlobalRole || !departmentId) ? null : departmentId
             },
             select: {
                 id: true,

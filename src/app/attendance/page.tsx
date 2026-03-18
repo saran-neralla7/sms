@@ -7,6 +7,7 @@ import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaSave, FaSearch, FaUserCh
 import LogoSpinner from "@/components/LogoSpinner";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
+import { formatISTDate } from "@/lib/dateUtils";
 
 // Types
 interface Student {
@@ -89,8 +90,10 @@ export default function AttendancePage() {
             const userDept = (session?.user as any).departmentId;
             if (userDept) {
                 setSelectedDept(userDept);
-                // Optionally filter list?
-                // setDepartments(prev => prev.filter(d => d.id === userDept));
+                // Lock the department list ONLY for SMS_USER
+                if (role === "SMS_USER") {
+                    setDepartments(depts.filter((d: any) => d.id === userDept));
+                }
             }
         }
 
@@ -230,7 +233,8 @@ export default function AttendancePage() {
                 year,
                 semester,
                 sectionIds: selectedSectionIds.join(","), // Send all IDs
-                limit: "-1" // Fetch all students, no pagination
+                limit: "-1", // Fetch all students, no pagination
+                ...(selectedSubject ? { subjectId: selectedSubject } : {})
             });
 
             const res = await fetch(`/api/students?${query.toString()}`);
@@ -334,6 +338,7 @@ export default function AttendancePage() {
                 departmentId: selectedDept,
                 subjectId: selectedSubject || null,
                 periodIds: selectedPeriods,
+                labBatchId: selectedLabBatch || null,
                 students: students.map(s => ({
                     rollNumber: s.rollNumber,
                     name: s.name,
@@ -422,7 +427,8 @@ export default function AttendancePage() {
             semester,
             sectionId: selectedSectionIds[0] || "", // Use first selected for template
             startDate: bulkStartDate,
-            endDate: bulkEndDate
+            endDate: bulkEndDate,
+            t: Date.now().toString()
         });
 
         window.open(`/api/attendance/bulk/template?${query.toString()}`, "_blank");
@@ -581,8 +587,25 @@ export default function AttendancePage() {
                     <>
                         <div className="grid gap-4 md:grid-cols-3 bg-slate-50 p-4 rounded-lg">
                             <div>
-                                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Date</label>
-                                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm" />
+                                <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Date (DD-MM-YYYY)</label>
+                                <div className="relative">
+                                    {/* Hidden native date picker for calendar UI */}
+                                    <input 
+                                        type="date" 
+                                        value={date} 
+                                        onChange={(e) => setDate(e.target.value)} 
+                                        max={new Date().toISOString().split("T")[0]} 
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                        title="Select Date"
+                                    />
+                                    {/* Visible formatted display */}
+                                    <div className="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-700">
+                                        <span>
+                                            {date ? `${date.split('-')[2]}-${date.split('-')[1]}-${date.split('-')[0]}` : "DD-MM-YYYY"}
+                                        </span>
+                                        <FaCalendarAlt className="text-slate-400" />
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Subject & Period - Hidden for SMS_USER */}
@@ -720,12 +743,40 @@ export default function AttendancePage() {
                             <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-800"><FaFileDownload /> 1. Download Template</h3>
                             <div className="flex gap-4 items-end">
                                 <div className="flex-1">
-                                    <label className="text-xs font-semibold uppercase text-slate-500">Start Date</label>
-                                    <input type="date" value={bulkStartDate} onChange={(e) => setBulkStartDate(e.target.value)} className="w-full rounded-md border p-2" />
+                                    <label className="text-xs font-semibold uppercase text-slate-500">Start Date (DD-MM-YYYY)</label>
+                                    <div className="relative mt-1">
+                                        <input 
+                                            type="date" 
+                                            value={bulkStartDate} 
+                                            onChange={(e) => setBulkStartDate(e.target.value)} 
+                                            max={new Date().toISOString().split("T")[0]}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                        />
+                                        <div className="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-700 h-[38px]">
+                                            <span>
+                                                {bulkStartDate ? `${bulkStartDate.split('-')[2]}-${bulkStartDate.split('-')[1]}-${bulkStartDate.split('-')[0]}` : "DD-MM-YYYY"}
+                                            </span>
+                                            <FaCalendarAlt className="text-slate-400" />
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="flex-1">
-                                    <label className="text-xs font-semibold uppercase text-slate-500">End Date</label>
-                                    <input type="date" value={bulkEndDate} onChange={(e) => setBulkEndDate(e.target.value)} className="w-full rounded-md border p-2" />
+                                    <label className="text-xs font-semibold uppercase text-slate-500">End Date (DD-MM-YYYY)</label>
+                                    <div className="relative mt-1">
+                                        <input 
+                                            type="date" 
+                                            value={bulkEndDate} 
+                                            onChange={(e) => setBulkEndDate(e.target.value)} 
+                                            max={new Date().toISOString().split("T")[0]}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                        />
+                                        <div className="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-700 h-[38px]">
+                                            <span>
+                                                {bulkEndDate ? `${bulkEndDate.split('-')[2]}-${bulkEndDate.split('-')[1]}-${bulkEndDate.split('-')[0]}` : "DD-MM-YYYY"}
+                                            </span>
+                                            <FaCalendarAlt className="text-slate-400" />
+                                        </div>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={downloadTemplate}
@@ -793,7 +844,7 @@ export default function AttendancePage() {
                                 {/* Details Block (Same for both) */}
                                 <div>
                                     <span className="block text-[10px] uppercase font-bold text-slate-400">Date</span>
-                                    <span className="font-semibold text-slate-900">{new Date(summaryData.date).toLocaleDateString()}</span>
+                                    <span className="font-semibold text-slate-900">{formatISTDate(summaryData.date)}</span>
                                 </div>
                                 <div>
                                     <span className="block text-[10px] uppercase font-bold text-slate-400">Class</span>

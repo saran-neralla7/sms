@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { AttendanceHistory } from "@/types";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { FaCalendarAlt, FaFileExcel, FaFilter, FaHistory, FaTrash, FaUserCircle, FaEye, FaDownload, FaTimes, FaEdit } from "react-icons/fa";
+import { FaCalendarAlt, FaFileExcel, FaFilter, FaHistory, FaTrash, FaUserCircle, FaEye, FaDownload, FaTimes, FaEdit, FaSms, FaCheckCircle } from "react-icons/fa";
 
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
+import LogoSpinner from "@/components/LogoSpinner";
+import { formatISTDate } from "@/lib/dateUtils";
 
 export default function HistoryPage() {
     const [history, setHistory] = useState<AttendanceHistory[]>([]);
@@ -31,6 +33,15 @@ export default function HistoryPage() {
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
 
     const [viewMode, setViewMode] = useState<"academic" | "sms">("academic");
+
+    // SMS State
+    const [sendingSms, setSendingSms] = useState(false);
+    const [smsSummary, setSmsSummary] = useState<{ success: number, failed: number, visible: boolean }>({ success: 0, failed: 0, visible: false });
+
+    // SMS Confirmation State
+    const [isSmsConfirmModalOpen, setIsSmsConfirmModalOpen] = useState(false);
+    const [recordToSms, setRecordToSms] = useState<any>(null);
+    const [smsAlreadySentCheck, setSmsAlreadySentCheck] = useState<{ checking: boolean, sent: boolean, count: number }>({ checking: false, sent: false, count: 0 });
 
     useEffect(() => {
         fetchHistory();
@@ -130,8 +141,10 @@ export default function HistoryPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Attendance");
 
             // Fix filename
-            const dateStr = new Date(viewRecord.date).toLocaleDateString("en-IN").replace(/\//g, "-");
-            const filename = `Attendance_Year-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${dateStr}.xlsx`;
+            const deptStr = viewRecord.department?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Dept";
+            const subjectStr = viewRecord.subject?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "SMS";
+            const dateStr = formatISTDate(viewRecord.date);
+            const filename = `Attendance_${deptStr}_Yr-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${subjectStr}_${dateStr}.xlsx`;
 
             XLSX.writeFile(wb, filename);
         } catch (e) { console.error("Download Error:", e); }
@@ -167,11 +180,56 @@ export default function HistoryPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Absentees");
 
             // Customize filename
-            const dateStr = new Date(viewRecord.date).toLocaleDateString("en-IN").replace(/\//g, "-");
-            const filename = `Absentees_Year-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${dateStr}.xlsx`;
+            const deptStr = viewRecord.department?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Dept";
+            const subjectStr = viewRecord.subject?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "SMS";
+            const dateStr = formatISTDate(viewRecord.date);
+            const filename = `Absentees_${deptStr}_Yr-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${subjectStr}_${dateStr}.xlsx`;
 
             XLSX.writeFile(wb, filename);
         } catch (e) { console.error("Download Error:", e); }
+    };
+
+    const initSendSms = async (record: any, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        setRecordToSms(record);
+        setIsSmsConfirmModalOpen(true);
+        setSmsAlreadySentCheck({ checking: true, sent: false, count: 0 });
+        setIsViewModalOpen(false); // Close view modal if it was open
+
+        try {
+            const res = await fetch(`/api/sms/check-sent?historyId=${record.id}`);
+            const data = await res.json();
+            setSmsAlreadySentCheck({ checking: false, sent: data.alreadySent, count: data.count });
+        } catch (err) {
+            setSmsAlreadySentCheck({ checking: false, sent: false, count: 0 });
+        }
+    };
+
+    const confirmAndSendSms = async () => {
+        if (!recordToSms) return;
+        setIsSmsConfirmModalOpen(false);
+        setSendingSms(true);
+
+        try {
+            const res = await fetch("/api/sms/send-absentees", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ historyId: recordToSms.id })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                setSmsSummary({ success: data.successCount, failed: data.failureCount, visible: true });
+            } else {
+                setStatus({ type: "error", message: data.error || "Failed to send SMS" });
+            }
+        } catch (error) {
+            console.error("SMS Error:", error);
+            setStatus({ type: "error", message: "Network error sending SMS" });
+        } finally {
+            setSendingSms(false);
+            setRecordToSms(null);
+        }
     };
 
     const getFilteredHistory = () => {
@@ -393,19 +451,26 @@ export default function HistoryPage() {
                             ) : filteredHistory.length === 0 ? (
                                 <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">No records found matching filters</td></tr>
                             ) : (
-                                filteredHistory.map((record) => (
-                                    <tr key={record.id} className="group hover:bg-slate-50/80 transition-colors">
+                                filteredHistory.map((record) => {
+                                    const recordDate = new Date(record.date);
+                                    const now = new Date();
+                                    const isToday = recordDate.getDate() === now.getDate() && 
+                                                    recordDate.getMonth() === now.getMonth() && 
+                                                    recordDate.getFullYear() === now.getFullYear();
+
+                                    return (
+                                        <tr key={record.id} className="group hover:bg-slate-50/80 transition-colors">
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
-                                            {new Date(record.date).toLocaleDateString("en-IN", {
-                                                day: 'numeric', month: 'short', year: 'numeric'
-                                            })}
+                                            {formatISTDate(record.date)}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-medium text-slate-900">
-                                                    Year {record.year} - Sem {record.semester}
+                                                <span className="text-sm font-medium text-slate-900 truncate max-w-[200px] sm:max-w-xs" title={record.department?.name || "Unknown Dept"}>
+                                                    {record.department?.name || "Unknown Dept"}
                                                 </span>
-                                                <span className="text-xs text-slate-500">Section {record.section?.name}</span>
+                                                <span className="text-xs text-slate-500">
+                                                    Yr {record.year} - Sem {record.semester} - Sec {record.section?.name}
+                                                </span>
                                                 {/* Subject & Period (or SMS) */}
                                                 <div className="mt-1">
                                                     {record.subject ? (
@@ -451,6 +516,22 @@ export default function HistoryPage() {
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
+                                                {/* Direct SMS Button */}
+                                                {["SMS_USER", "ADMIN", "DIRECTOR", "PRINCIPAL"].includes(((session?.user as any)?.role || "").toUpperCase()) && (
+                                                    <button
+                                                        onClick={(e) => initSendSms(record, e)}
+                                                        disabled={!isToday}
+                                                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+                                                            isToday 
+                                                                ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" 
+                                                                : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                                        }`}
+                                                        title={isToday ? "Send SMS to Absentees" : "SMS can only be sent on the day of attendance"}
+                                                    >
+                                                        <FaSms size={14} /> Send SMS
+                                                    </button>
+                                                )}
+
                                                 {/* Edit Button */}
                                                 {["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes((session?.user.role || "").toUpperCase()) && (
                                                     <button
@@ -474,7 +555,8 @@ export default function HistoryPage() {
                                             </div>
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
@@ -496,6 +578,65 @@ export default function HistoryPage() {
                 isDangerous={true}
             />
 
+            {/* SMS Confirmation Modal */}
+            <Modal isOpen={isSmsConfirmModalOpen} onClose={() => setIsSmsConfirmModalOpen(false)} title="Confirm SMS Delivery">
+                <div className="p-6">
+                    <div className="flex flex-col items-center justify-center text-center">
+                        <div className="mb-4 rounded-full bg-indigo-100 p-4 text-indigo-600">
+                            <FaSms size={32} />
+                        </div>
+                        <h3 className="mb-2 text-xl font-bold text-slate-900">Send Delivery Alerts</h3>
+                        <p className="mb-6 text-sm text-slate-500 max-w-sm">
+                            You are about to send SMS alerts to the parents of all absent students for this class record.
+                        </p>
+
+                        {smsAlreadySentCheck.checking ? (
+                            <div className="mb-6 rounded-lg bg-slate-50 p-4 w-full flex items-center justify-center gap-2 text-sm text-slate-500">
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600"></div>
+                                Checking previous deliveries...
+                            </div>
+                        ) : smsAlreadySentCheck.sent ? (
+                            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 w-full text-left">
+                                <div className="flex items-start gap-3">
+                                    <div className="text-amber-500 text-xl font-bold mt-0.5">⚠️</div>
+                                    <div>
+                                        <p className="font-semibold text-amber-800">SMS Already Sent</p>
+                                        <p className="text-sm text-amber-700 mt-1">
+                                            It looks like {smsAlreadySentCheck.count} delivery alerts have already been processed for this class on this date.
+                                            Are you sure you want to resend them?
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mb-6 rounded-lg border border-slate-100 bg-slate-50 p-4 w-full">
+                                <p className="text-sm text-slate-600 font-medium tracking-wide">Ready to process delivery queue.</p>
+                            </div>
+                        )}
+
+                        <div className="flex w-full gap-3 mt-2">
+                            <button
+                                onClick={() => setIsSmsConfirmModalOpen(false)}
+                                className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmAndSendSms}
+                                disabled={smsAlreadySentCheck.checking}
+                                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white shadow-sm transition-all ${smsAlreadySentCheck.sent
+                                        ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
+                                        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20"
+                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                <FaSms />
+                                {smsAlreadySentCheck.sent ? "Resend" : "Confirm"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Modal>
+
             {/* View Modal */}
             {viewRecord && (
                 <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Attendance Report">
@@ -506,14 +647,17 @@ export default function HistoryPage() {
                                     <div>
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Date</span>
                                         <span className="font-medium text-slate-900">
-                                            {new Date(viewRecord.date).toLocaleDateString()}
+                                            {formatISTDate(viewRecord.date)}
                                         </span>
                                     </div>
                                     <div>
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
                                         <span className="font-medium text-slate-900">
-                                            Year {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name || 'N/A'}
+                                            {viewRecord.department?.name || 'Unknown Dept'}
                                         </span>
+                                        <div className="text-xs text-slate-500 mt-0.5">
+                                            Yr {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name || 'N/A'}
+                                        </div>
                                     </div>
                                     <div className="col-span-2 my-2 border-t border-slate-200"></div>
                                     <div>
@@ -543,8 +687,16 @@ export default function HistoryPage() {
                                     onClick={handleDownloadAbsentees}
                                     className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
                                 >
-                                    <FaDownload /> Download Absentees
+                                    <FaFileExcel /> Download Absentees (Excel)
                                 </button>
+                                {["SMS_USER", "ADMIN", "DIRECTOR", "PRINCIPAL"].includes(((session?.user as any)?.role || "").toUpperCase()) && (
+                                    <button
+                                        onClick={() => initSendSms(viewRecord)}
+                                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-indigo-700 transition-colors"
+                                    >
+                                        <FaSms size={16} /> Send SMS to Absentees
+                                    </button>
+                                )}
                             </div>
 
                             <button onClick={() => setIsViewModalOpen(false)} className="mt-2 w-full text-center text-xs text-slate-400 hover:text-slate-600 underline">
@@ -608,6 +760,48 @@ export default function HistoryPage() {
                             {saving ? "Saving..." : "Save Changes"}
                         </button>
                     </div>
+                </div>
+            </Modal>
+
+            {/* SMS Loading Modal */}
+            <Modal isOpen={sendingSms} onClose={() => { }} title="Sending SMS">
+                <div className="flex flex-col items-center justify-center p-8 space-y-4">
+                    <LogoSpinner fullScreen={false} />
+                    <p className="text-lg font-bold text-slate-800 text-center mt-4">Sending messages to parents...</p>
+                    <p className="text-sm text-slate-500 text-center">Please wait, do not close this window.</p>
+                </div>
+            </Modal>
+
+            {/* SMS Summary Modal */}
+            <Modal isOpen={smsSummary.visible} onClose={() => setSmsSummary({ ...smsSummary, visible: false })} title="SMS Delivery Report">
+                <div className="p-6">
+                    <div className="flex flex-col items-center space-y-4 mb-6">
+                        <div className="rounded-full bg-green-100 p-4 text-green-600 shadow-sm border border-green-200">
+                            <FaCheckCircle size={36} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-800">Messages Processed</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="bg-green-50/80 rounded-2xl p-6 border border-green-200/60 shadow-sm">
+                            <div className="text-4xl font-black text-green-600 tracking-tight">{smsSummary.success}</div>
+                            <div className="text-sm font-bold text-green-800 mt-2">Successfully Sent</div>
+                        </div>
+                        <div className="bg-red-50/80 rounded-2xl p-6 border border-red-200/60 shadow-sm">
+                            <div className="text-4xl font-black text-red-600 tracking-tight">{smsSummary.failed}</div>
+                            <div className="text-sm font-bold text-red-800 mt-2">Failed to Send</div>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            setSmsSummary({ ...smsSummary, visible: false });
+                            fetchHistory(); // Refresh to see logs easily
+                        }}
+                        className="mt-8 w-full rounded-xl bg-slate-900 px-4 py-4 text-sm font-bold text-white shadow hover:bg-slate-800 transition-colors"
+                    >
+                        Return to Dashboard
+                    </button>
                 </div>
             </Modal>
         </div>

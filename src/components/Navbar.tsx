@@ -34,7 +34,10 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                 <div className="flex h-16 items-center justify-between">
                     {/* Logo / Home via Logo */}
                     <div className="flex items-center gap-4">
-                        <Link href={(session.user as any).role === "FACULTY" ? "/faculty/dashboard" : "/dashboard"} className="flex items-center gap-2">
+                        <Link 
+                            href={(session.user as any).role === "FACULTY" ? "/faculty/dashboard" : (session.user as any).role === "STUDENT" ? "/student/dashboard" : "/dashboard"} 
+                            className="flex items-center gap-2"
+                        >
                             <img
                                 src="https://www.gvpcdpgc.edu.in/gvplogo.jpg"
                                 alt="Logo"
@@ -57,8 +60,8 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                             </div>
                         )}
 
-                        {/* Global Academic Year Selector - HIDE for SMS User */}
-                        {(session.user as any).role !== "SMS_USER" && (
+                        {/* Global Academic Year Selector - HIDE for SMS User and Students */}
+                        {(session.user as any).role !== "SMS_USER" && (session.user as any).role !== "STUDENT" && (
                             <div className="hidden md:block">
                                 <AcademicYearSelector years={years} currentYearId={currentYearId} />
                             </div>
@@ -67,8 +70,8 @@ export default function Navbar({ years = [], currentYearId }: Props) {
 
                     {/* Right Side Actions */}
                     <div className="flex items-center gap-3">
-                        {/* Back Button - Hidden on Dashboard and for SMS User */}
-                        {!isDashboard && (session.user as any).role !== "SMS_USER" && (
+                        {/* Back Button - Hidden on Dashboard, for SMS User, and for Students */}
+                        {!isDashboard && (session.user as any).role !== "SMS_USER" && (session.user as any).role !== "STUDENT" && (
                             <button
                                 onClick={() => router.back()}
                                 className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900"
@@ -79,8 +82,8 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                             </button>
                         )}
 
-                        {/* Home Button - Hidden on Dashboard and for SMS User */}
-                        {!isDashboard && (session.user as any).role !== "SMS_USER" && (
+                        {/* Home Button - Hidden on Dashboard, for SMS User, and for Students */}
+                        {!isDashboard && (session.user as any).role !== "SMS_USER" && (session.user as any).role !== "STUDENT" && (
                             <Link
                                 href={(session.user as any).role === "FACULTY" ? "/faculty/dashboard" : "/dashboard"}
                                 className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700"

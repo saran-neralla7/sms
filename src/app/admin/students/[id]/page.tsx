@@ -9,6 +9,7 @@ import Image from "next/image";
 import EditStudentModal from "@/components/EditStudentModal";
 import Modal from "@/components/Modal";
 import AttendanceGraph from "@/components/AttendanceGraph";
+import { formatISTDate } from "@/lib/dateUtils";
 
 export default function StudentProfilePage() {
     const params = useParams();
@@ -28,7 +29,7 @@ export default function StudentProfilePage() {
 
     // SMS Logs Modal State
     const [isSmsLogModalOpen, setIsSmsLogModalOpen] = useState(false);
-    const [smsLogData, setSmsLogData] = useState<{ student: any, absentDates: any[] } | null>(null);
+    const [smsLogData, setSmsLogData] = useState<any[] | null>(null);
     const [smsLogLoading, setSmsLogLoading] = useState(false);
 
     useEffect(() => {
@@ -109,15 +110,16 @@ export default function StudentProfilePage() {
         setSmsLogLoading(true);
         setSmsLogData(null);
         try {
-            const res = await fetch(`/api/students/${params?.id}/sms-logs`);
+            const res = await fetch(`/api/sms/logs?studentId=${params?.id}`);
             if (res.ok) {
                 const data = await res.json();
                 setSmsLogData(data);
             } else {
-                setSmsLogData({ student: null, absentDates: [] }); // Error state
+                setSmsLogData([]); // Error state fallback
             }
         } catch (e) {
             console.error(e);
+            setSmsLogData([]);
         } finally {
             setSmsLogLoading(false);
         }
@@ -243,7 +245,7 @@ export default function StudentProfilePage() {
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
                             <h3 className="mb-4 text-lg font-bold text-slate-900">Personal Details</h3>
                             <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
-                                <InfoItem label="Date of Birth" value={student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : "-"} icon={<FaCalendarAlt />} />
+                                <InfoItem label="Date of Birth" value={student.dateOfBirth ? formatISTDate(student.dateOfBirth) : "-"} icon={<FaCalendarAlt />} />
                                 <InfoItem label="Gender" value={student.gender} />
                                 <InfoItem label="Father's Name" value={student.fatherName} />
                                 <InfoItem label="Mother's Name" value={student.motherName} />
@@ -272,7 +274,7 @@ export default function StudentProfilePage() {
                             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                                 <InfoItem label="Admission Type" value={student.admissionType} />
                                 <InfoItem label="EAMCET Rank" value={student.eamcetRank} />
-                                <InfoItem label="Date of Reporting" value={student.dateOfReporting ? new Date(student.dateOfReporting).toLocaleDateString() : "-"} />
+                                <InfoItem label="Date of Reporting" value={student.dateOfReporting ? formatISTDate(student.dateOfReporting) : "-"} />
                                 <InfoItem label="Reimbursement" value={student.reimbursement ? "Yes" : "No"} />
                             </div>
                         </div>
@@ -625,34 +627,47 @@ export default function StudentProfilePage() {
                         </div>
                     ) : smsLogData ? (
                         <div>
-                            <div className="mb-4 rounded-md bg-slate-50 p-3">
-                                <p className="text-sm font-semibold text-slate-800">{smsLogData.student?.name}</p>
-                                <p className="text-xs text-slate-500">{smsLogData.student?.rollNumber}</p>
+                            <div className="mb-4 rounded-md bg-slate-50 p-3 flex justify-between items-center">
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-800">{student?.name}</p>
+                                    <p className="text-xs text-slate-500">{student?.rollNumber}</p>
+                                </div>
+                                <div className="text-xs font-mono text-slate-400">
+                                    {smsLogData?.length} logs found
+                                </div>
                             </div>
 
-                            {smsLogData.absentDates.length === 0 ? (
+                            {(!smsLogData || smsLogData.length === 0) ? (
                                 <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg border border-slate-100">
-                                    <p className="font-medium">No Absent Records</p>
-                                    <p className="text-xs mt-1">Student present for all SMS sessions.</p>
+                                    <p className="font-medium">No SMS Logs</p>
+                                    <p className="text-xs mt-1">No SMS alerts have been sent for this student yet.</p>
                                 </div>
                             ) : (
                                 <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200">
                                     <table className="w-full text-left text-sm">
                                         <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500 sticky top-0">
                                             <tr>
-                                                <th className="px-4 py-2 border-b border-slate-200">Date</th>
+                                                <th className="px-4 py-2 border-b border-slate-200">Sent Date</th>
+                                                <th className="px-4 py-2 border-b border-slate-200">Target Absent Date</th>
+                                                <th className="px-4 py-2 border-b border-slate-200">Sender</th>
                                                 <th className="px-4 py-2 border-b border-slate-200 text-right">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {smsLogData.absentDates.map((log: any) => (
+                                            {smsLogData.map((log: any) => (
                                                 <tr key={log.id} className="hover:bg-slate-50">
                                                     <td className="px-4 py-2 font-medium text-slate-700">
-                                                        {new Date(log.date).toLocaleDateString()}
+                                                        {formatISTDate(log.dateSent)}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-slate-600">
+                                                        {new Date(log.targetDate).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-slate-600">
+                                                        {log.sentBy}
                                                     </td>
                                                     <td className="px-4 py-2 text-right">
-                                                        <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
-                                                            Absent
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${log.status === "SUCCESS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                                            {log.status === "SUCCESS" ? "Delivered" : "Failed"}
                                                         </span>
                                                     </td>
                                                 </tr>
