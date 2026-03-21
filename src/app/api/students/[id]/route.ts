@@ -23,7 +23,10 @@ export async function GET(
             include: {
                 department: true,
                 section: true,
-                regulation: true
+                regulation: true,
+                batch: true,
+                originalBatch: true,
+                labBatch: true
             }
         });
 
