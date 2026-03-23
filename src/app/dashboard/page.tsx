@@ -171,7 +171,7 @@ export default function DashboardPage() {
                     </span>
                     <div>
                       <p className="font-semibold">
-                        {backupStatus.status === "success" ? "Database Backup Successful" : "Database Backup Failed"}
+                        {backupStatus.status === "success" ? "System Auto-Sync Successful" : "System Auto-Sync Failed"}
                       </p>
                       <p className="text-sm opacity-90">
                         {backupStatus.message}

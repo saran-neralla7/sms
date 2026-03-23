@@ -26,7 +26,16 @@ export async function GET(
                 regulation: true,
                 batch: true,
                 originalBatch: true,
-                labBatch: true
+                labBatch: true,
+                internalMarks: {
+                    include: {
+                        subject: true,
+                        academicYear: true
+                    },
+                    orderBy: {
+                        createdAt: 'desc'
+                    }
+                }
             }
         });
 

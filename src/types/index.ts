@@ -55,6 +55,7 @@ export interface Student {
     certificatesSubmitted?: boolean;
     domainMailId?: string;
     subjects?: any[];
+    internalMarks?: any[];
 }
 
 export interface Subject {

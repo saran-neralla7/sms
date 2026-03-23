@@ -49,6 +49,7 @@ model User {
   smsLogs               SMSLog[]
   department            Department?            @relation(fields: [departmentId], references: [id])
   faculty               Faculty?               @relation(fields: [facultyId], references: [id])
+  internalMarks         InternalMark[]
 }
 
 model Faculty {
@@ -126,6 +127,7 @@ model Student {
   regulation            Regulation?       @relation(fields: [regulationId], references: [id])
   section               Section           @relation(fields: [sectionId], references: [id])
   subjects              Subject[]         @relation("StudentToSubject")
+  internalMarks         InternalMark[]
 }
 
 model SemesterResult {
@@ -172,6 +174,7 @@ model Subject {
   regulation           Regulation?              @relation(fields: [regulationId], references: [id])
   timetables           Timetable[]
   students             Student[]                @relation("StudentToSubject")
+  internalMarks        InternalMark[]
 }
 
 model Period {
@@ -239,6 +242,7 @@ model AcademicYear {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   attendanceHistory AttendanceHistory[]
+  internalMarks     InternalMark[]
 }
 
 model Batch {
@@ -376,4 +380,23 @@ model ExamApplicationSetting {
   updatedAt      DateTime  @updatedAt
 
   @@unique([year, semester])
+}
+
+model InternalMark {
+  id           String   @id @default(uuid())
+  studentId    String
+  subjectId    String
+  academicYearId String
+  marksObtained Float
+  maxMarks     Float    @default(30)
+  recordedById String   
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+
+  @@unique([studentId, subjectId, academicYearId])
 }

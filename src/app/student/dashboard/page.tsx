@@ -11,7 +11,7 @@ import { formatISTDate } from "@/lib/dateUtils";
 export default function StudentDashboardPage() {
     const [student, setStudent] = useState<Student | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "results">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "results" | "internal-marks">("overview");
     const [stats, setStats] = useState<any>(null);
     const [results, setResults] = useState<any[]>([]);
     const [statsLoading, setStatsLoading] = useState(false);
@@ -139,6 +139,7 @@ export default function StudentDashboardPage() {
                             <TabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")} label="Overview" />
                             <TabButton active={activeTab === "attendance"} onClick={() => setActiveTab("attendance")} label="Attendance" />
                             <TabButton active={activeTab === "results"} onClick={() => setActiveTab("results")} label="Results" />
+                            <TabButton active={activeTab === "internal-marks"} onClick={() => setActiveTab("internal-marks")} label="Internal Marks" />
                         </div>
                     </div>
                 </div>
@@ -387,6 +388,46 @@ export default function StudentDashboardPage() {
                         ) : (
                             <div className="text-center py-12 text-slate-500 bg-white rounded-xl border border-slate-200">
                                 <p>Your exam results have not been posted yet.</p>
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+
+                {activeTab === "internal-marks" && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                        {student.internalMarks && student.internalMarks.length > 0 ? (
+                            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <h3 className="mb-4 text-lg font-bold text-slate-900">Recorded Internal Marks</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-6 py-3 font-semibold">Academic Year</th>
+                                                <th className="px-6 py-3 font-semibold">Subject Code</th>
+                                                <th className="px-6 py-3 font-semibold">Subject Name</th>
+                                                <th className="px-6 py-3 font-semibold text-right">Marks (Out of 30)</th>
+                                                <th className="px-6 py-3 font-semibold text-right">Date Uploaded</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {student.internalMarks.map((mark: any) => (
+                                                <tr key={mark.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-6 py-4 font-medium text-slate-700">{mark.academicYear?.name}</td>
+                                                    <td className="px-6 py-4 text-slate-600">{mark.subject?.code}</td>
+                                                    <td className="px-6 py-4 text-slate-600">{mark.subject?.name}</td>
+                                                    <td className="px-6 py-4 text-right font-bold text-slate-900">{mark.marksObtained}</td>
+                                                    <td className="px-6 py-4 text-right text-slate-400 text-xs">
+                                                        {new Date(mark.createdAt).toLocaleDateString()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-12 text-slate-500 bg-white rounded-xl border border-slate-200">
+                                <p>No internal marks recorded yet.</p>
                             </div>
                         )}
                     </motion.div>

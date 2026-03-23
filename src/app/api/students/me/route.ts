@@ -30,6 +30,15 @@ export async function GET(request: Request) {
                         isElective: true,
                         type: true
                     }
+                },
+                internalMarks: {
+                    include: {
+                        subject: true,
+                        academicYear: true
+                    },
+                    orderBy: {
+                        createdAt: 'desc'
+                    }
                 }
             }
         });
