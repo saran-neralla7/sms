@@ -175,6 +175,13 @@ export default function AdminDashboardPage() {
             description: "Configure exam dates, create office accounts, and view statistics.",
             href: "/admin/exam-applications",
             color: "bg-amber-50 text-amber-600"
+        },
+        {
+            title: "Internal Marks",
+            icon: <FaBook className="h-6 w-6" />,
+            description: "Bulk upload internal marks via Excel templates.",
+            href: "/admin/internal-marks",
+            color: "bg-red-50 text-red-600"
         }
     ];
 
