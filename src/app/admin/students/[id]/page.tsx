@@ -125,6 +125,52 @@ export default function StudentProfilePage() {
         }
     };
 
+    const handleEditInternalMark = async (mark: any) => {
+        const newMarks = prompt(`Enter new marks for ${mark.subject?.name}:`, mark.marksObtained);
+        if (newMarks === null) return;
+        const parsed = parseFloat(newMarks);
+        if (isNaN(parsed) || parsed < 0) {
+            alert("Invalid marks entered.");
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/internal-marks/${mark.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ marksObtained: parsed })
+            });
+            if (res.ok) {
+                alert("Mark updated successfully");
+                fetchStudent(); // Re-fetch
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to update mark");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Update Error");
+        }
+    };
+
+    const handleDeleteInternalMark = async (mark: any) => {
+        if (!confirm(`Are you sure you want to delete the internal mark for ${mark.subject?.name}?`)) return;
+        
+        try {
+            const res = await fetch(`/api/internal-marks/${mark.id}`, { method: "DELETE" });
+            if (res.ok) {
+                alert("Mark deleted successfully");
+                fetchStudent(); // Re-fetch
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to delete mark");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Delete Error");
+        }
+    };
+
     if (loading) {
         return <div className="flex h-96 items-center justify-center text-slate-500">Loading Profile...</div>;
     }
@@ -608,6 +654,7 @@ export default function StudentProfilePage() {
                                                 <th className="px-6 py-3 font-semibold">Subject Name</th>
                                                 <th className="px-6 py-3 font-semibold text-right">Marks Obtained</th>
                                                 <th className="px-6 py-3 font-semibold text-right">Date Uploaded</th>
+                                                <th className="px-6 py-3 font-semibold text-center">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -619,6 +666,24 @@ export default function StudentProfilePage() {
                                                     <td className="px-6 py-4 text-right font-bold text-purple-600">{mark.marksObtained}</td>
                                                     <td className="px-6 py-4 text-right text-slate-400 text-xs">
                                                         {new Date(mark.createdAt).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <div className="flex justify-center gap-3">
+                                                            <button
+                                                                onClick={() => handleEditInternalMark(mark)}
+                                                                className="text-blue-500 hover:text-blue-700 text-sm font-semibold transition-colors"
+                                                                title="Edit Mark"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteInternalMark(mark)}
+                                                                className="text-red-500 hover:text-red-700 text-sm font-semibold transition-colors"
+                                                                title="Delete Mark"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
