@@ -32,6 +32,16 @@ export default function StudentProfilePage() {
     const [smsLogData, setSmsLogData] = useState<any[] | null>(null);
     const [smsLogLoading, setSmsLogLoading] = useState(false);
 
+    // Internal Marks Modals
+    const [isEditMarkModalOpen, setIsEditMarkModalOpen] = useState(false);
+    const [selectedMarkForEdit, setSelectedMarkForEdit] = useState<any>(null);
+    const [editMarkValue, setEditMarkValue] = useState("");
+    const [editMarkLoading, setEditMarkLoading] = useState(false);
+
+    const [isDeleteMarkModalOpen, setIsDeleteMarkModalOpen] = useState(false);
+    const [selectedMarkForDelete, setSelectedMarkForDelete] = useState<any>(null);
+    const [deleteMarkLoading, setDeleteMarkLoading] = useState(false);
+
     useEffect(() => {
         const tab = searchParams?.get("tab");
         if (tab === "attendance" || tab === "results" || tab === "overview") {
@@ -125,42 +135,60 @@ export default function StudentProfilePage() {
         }
     };
 
-    const handleEditInternalMark = async (mark: any) => {
-        const newMarks = prompt(`Enter new marks for ${mark.subject?.name}:`, mark.marksObtained);
-        if (newMarks === null) return;
-        const parsed = parseFloat(newMarks);
+    const handleEditInternalMark = (mark: any) => {
+        setSelectedMarkForEdit(mark);
+        setEditMarkValue(mark.marksObtained.toString());
+        setIsEditMarkModalOpen(true);
+    };
+
+    const submitEditInternalMark = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedMarkForEdit) return;
+
+        const parsed = parseFloat(editMarkValue);
         if (isNaN(parsed) || parsed < 0) {
-            alert("Invalid marks entered.");
+            alert("Please enter a valid positive number.");
             return;
         }
 
+        setEditMarkLoading(true);
         try {
-            const res = await fetch(`/api/internal-marks/${mark.id}`, {
+            const res = await fetch(`/api/internal-marks/${selectedMarkForEdit.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ marksObtained: parsed })
             });
             if (res.ok) {
-                alert("Mark updated successfully");
-                fetchStudent(); // Re-fetch
+                fetchStudent();
+                setIsEditMarkModalOpen(false);
+                setSelectedMarkForEdit(null);
             } else {
                 const data = await res.json();
-                alert(data.error || "Failed to update mark");
+                alert(data.error || "Failed to update mark. " + JSON.stringify(data));
             }
         } catch (e) {
-            console.error(e);
-            alert("Update Error");
+            console.error("Update Error:", e);
+            alert("Critical Failure");
+        } finally {
+            setEditMarkLoading(false);
         }
     };
 
-    const handleDeleteInternalMark = async (mark: any) => {
-        if (!confirm(`Are you sure you want to delete the internal mark for ${mark.subject?.name}?`)) return;
-        
+    const handleDeleteInternalMark = (mark: any) => {
+        setSelectedMarkForDelete(mark);
+        setIsDeleteMarkModalOpen(true);
+    };
+
+    const submitDeleteInternalMark = async () => {
+        if (!selectedMarkForDelete) return;
+
+        setDeleteMarkLoading(true);
         try {
-            const res = await fetch(`/api/internal-marks/${mark.id}`, { method: "DELETE" });
+            const res = await fetch(`/api/internal-marks/${selectedMarkForDelete.id}`, { method: "DELETE" });
             if (res.ok) {
-                alert("Mark deleted successfully");
-                fetchStudent(); // Re-fetch
+                fetchStudent();
+                setIsDeleteMarkModalOpen(false);
+                setSelectedMarkForDelete(null);
             } else {
                 const data = await res.json();
                 alert(data.error || "Failed to delete mark");
@@ -168,6 +196,8 @@ export default function StudentProfilePage() {
         } catch (e) {
             console.error(e);
             alert("Delete Error");
+        } finally {
+            setDeleteMarkLoading(false);
         }
     };
 

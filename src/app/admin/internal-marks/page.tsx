@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaFileDownload, FaFileUpload } from "react-icons/fa";
+import { FaFileDownload, FaFileUpload, FaTrashAlt } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
+import Modal from "@/components/Modal";
 
 interface Meta {
     id: string;
@@ -31,6 +32,12 @@ export default function InternalMarksUploadPage() {
 
     const [bulkFile, setBulkFile] = useState<File | null>(null);
     const [bulkUploading, setBulkUploading] = useState(false);
+
+    // Modals Data
+    const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+    const [successMessage, setSuccessMessage] = useState("");
+    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+    const [bulkDeleting, setBulkDeleting] = useState(false);
 
     useEffect(() => {
         if (status === "authenticated") {
@@ -115,7 +122,8 @@ export default function InternalMarksUploadPage() {
 
     const uploadBulk = async () => {
         if (!bulkFile || !selectedAcademicYear || !selectedDept || !year || !semester || !selectedSection) {
-            alert("Please fill all selections and choose a file.");
+            setSuccessMessage("Please fill all selections and choose a file.");
+            setIsSuccessModalOpen(true);
             return;
         }
 
@@ -141,19 +149,65 @@ export default function InternalMarksUploadPage() {
             const data = await res.json();
 
             if (res.ok) {
-                alert(`Success! Generated/Updated ${data.recordsUpdated} marks.\nSkipped missing students: ${data.skippedStudentRows}\nIgnored invalid marks: ${data.invalidMarksIgnored}`);
+                setSuccessMessage(`Success! Generated/Updated ${data.recordsUpdated} marks.\nSkipped missing students: ${data.skippedStudentRows}\nIgnored invalid marks: ${data.invalidMarksIgnored}`);
                 setBulkFile(null);
-                // Reset file input
                 const fileInput = document.getElementById('marksUploadFile') as HTMLInputElement;
                 if (fileInput) fileInput.value = '';
             } else {
-                alert(data.error || "Upload Failed");
+                setSuccessMessage(data.error || "Upload Failed");
             }
         } catch (e) {
             console.error(e);
-            alert("Upload Error");
+            setSuccessMessage("Upload Error");
         } finally {
             setBulkUploading(false);
+            setIsSuccessModalOpen(true);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedAcademicYear || !selectedDept || !year || !semester || !selectedSection) {
+            setSuccessMessage("Please fill all drop-down selections before performing a Bulk Delete.");
+            setIsSuccessModalOpen(true);
+            setIsBulkDeleteModalOpen(false);
+            return;
+        }
+
+        setBulkDeleting(true);
+        try {
+            const formData = {
+                academicYearId: selectedAcademicYear,
+                departmentId: selectedDept,
+                year,
+                semester,
+                sectionId: selectedSection,
+                subjectYear: isOldMarks ? subjectYear : undefined,
+                subjectSemester: isOldMarks ? subjectSemester : undefined
+            };
+
+            const res = await fetch("/api/internal-marks/bulk-delete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formData)
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                setSuccessMessage(`Successfully deleted ${data.recordsDeleted} records.`);
+                setIsBulkDeleteModalOpen(false);
+                setIsSuccessModalOpen(true);
+            } else {
+                setSuccessMessage(data.error || "Bulk Delete Failed");
+                setIsBulkDeleteModalOpen(false);
+                setIsSuccessModalOpen(true);
+            }
+        } catch (e) {
+            console.error(e);
+            setSuccessMessage("Bulk Delete Error");
+            setIsBulkDeleteModalOpen(false);
+            setIsSuccessModalOpen(true);
+        } finally {
+            setBulkDeleting(false);
         }
     };
 
@@ -296,8 +350,75 @@ export default function InternalMarksUploadPage() {
                             </button>
                         </div>
                     </div>
+
+                    {/* 3. Bulk Delete Warning Row */}
+                    <div className="rounded-lg border border-red-100 bg-red-50/50 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex-1">
+                            <h3 className="flex items-center gap-2 font-bold text-red-800 text-lg"><FaTrashAlt className="text-red-600" /> 3. Rollback Database Changes</h3>
+                            <p className="mt-1 text-sm text-red-600/80 mb-2">If you uploaded a broken spreadsheet or the wrong class segment, you can instantly strip every internal mark recorded for the current section and subjects chosen above.</p>
+                        </div>
+                        <div className="shrink-0 flex items-center justify-end whitespace-nowrap">
+                            <button
+                                onClick={() => setIsBulkDeleteModalOpen(true)}
+                                disabled={bulkDeleting}
+                                className="flex min-w-[160px] items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50 shadow-sm"
+                            >
+                                <FaTrashAlt />
+                                {bulkDeleting ? "Deleting..." : "Purge Marks Data"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {/* Success/Error Modal */}
+            <Modal
+                isOpen={isSuccessModalOpen}
+                onClose={() => setIsSuccessModalOpen(false)}
+                title="System Notice"
+                maxWidth="sm"
+            >
+                <div className="p-4 flex flex-col items-center text-center">
+                    <p className="text-sm font-medium text-slate-700 mb-6 whitespace-pre-wrap">{successMessage}</p>
+                    <button
+                        onClick={() => setIsSuccessModalOpen(false)}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold text-sm transition-colors"
+                    >
+                        Acknowledge
+                    </button>
+                </div>
+            </Modal>
+
+            {/* Bulk Delete Confirm Modal */}
+            <Modal
+                isOpen={isBulkDeleteModalOpen}
+                onClose={() => setIsBulkDeleteModalOpen(false)}
+                title="Confirm Bulk Deletion"
+                maxWidth="md"
+            >
+                <div className="p-4">
+                    <p className="text-sm text-slate-600 mb-6 font-medium">
+                        Are you sure you want to permanently delete ALL internal marks for the exact group of students and subjects you specified in the dropdown fields above?
+                        This action CANNOT be reversed automatically.
+                    </p>
+                    <div className="flex justify-end gap-3">
+                        <button
+                            onClick={() => setIsBulkDeleteModalOpen(false)}
+                            disabled={bulkDeleting}
+                            className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleBulkDelete}
+                            disabled={bulkDeleting}
+                            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50"
+                        >
+                            {bulkDeleting ? "Processing..." : "Yes, Purge Records"}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }
