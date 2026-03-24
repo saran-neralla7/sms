@@ -22,6 +22,10 @@ export async function POST(request: Request) {
         const semester = formData.get("semester") as string;
         const sectionId = formData.get("sectionId") as string;
 
+        // Overrides for previous semesters
+        const subjectYear = formData.get("subjectYear") as string || year;
+        const subjectSemester = formData.get("subjectSemester") as string || semester;
+
         if (!file || !academicYearId || !departmentId || !year || !semester || !sectionId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
@@ -55,7 +59,7 @@ export async function POST(request: Request) {
         
         // Fetch valid subjects for the context
         const validSubjects = await prisma.subject.findMany({
-            where: { departmentId, year, semester }
+            where: { departmentId, year: subjectYear, semester: subjectSemester }
         });
 
         for (let i = 2; i < headerRow.length; i++) {
@@ -116,9 +120,8 @@ export async function POST(request: Request) {
                     continue;
                 }
 
-                // Strictly enforce marks between 0 and 30
+                // Strictly enforce non-negative marks
                 if (markVal < 0) markVal = 0;
-                if (markVal > 30) markVal = 30;
 
                 // Prepare Upsert (Unique constraint: studentId, subjectId, academicYearId)
                 operations.push(prisma.internalMark.upsert({
@@ -138,7 +141,6 @@ export async function POST(request: Request) {
                         subjectId: subCol.subjectId,
                         academicYearId,
                         marksObtained: markVal,
-                        maxMarks: 30,
                         recordedById: session.user.id
                     }
                 }));

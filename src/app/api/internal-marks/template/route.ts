@@ -19,9 +19,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const academicYearId = searchParams.get("academicYearId");
     const departmentId = searchParams.get("departmentId");
-    const year = searchParams.get("year");
-    const semester = searchParams.get("semester");
-    const sectionId = searchParams.get("sectionId");
+    const year = searchParams.get("year") as string;
+    const semester = searchParams.get("semester") as string;
+    const sectionId = searchParams.get("sectionId") as string;
+
+    // Optional overrides for previous semester marks
+    const subjectYear = searchParams.get("subjectYear") as string || year;
+    const subjectSemester = searchParams.get("subjectSemester") as string || semester;
 
     if (!academicYearId || !departmentId || !year || !semester || !sectionId) {
         return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
@@ -48,8 +52,8 @@ export async function GET(request: Request) {
         const subjects = await prisma.subject.findMany({
             where: {
                 departmentId,
-                year,
-                semester
+                year: subjectYear,
+                semester: subjectSemester
             },
             orderBy: { code: 'asc' }
         });
@@ -92,7 +96,7 @@ export async function GET(request: Request) {
         return new NextResponse(buffer, {
             headers: {
                 "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "Content-Disposition": `attachment; filename="Internal_Marks_Template_${year}_${semester}.xlsx"`,
+                "Content-Disposition": `attachment; filename="Internal_Marks_Template_Y${subjectYear}_S${subjectSemester}.xlsx"`,
             },
         });
     } catch (error) {

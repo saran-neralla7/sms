@@ -25,6 +25,10 @@ export default function InternalMarksUploadPage() {
     const [semester, setSemester] = useState("");
     const [selectedSection, setSelectedSection] = useState("");
 
+    const [isOldMarks, setIsOldMarks] = useState(false);
+    const [subjectYear, setSubjectYear] = useState("");
+    const [subjectSemester, setSubjectSemester] = useState("");
+
     const [bulkFile, setBulkFile] = useState<File | null>(null);
     const [bulkUploading, setBulkUploading] = useState(false);
 
@@ -87,13 +91,20 @@ export default function InternalMarksUploadPage() {
             return;
         }
 
-        const query = new URLSearchParams({
+        const queryParams: any = {
             academicYearId: selectedAcademicYear,
             departmentId: selectedDept,
             year,
             semester,
             sectionId: selectedSection
-        });
+        };
+
+        if (isOldMarks && subjectYear && subjectSemester) {
+            queryParams.subjectYear = subjectYear;
+            queryParams.subjectSemester = subjectSemester;
+        }
+
+        const query = new URLSearchParams(queryParams);
 
         window.open(`/api/internal-marks/template?${query.toString()}`, "_blank");
     };
@@ -116,6 +127,11 @@ export default function InternalMarksUploadPage() {
         formData.append("year", year);
         formData.append("semester", semester);
         formData.append("sectionId", selectedSection);
+
+        if (isOldMarks && subjectYear && subjectSemester) {
+            formData.append("subjectYear", subjectYear);
+            formData.append("subjectSemester", subjectSemester);
+        }
 
         try {
             const res = await fetch("/api/internal-marks/bulk", {
@@ -146,7 +162,7 @@ export default function InternalMarksUploadPage() {
     return (
         <div className="mx-auto max-w-7xl px-4 py-8 animate-in fade-in">
             <h1 className="mb-2 text-2xl font-bold text-slate-800">Internal Marks - Bulk Upload</h1>
-            <p className="mb-6 text-slate-500">Download Excel templates structured by class section, fill in the marks out of 30, and upload to synchronize with the database.</p>
+            <p className="mb-6 text-slate-500">Download Excel templates structured by class section, fill in the marks, and upload to synchronize with the database. Supports active and historical semesters.</p>
 
             <div className="grid gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 
@@ -207,6 +223,40 @@ export default function InternalMarksUploadPage() {
                     </div>
                 </div>
 
+                {/* HISTORICAL SESSIONS TOGGLE */}
+                <div className="mt-2 text-sm text-slate-600">
+                    <label className="flex items-center gap-2 cursor-pointer w-fit">
+                        <input type="checkbox" checked={isOldMarks} onChange={e => setIsOldMarks(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        Upload Previous Semester Marks (Backlog/HistoricalData)
+                    </label>
+                </div>
+
+                {/* HISTORICAL SESSIONS FIELDS */}
+                {isOldMarks && (
+                    <div className="mt-4 grid gap-4 md:grid-cols-2 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase text-orange-700">Which Semester's Marks?</label>
+                            <select
+                                value={subjectYear} onChange={(e) => setSubjectYear(e.target.value)}
+                                className="block w-full rounded-md border border-orange-300 p-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+                            >
+                                <option value="">Select Subject Year</option>
+                                {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase text-orange-700">&nbsp;</label>
+                            <select
+                                value={subjectSemester} onChange={(e) => setSubjectSemester(e.target.value)}
+                                className="block w-full rounded-md border border-orange-300 p-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+                            >
+                                <option value="">Select Subject Sem</option>
+                                {[1, 2].map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                )}
+
                 <div className="mt-4 border-t border-slate-100 pt-6 space-y-8">
                     {/* 1. Download Template */}
                     <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -226,7 +276,7 @@ export default function InternalMarksUploadPage() {
                     <div className="rounded-lg border border-purple-100 bg-purple-50/50 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex-1">
                             <h3 className="flex items-center gap-2 font-bold text-slate-800 text-lg"><FaFileUpload className="text-purple-600" /> 2. Upload Computed Marks</h3>
-                            <p className="mt-1 text-sm text-slate-500 mb-4">Enter marks strictly out of 30 into your local Excel spreadsheet. Any value greater than 30 is capped automatically. Blank cells are safely ignored.</p>
+                            <p className="mt-1 text-sm text-slate-500 mb-4">Enter exact marks into your local Excel spreadsheet. Blank cells are safely ignored.</p>
                             
                             <input
                                 type="file"

@@ -606,7 +606,7 @@ export default function StudentProfilePage() {
                                                 <th className="px-6 py-3 font-semibold">Academic Year</th>
                                                 <th className="px-6 py-3 font-semibold">Subject Code</th>
                                                 <th className="px-6 py-3 font-semibold">Subject Name</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Marks (Out of 30)</th>
+                                                <th className="px-6 py-3 font-semibold text-right">Marks Obtained</th>
                                                 <th className="px-6 py-3 font-semibold text-right">Date Uploaded</th>
                                             </tr>
                                         </thead>
