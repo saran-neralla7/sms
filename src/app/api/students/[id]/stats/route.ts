@@ -103,10 +103,17 @@ export async function GET(
 
         for (const record of attendanceRecords) {
             const subjectId = record.subjectId;
-            const subjectName = record.subject?.name || subjectMap.get(record.subjectId || "") || "Unknown Subject";
+            
+            // SECURITY: If the subject is not found in the student's Department 
+            // Curriculum (subjectMap), we forcefully skip this record to prevent 
+            // cross-contamination from legacy or corrupted attendance saves.
+            if (subjectId && !subjectMap.has(subjectId)) {
+                continue;
+            }
 
+            const subjectName = record.subject?.name || subjectMap.get(subjectId || "") || "Unknown Subject";
             const key = subjectId || "unassigned";
-            const name = subjectId ? subjectName : "Unassigned"; // Fallback Renamed
+            const name = subjectId ? subjectName : "Unassigned";
 
             if (!subjectStats[key]) {
                 subjectStats[key] = { id: key, name, total: 0, attended: 0 };
@@ -166,6 +173,11 @@ export async function GET(
 
             if (!monthlyStats[monthKey]) {
                 monthlyStats[monthKey] = { total: 0, attended: 0, date: date };
+            }
+
+            // SECURITY: Also protect the Monthly Trend timeline aggregation
+            if (record.subjectId && !subjectMap.has(record.subjectId)) {
+                continue;
             }
 
             // Re-check student status for this record (optimization: could store earlier)
