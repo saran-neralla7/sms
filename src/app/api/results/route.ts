@@ -30,7 +30,8 @@ export async function GET(request: Request) {
                         id: true,
                         rollNumber: true,
                         name: true,
-                        batch: true,
+                        batchString: true,
+                        batch: { select: { name: true } },
                         department: { select: { name: true, code: true } },
                         section: { select: { name: true } }
                     }

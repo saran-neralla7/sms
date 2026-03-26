@@ -227,7 +227,7 @@ export default function ResultsPage() {
                 "SGPA": r.sgpa,
                 "CGPA": r.cgpa
             };
-            (r.grades as any[]).forEach((g: any) => {
+            (r.grades as any[] || []).forEach((g: any) => {
                 row[g.subjectCode] = g.grade;
             });
             return row;
@@ -359,7 +359,8 @@ export default function ResultsPage() {
                                 const avgSGPA = (sectionResults.reduce((acc, r) => acc + (Number(r.sgpa) || 0), 0) / sectionResults.length).toFixed(2);
 
                                 // get batch and department from first student in this section
-                                const batchString = sectionResults[0]?.student?.batch || "Unknown Batch";
+                                const rawBatch = sectionResults[0]?.student;
+                                const batchString = rawBatch?.batch?.name || rawBatch?.batchString || "Unknown Batch";
                                 const deptName = sectionResults[0]?.student?.department?.name || "Unknown Dept";
                                 const deptCode = sectionResults[0]?.student?.department?.code || deptName;
 
@@ -401,7 +402,7 @@ export default function ResultsPage() {
                     {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => {
                         const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
                         // Extract all unique subject codes for this section to build matrix headers
-                        const allSubjects = Array.from(new Set(sectionResults.flatMap(r => (r.grades as any[]).map(g => g.subjectCode)))).sort();
+                        const allSubjects = Array.from(new Set(sectionResults.flatMap(r => ((r.grades || []) as any[]).map(g => g.subjectCode)))).sort();
 
                         return (
                             <div id={`results-table-${sectionName}`} key={sectionName} className="hidden overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm animate-in fade-in slide-in-from-top-4">
@@ -438,7 +439,7 @@ export default function ResultsPage() {
                                                     <td className="p-2 border border-slate-300 text-center font-bold text-slate-800">{Number(res.sgpa) ? Number(res.sgpa).toFixed(2) : res.sgpa}</td>
                                                     <td className="p-2 border border-slate-300 text-center text-slate-800">{Number(res.cgpa) ? Number(res.cgpa).toFixed(2) : res.cgpa}</td>
                                                     {allSubjects.map(subCode => {
-                                                        const gradeEntry = (res.grades as any[]).find(g => g.subjectCode === subCode);
+                                                        const gradeEntry = ((res.grades || []) as any[]).find(g => g.subjectCode === subCode);
                                                         const grade = gradeEntry?.grade || "-";
                                                         const isFail = grade === "F" || grade === "ABSENT";
                                                         return (
