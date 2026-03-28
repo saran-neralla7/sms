@@ -51,6 +51,7 @@ export async function GET(request: Request) {
             "UTR Number": app.utrNumber,
             "Amount Paid": app.amountPaid || "",
             "Duplicate UTR": app.duplicateUtr ? "YES" : "NO",
+            "Payment Date": app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—",
             "Status": app.status,
             "Submitted On": new Date(app.submittedAt).toLocaleDateString("en-IN"),
             "Approved By": app.approvedBy || "",

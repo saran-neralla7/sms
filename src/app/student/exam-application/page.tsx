@@ -14,6 +14,7 @@ interface SemesterData {
     selectedSubjects: string[];
     utrNumber: string;
     amountPaid: string;
+    paymentDate: string;
     isDuplicateUtr: boolean;
     error?: string;
 }
@@ -71,6 +72,7 @@ export default function ExamApplicationPage() {
                         selectedSubjects: [],
                         utrNumber: "",
                         amountPaid: "",
+                        paymentDate: "",
                         isDuplicateUtr: false,
                     });
                 }
@@ -114,7 +116,7 @@ export default function ExamApplicationPage() {
         });
     };
 
-    const updateSemesterField = (semIdx: number, field: "utrNumber" | "amountPaid", value: string) => {
+    const updateSemesterField = (semIdx: number, field: "utrNumber" | "amountPaid" | "paymentDate", value: string) => {
         setActiveSemesters(prev => {
             const next = [...prev];
             if (field === "amountPaid") {
@@ -253,6 +255,8 @@ export default function ExamApplicationPage() {
             doc.text(`UTR Number: ${app.utrNumber}`, 20, y);
             y += 6;
             doc.text(`Amount Paid: ₹${app.amountPaid || "0"}`, 20, y);
+            y += 6;
+            doc.text(`Payment Date: ${app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}`, 20, y);
             y += 12;
 
             doc.setFontSize(12);
@@ -305,8 +309,8 @@ export default function ExamApplicationPage() {
         const newSemesters = [...activeSemesters];
         activeSubmissions.forEach(sub => {
             const idx = activeSemesters.findIndex(s => s.year === sub.year && s.semester === sub.semester);
-            if (!sub.utrNumber.trim() || !sub.amountPaid.trim()) {
-                newSemesters[idx].error = "UTR Number and Amount Paid are required for this semester.";
+            if (!sub.utrNumber.trim() || !sub.amountPaid.trim() || !sub.paymentDate.trim()) {
+                newSemesters[idx].error = "UTR Number, Amount Paid, and Payment Date are required for this semester.";
                 setExpandedSemester(`${sub.year}-${sub.semester}`);
                 isValid = false;
             } else {
@@ -326,7 +330,8 @@ export default function ExamApplicationPage() {
             semester: sem.semester,
             subjectIds: sem.selectedSubjects,
             utrNumber: sem.utrNumber.trim(),
-            amountPaid: sem.amountPaid.trim()
+            amountPaid: sem.amountPaid.trim(),
+            paymentDate: sem.paymentDate
         }));
 
         const formData = new FormData();
@@ -397,6 +402,7 @@ export default function ExamApplicationPage() {
                                     <div className="p-4 text-sm grid sm:grid-cols-2 gap-4">
                                         <div><span className="text-slate-500 block text-xs">UTR Number</span><span className="font-medium text-slate-800">{app.utrNumber}</span></div>
                                         <div><span className="text-slate-500 block text-xs">Amount</span><span className="font-medium text-slate-800">₹{app.amountPaid || 0}</span></div>
+                                        <div><span className="text-slate-500 block text-xs">Payment Date</span><span className="font-medium text-slate-800">{app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}</span></div>
                                         <div className="sm:col-span-2">
                                             <span className="text-slate-500 block text-xs mb-1">Subjects</span>
                                             <div className="flex flex-wrap gap-1">
@@ -545,6 +551,16 @@ export default function ExamApplicationPage() {
                                                                             onChange={e => updateSemesterField(idx, "amountPaid", e.target.value)}
                                                                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
                                                                             placeholder="e.g. 1400"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs font-medium text-slate-600 mb-1 block">Payment Date <span className="text-red-500">*</span></label>
+                                                                        <input
+                                                                            type="date"
+                                                                            max={new Date().toISOString().split("T")[0]}
+                                                                            value={sem.paymentDate}
+                                                                            onChange={e => updateSemesterField(idx, "paymentDate", e.target.value)}
+                                                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
                                                                         />
                                                                     </div>
                                                                 </div>

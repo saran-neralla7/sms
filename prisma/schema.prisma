@@ -351,6 +351,7 @@ model ExamApplication {
   status            String                   @default("PENDING")
   remarks           String?
   approvedBy        String?
+  paymentDate       DateTime?
   submittedAt       DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
   amountPaid        Float?

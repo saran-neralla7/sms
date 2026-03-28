@@ -196,6 +196,7 @@ export default function AdminExamApplicationsPage() {
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Student Name</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Amount</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Payment Date</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Status</th>
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
                                     </tr>
@@ -214,6 +215,9 @@ export default function AdminExamApplicationsPage() {
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">₹{app.amountPaid || "0"}</td>
+                                            <td className="px-4 py-3 font-medium text-slate-600">
+                                                {app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}
+                                            </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-col gap-2 min-w-[140px]">
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold w-fit ${

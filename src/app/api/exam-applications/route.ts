@@ -104,10 +104,10 @@ export async function POST(request: Request) {
         const applicationsToCreate = [];
 
         for (const app of applicationsData) {
-            const { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr } = app;
+            const { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr, paymentDate } = app;
 
-            if (!year || !semester || !utrNumber || !Array.isArray(subjectIds) || subjectIds.length === 0) {
-                return NextResponse.json({ error: `Missing required fields for 0${year}-0${semester} application.` }, { status: 400 });
+            if (!year || !semester || !utrNumber || !paymentDate || !Array.isArray(subjectIds) || subjectIds.length === 0) {
+                return NextResponse.json({ error: `Missing required fields (including Payment Date) for 0${year}-0${semester} application.` }, { status: 400 });
             }
 
             const amountPaid = amountPaidStr ? parseFloat(amountPaidStr) : null;
@@ -150,6 +150,7 @@ export async function POST(request: Request) {
                 semester,
                 utrNumber,
                 amountPaid,
+                paymentDate: new Date(paymentDate),
                 duplicateUtr: !!duplicateUtrRecord,
                 duplicateUtrRollNo: duplicateUtrRecord ? duplicateUtrRecord.rollNumber : null,
                 subjects: {
