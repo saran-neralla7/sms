@@ -8,12 +8,17 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "GVP Student Management System",
-  description: "Manage student attendance and records",
-  manifest: "/manifest.json",
+  description: "Enterprise Student Management and ERP System for GVP",
+  // Next.js automatically maps src/app/manifest.ts, do NOT hardcode absolute path!
   icons: {
-    icon: "/gvp-logo.jpg",
-    shortcut: "/gvp-logo.jpg",
-    apple: "/gvp-logo.jpg",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png", // Safari/iOS specific touch icon
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "GVP SMS",
   },
 };
 
