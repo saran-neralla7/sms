@@ -69,6 +69,6 @@ export default withAuth(
 
 export const config = {
     matcher: [
-        "/((?!login|api/auth|api/upload-photos|api/student-photos|_next/static|_next/image|favicon.ico|manifest.json|student-photos).*)",
+        "/((?!login|api/auth|api/upload-photos|api/student-photos|_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
     ],
 };

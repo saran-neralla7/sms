@@ -31,12 +31,14 @@ export async function GET(request: Request) {
         if (searchParams.get("semester")) where.semester = searchParams.get("semester");
         if (searchParams.get("status")) where.status = searchParams.get("status");
         if (searchParams.get("duplicate") === "true") where.duplicateUtr = true;
+        if (searchParams.get("editRequested") === "true") where.editRequested = true;
     } else if (["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) {
         if (searchParams.get("department")) where.department = searchParams.get("department");
         if (searchParams.get("year")) where.year = searchParams.get("year");
         if (searchParams.get("semester")) where.semester = searchParams.get("semester");
         if (searchParams.get("status")) where.status = searchParams.get("status");
         if (searchParams.get("duplicate") === "true") where.duplicateUtr = true;
+        if (searchParams.get("editRequested") === "true") where.editRequested = true;
     } else {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -124,7 +126,10 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: `Exam application is not active for 0${year}-0${semester}.` }, { status: 400 });
             }
 
-            if (now < setting.startDate || now > setting.endDate) {
+            const effectiveEndDate = new Date(setting.endDate);
+            effectiveEndDate.setHours(23, 59, 59, 999);
+
+            if (now < setting.startDate || now > effectiveEndDate) {
                 return NextResponse.json({ error: `Exam application window is closed for 0${year}-0${semester}.` }, { status: 400 });
             }
 

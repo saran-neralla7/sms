@@ -23,6 +23,11 @@ export default function OfficeExamApplicationsPage() {
     const [loading, setLoading] = useState(true);
     const [selectedCard, setSelectedCard] = useState<StatCard | null>(null);
     const [filter, setFilter] = useState("ALL");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [overviewDept, setOverviewDept] = useState("ALL");
+    const [overviewYear, setOverviewYear] = useState("ALL");
+    const [overviewSem, setOverviewSem] = useState("ALL");
+    const [mainTab, setMainTab] = useState<"overview" | "edit-requests">("overview");
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [rejectModal, setRejectModal] = useState<{ id: string; open: boolean }>({ id: "", open: false });
     const [remarks, setRemarks] = useState("");
@@ -30,6 +35,17 @@ export default function OfficeExamApplicationsPage() {
     const [duplicateModal, setDuplicateModal] = useState<any | null>(null);
     const [confirmModal, setConfirmModal] = useState<{ id: string, open: boolean } | null>(null);
     const [viewModal, setViewModal] = useState<any | null>(null);
+    const [editReqApplications, setEditReqApplications] = useState<any[]>([]);
+    const [loadingEditReqs, setLoadingEditReqs] = useState(false);
+
+    useEffect(() => {
+        if (mainTab === "edit-requests" && editReqApplications.length === 0) {
+            setLoadingEditReqs(true);
+            fetch("/api/exam-applications?editRequested=true")
+                .then(r => r.ok ? r.json() : [])
+                .then(data => { setEditReqApplications(data); setLoadingEditReqs(false); });
+        }
+    }, [mainTab]);
 
     useEffect(() => {
         fetch("/api/exam-applications/stats")
@@ -100,10 +116,16 @@ export default function OfficeExamApplicationsPage() {
         window.open(`/api/exam-applications/export?${params}`, "_blank");
     };
 
-    const filtered = filter === "ALL" ? applications : 
-                     filter === "DUPLICATE" ? applications.filter(a => a.duplicateUtr) :
-                     filter === "EDIT_REQUESTS" ? applications.filter(a => a.editRequested) :
-                     applications.filter(a => a.status === filter);
+    const searchLower = searchQuery.toLowerCase();
+    const baseFiltered = filter === "ALL" ? applications : 
+                         filter === "DUPLICATE" ? applications.filter(a => a.duplicateUtr) :
+                         filter === "EDIT_REQUESTS" ? applications.filter(a => a.editRequested) :
+                         applications.filter(a => a.status === filter);
+                         
+    const filtered = baseFiltered.filter(a => 
+        a.rollNumber.toLowerCase().includes(searchLower) || 
+        (a.student?.name || "").toLowerCase().includes(searchLower)
+    );
 
     if (loading && !selectedCard) {
         return <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>;
@@ -130,7 +152,14 @@ export default function OfficeExamApplicationsPage() {
                             <h1 className="text-2xl font-extrabold text-slate-900">{selectedCard.department}</h1>
                             <p className="text-slate-500">Year {selectedCard.year} — Semester {selectedCard.semester}</p>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            <input 
+                                type="text"
+                                placeholder="Search Name or Roll No..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 sm:w-64"
+                            />
                             <select value={filter} onChange={e => setFilter(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
                                 <option value="ALL">All ({applications.length})</option>
                                 <option value="PENDING">Pending ({applications.filter(a => a.status === "PENDING").length})</option>
@@ -139,7 +168,7 @@ export default function OfficeExamApplicationsPage() {
                                 <option value="DUPLICATE">Duplicate ({applications.filter(a => a.duplicateUtr).length})</option>
                                 <option value="EDIT_REQUESTS">Edit Requests ({applications.filter(a => a.editRequested).length})</option>
                             </select>
-                            <button onClick={handleExport} className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors">
+                            <button onClick={handleExport} className="flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors">
                                 <FaDownload /> Export Excel
                             </button>
                         </div>
@@ -472,19 +501,55 @@ export default function OfficeExamApplicationsPage() {
     // Overview — department-wise cards
     return (
         <div className="mx-auto max-w-6xl">
-            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4">
                 <h1 className="text-2xl font-extrabold text-slate-900">Exam Applications</h1>
-                <p className="mt-1 text-slate-500">Department-wise application overview</p>
+                <p className="mt-1 text-slate-500">Manage departmental applications and requests.</p>
             </motion.div>
 
-            {stats.length === 0 ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
-                    <p className="text-slate-500">No exam applications have been submitted yet.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {stats.map((card, i) => (
-                        <motion.div key={`${card.department}-${card.year}-${card.semester}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            {/* Tabs */}
+            <div className="mb-8 flex gap-1 rounded-xl bg-slate-100 p-1 w-fit">
+                <button
+                    onClick={() => setMainTab("overview")}
+                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-semibold transition-all ${mainTab === "overview" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                    Overview
+                </button>
+                <button
+                    onClick={() => setMainTab("edit-requests")}
+                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-semibold transition-all ${mainTab === "edit-requests" ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                    Edit Requests {editReqApplications.length > 0 && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">{editReqApplications.length}</span>}
+                </button>
+            </div>
+
+            {mainTab === "overview" ? (
+                stats.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+                        <p className="text-slate-500">No exam applications have been submitted yet.</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="mb-6 flex flex-wrap gap-4">
+                            <select value={overviewDept} onChange={e => setOverviewDept(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                            <option value="ALL">All Departments</option>
+                            {Array.from(new Set(stats.map(s => s.department))).sort().map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <select value={overviewYear} onChange={e => setOverviewYear(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                            <option value="ALL">All Years</option>
+                            {["1", "2", "3", "4"].map(y => <option key={y} value={y}>Year {y}</option>)}
+                        </select>
+                        <select value={overviewSem} onChange={e => setOverviewSem(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                            <option value="ALL">All Semesters</option>
+                            {["1", "2"].map(s => <option key={s} value={s}>Semester {s}</option>)}
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        {stats.filter(s => 
+                            (overviewDept === "ALL" || s.department === overviewDept) &&
+                            (overviewYear === "ALL" || s.year === overviewYear) &&
+                            (overviewSem === "ALL" || s.semester === overviewSem)
+                        ).map((card, i) => (
+                            <motion.div key={`${card.department}-${card.year}-${card.semester}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                             <button onClick={() => loadApplications(card)} className="block w-full text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer">
                                 <h3 className="text-lg font-bold text-slate-800">{card.department}</h3>
                                 <p className="text-sm text-slate-500 mb-4">Year {card.year} • Semester {card.semester}</p>
@@ -498,6 +563,55 @@ export default function OfficeExamApplicationsPage() {
                         </motion.div>
                     ))}
                 </div>
+                </>
+                )
+            ) : (
+                loadingEditReqs ? (
+                    <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>
+                ) : editReqApplications.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+                        <p className="text-slate-500">No edit requests found.</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                                <tr>
+                                    <th className="px-4 py-3 whitespace-nowrap">Roll No</th>
+                                    <th className="px-4 py-3 whitespace-nowrap min-w-[150px]">Student Name</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Subjects</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Reason</th>
+                                    <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {editReqApplications.map((app: any) => (
+                                    <tr key={app.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
+                                        <td className="px-4 py-3 text-slate-700">{app.student?.name || ""}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex flex-wrap gap-1">
+                                                {(app.subjects || []).map((s: any) => (
+                                                    <span key={s.id} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{s.subject?.code || s.subjectId}</span>
+                                                ))}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-slate-600 max-w-xs truncate" title={app.editRequestReason}>{app.editRequestReason}</td>
+                                        <td className="px-4 py-3">
+                                            <button
+                                                onClick={() => setConfirmModal({ id: app.id, open: true })}
+                                                disabled={actionLoading === app.id}
+                                                className="rounded-lg bg-orange-100 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-200 disabled:opacity-50"
+                                            >
+                                                Approve Edit
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )
             )}
         </div>
     );

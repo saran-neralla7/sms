@@ -31,6 +31,11 @@ export default function AdminExamApplicationsPage() {
     const [viewModal, setViewModal] = useState<any | null>(null);
     const [rejectModal, setRejectModal] = useState<{ id: string; open: boolean }>({ id: "", open: false });
     const [remarks, setRemarks] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filter, setFilter] = useState("ALL");
+    const [overviewDept, setOverviewDept] = useState("ALL");
+    const [overviewYear, setOverviewYear] = useState("ALL");
+    const [overviewSem, setOverviewSem] = useState("ALL");
 
     const refreshStats = () => {
         fetch("/api/exam-applications/stats").then(r => r.ok ? r.json() : []).then(st => setStats(st));
@@ -190,29 +195,43 @@ export default function AdminExamApplicationsPage() {
                             <h1 className="text-2xl font-extrabold text-slate-900">{selectedCard.department}</h1>
                             <p className="text-slate-500">Year {selectedCard.year} — Semester {selectedCard.semester}</p>
                         </div>
-                        <div className="flex gap-2">
-                            <select
-                                className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-                                onChange={(e) => {
-                                    if (e.target.value === "DUPLICATE") {
-                                        setApplications([...applications].sort((a, b) => (b.duplicateUtr ? 1 : 0) - (a.duplicateUtr ? 1 : 0)));
-                                    } else if (e.target.value === "EDIT_REQUESTS") {
-                                        setApplications([...applications].sort((a, b) => (b.editRequested ? 1 : 0) - (a.editRequested ? 1 : 0)));
-                                    }
-                                }}
-                            >
-                                <option value="ALL">All Applications</option>
-                                <option value="DUPLICATE">Duplicate UTRs First</option>
-                                <option value="EDIT_REQUESTS">Edit Requests First</option>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            <input 
+                                type="text"
+                                placeholder="Search Name or Roll No..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 sm:w-64"
+                            />
+                            <select value={filter} onChange={e => setFilter(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                                <option value="ALL">All ({applications.length})</option>
+                                <option value="PENDING">Pending ({applications.filter(a => a.status === "PENDING").length})</option>
+                                <option value="APPROVED">Approved ({applications.filter(a => a.status === "APPROVED").length})</option>
+                                <option value="REJECTED">Rejected ({applications.filter(a => a.status === "REJECTED").length})</option>
+                                <option value="DUPLICATE">Duplicate ({applications.filter(a => a.duplicateUtr).length})</option>
+                                <option value="EDIT_REQUESTS">Edit Requests ({applications.filter(a => a.editRequested).length})</option>
                             </select>
                             <button
                                 onClick={() => window.open(`/api/exam-applications/export?department=${selectedCard.department}&year=${selectedCard.year}&semester=${selectedCard.semester}`, "_blank")}
-                                className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
+                                className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors justify-center"
                             >
                                 <FaDownload /> Export Excel
                             </button>
                         </div>
                     </div>
+
+                    {(() => {
+                        const searchLower = searchQuery.toLowerCase();
+                        const baseFiltered = filter === "ALL" ? applications : 
+                                             filter === "DUPLICATE" ? applications.filter(a => a.duplicateUtr) :
+                                             filter === "EDIT_REQUESTS" ? applications.filter(a => a.editRequested) :
+                                             applications.filter(a => a.status === filter);
+                        const filtered = baseFiltered.filter((a: any) => 
+                            a.rollNumber.toLowerCase().includes(searchLower) || 
+                            (a.student?.name || "").toLowerCase().includes(searchLower)
+                        );
+                        return (
+                            <>
 
                     {loadingApps ? (
                         <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>
@@ -235,7 +254,7 @@ export default function AdminExamApplicationsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {applications.map((app: any) => (
+                                    {filtered.map((app: any) => (
                                         <tr key={app.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
                                             <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
@@ -299,6 +318,8 @@ export default function AdminExamApplicationsPage() {
                             </table>
                         </div>
                     )}
+                    </>
+                );})()}
                 </motion.div>
 
                 {/* Duplicate UTR Modal */}
@@ -661,28 +682,48 @@ export default function AdminExamApplicationsPage() {
                     {stats.length === 0 ? (
                         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center"><p className="text-slate-500">No applications submitted yet.</p></div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                            {stats.map((card: any, i: number) => (
-                                <motion.div key={`${card.department}-${card.year}-${card.semester}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                                    <button
-                                        onClick={() => loadApplications(card)}
-                                        className="w-full text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                    >
-                                        <h3 className="text-lg font-bold text-slate-800">{card.department}</h3>
-                                        <p className="text-sm text-slate-500 mb-4">Year {card.year} • Semester {card.semester}</p>
-                                        <div className="text-2xl font-extrabold text-blue-600 mb-3">{card.total} <span className="text-sm font-medium text-slate-500">total</span></div>
-                                        <div className="flex gap-4 text-xs font-semibold mb-3">
-                                            <span className="flex items-center gap-1 text-yellow-600"><FaClock /> {card.pending}</span>
-                                            <span className="flex items-center gap-1 text-green-600"><FaCheckCircle /> {card.approved}</span>
-                                            <span className="flex items-center gap-1 text-red-600"><FaTimesCircle /> {card.rejected}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-blue-600 text-xs font-bold uppercase tracking-wider">
-                                            View Applications →
-                                        </div>
-                                    </button>
-                                </motion.div>
-                            ))}
-                        </div>
+                        <>
+                            <div className="mb-6 flex flex-wrap gap-4">
+                                <select value={overviewDept} onChange={e => setOverviewDept(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                                    <option value="ALL">All Departments</option>
+                                    {Array.from(new Set(stats.map(s => s.department))).sort().map(d => <option key={d as string} value={d as string}>{d as string}</option>)}
+                                </select>
+                                <select value={overviewYear} onChange={e => setOverviewYear(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                                    <option value="ALL">All Years</option>
+                                    {["1", "2", "3", "4"].map(y => <option key={y} value={y}>Year {y}</option>)}
+                                </select>
+                                <select value={overviewSem} onChange={e => setOverviewSem(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                                    <option value="ALL">All Semesters</option>
+                                    {["1", "2"].map(s => <option key={s} value={s}>Semester {s}</option>)}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                                {stats.filter((s: any) => 
+                                    (overviewDept === "ALL" || s.department === overviewDept) &&
+                                    (overviewYear === "ALL" || s.year === overviewYear) &&
+                                    (overviewSem === "ALL" || s.semester === overviewSem)
+                                ).map((card: any, i: number) => (
+                                    <motion.div key={`${card.department}-${card.year}-${card.semester}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                                        <button
+                                            onClick={() => loadApplications(card)}
+                                            className="w-full text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                        >
+                                            <h3 className="text-lg font-bold text-slate-800">{card.department}</h3>
+                                            <p className="text-sm text-slate-500 mb-4">Year {card.year} • Semester {card.semester}</p>
+                                            <div className="text-2xl font-extrabold text-blue-600 mb-3">{card.total} <span className="text-sm font-medium text-slate-500">total</span></div>
+                                            <div className="flex gap-4 text-xs font-semibold mb-3">
+                                                <span className="flex items-center gap-1 text-yellow-600"><FaClock /> {card.pending}</span>
+                                                <span className="flex items-center gap-1 text-green-600"><FaCheckCircle /> {card.approved}</span>
+                                                <span className="flex items-center gap-1 text-red-600"><FaTimesCircle /> {card.rejected}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-blue-600 text-xs font-bold uppercase tracking-wider">
+                                                View Applications →
+                                            </div>
+                                        </button>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </>
                     )}
                 </motion.div>
             )}
