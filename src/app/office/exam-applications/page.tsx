@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaCheckCircle, FaTimesCircle, FaClock, FaExclamationTriangle, FaDownload, FaArrowLeft, FaImage, FaTimes } from "react-icons/fa";
+import { FaCheckCircle, FaTimesCircle, FaClock, FaExclamationTriangle, FaDownload, FaArrowLeft, FaImage, FaTimes, FaSearch, FaFileExcel } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
+import * as XLSX from "xlsx";
 
 interface StatCard {
     department: string;
@@ -27,7 +28,16 @@ export default function OfficeExamApplicationsPage() {
     const [overviewDept, setOverviewDept] = useState("ALL");
     const [overviewYear, setOverviewYear] = useState("ALL");
     const [overviewSem, setOverviewSem] = useState("ALL");
-    const [mainTab, setMainTab] = useState<"overview" | "edit-requests">("overview");
+    const [mainTab, setMainTab] = useState<"overview" | "edit-requests" | "student-tracker">("overview");
+
+    // Student Tracker state
+    const [trackerDept, setTrackerDept] = useState("");
+    const [trackerYear, setTrackerYear] = useState("");
+    const [trackerSem, setTrackerSem] = useState("");
+    const [trackerData, setTrackerData] = useState<any[]>([]);
+    const [trackerLoading, setTrackerLoading] = useState(false);
+    const [trackerSearch, setTrackerSearch] = useState("");
+    const [trackerDepts, setTrackerDepts] = useState<string[]>([]);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [rejectModal, setRejectModal] = useState<{ id: string; open: boolean }>({ id: "", open: false });
     const [remarks, setRemarks] = useState("");
@@ -48,9 +58,14 @@ export default function OfficeExamApplicationsPage() {
     }, [mainTab]);
 
     useEffect(() => {
-        fetch("/api/exam-applications/stats")
-            .then(r => r.ok ? r.json() : [])
-            .then(data => { setStats(data); setLoading(false); });
+        Promise.all([
+            fetch("/api/exam-applications/stats").then(r => r.ok ? r.json() : []),
+            fetch("/api/departments").then(r => r.ok ? r.json() : [])
+        ]).then(([data, depts]) => {
+            setStats(data);
+            setTrackerDepts(depts.map((d: any) => d.name).sort());
+            setLoading(false);
+        });
 
         const handlePopState = () => {
             setSelectedCard(null);
@@ -520,6 +535,12 @@ export default function OfficeExamApplicationsPage() {
                 >
                     Edit Requests {editReqApplications.length > 0 && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">{editReqApplications.length}</span>}
                 </button>
+                <button
+                    onClick={() => setMainTab("student-tracker")}
+                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-semibold transition-all ${mainTab === "student-tracker" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                    Student Tracker
+                </button>
             </div>
 
             {mainTab === "overview" ? (
@@ -565,7 +586,7 @@ export default function OfficeExamApplicationsPage() {
                 </div>
                 </>
                 )
-            ) : (
+            ) : mainTab === "edit-requests" ? (
                 loadingEditReqs ? (
                     <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>
                 ) : editReqApplications.length === 0 ? (
@@ -612,7 +633,151 @@ export default function OfficeExamApplicationsPage() {
                         </table>
                     </div>
                 )
-            )}
+            ) : mainTab === "student-tracker" ? (
+                <div>
+                    <div className="mb-6 flex flex-wrap items-end gap-4">
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">Department</label>
+                            <select value={trackerDept} onChange={e => setTrackerDept(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500 min-w-[200px]">
+                                <option value="">Select Department</option>
+                                {trackerDepts.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">Year</label>
+                            <select value={trackerYear} onChange={e => setTrackerYear(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                                <option value="">Year</option>
+                                {["1","2","3","4"].map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">Semester</label>
+                            <select value={trackerSem} onChange={e => setTrackerSem(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500">
+                                <option value="">Sem</option>
+                                {["1","2"].map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <button
+                            disabled={!trackerDept || !trackerYear || !trackerSem || trackerLoading}
+                            onClick={async () => {
+                                setTrackerLoading(true);
+                                const params = new URLSearchParams({ department: trackerDept, year: trackerYear, semester: trackerSem });
+                                const res = await fetch(`/api/exam-applications/student-tracker?${params}`);
+                                const data = await res.ok ? await res.json() : [];
+                                setTrackerData(data);
+                                setTrackerLoading(false);
+                            }}
+                            className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                            {trackerLoading ? "Loading..." : "Load Tracker"}
+                        </button>
+                        {trackerData.length > 0 && (
+                            <button
+                                onClick={() => {
+                                    const rows = trackerData.map(s => {
+                                        const reg = s.regular;
+                                        const backlogStr = s.backlogs.map((b: any) => `[${b.year}-${b.semester}] ${b.status} UTR:${b.utrNumber} ₹${b.amountPaid || 0}`).join(" | ");
+                                        return {
+                                            "Roll Number": s.rollNumber,
+                                            "Student Name": s.name,
+                                            [`Regular (${trackerYear}-${trackerSem}) Status`]: reg ? reg.status : "NOT APPLIED",
+                                            [`Regular UTR`]: reg?.utrNumber || "",
+                                            [`Regular Amount`]: reg?.amountPaid || "",
+                                            [`Regular Payment Date`]: reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN") : "",
+                                            "Backlog Applications": backlogStr || "None"
+                                        };
+                                    });
+                                    const ws = XLSX.utils.json_to_sheet(rows);
+                                    const wb = XLSX.utils.book_new();
+                                    XLSX.utils.book_append_sheet(wb, ws, "Student Tracker");
+                                    XLSX.writeFile(wb, `Student_Tracker_${trackerDept}_${trackerYear}-${trackerSem}.xlsx`);
+                                }}
+                                className="rounded-xl bg-green-100 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-200 flex items-center gap-2"
+                            >
+                                <FaFileExcel /> Export Excel
+                            </button>
+                        )}
+                    </div>
+
+                    {trackerData.length > 0 && (
+                        <div className="mb-4">
+                            <div className="relative">
+                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by name or roll number..."
+                                    value={trackerSearch}
+                                    onChange={e => setTrackerSearch(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {trackerLoading ? (
+                        <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>
+                    ) : trackerData.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+                            <p className="text-slate-500">Select department, year & semester, then click "Load Tracker" to view consolidated student applications.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                                    <tr>
+                                        <th className="px-4 py-3 whitespace-nowrap">S.No</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Roll Number</th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[150px]">Student Name</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Regular ({trackerYear}-{trackerSem})</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Regular UTR</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Amount</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Payment Date</th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[250px]">Backlog Applications</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {trackerData.filter(s => {
+                                        if (!trackerSearch) return true;
+                                        const q = trackerSearch.toLowerCase();
+                                        return s.rollNumber.toLowerCase().includes(q) || s.name.toLowerCase().includes(q);
+                                    }).map((s: any, idx: number) => {
+                                        const reg = s.regular;
+                                        const statusColor = !reg ? "text-red-600 font-bold" : reg.status === "APPROVED" ? "text-green-600 font-semibold" : reg.status === "REJECTED" ? "text-red-600 font-semibold" : "text-yellow-600 font-semibold";
+                                        const statusText = !reg ? "NOT APPLIED" : reg.status === "PENDING" ? "PENDING" : reg.status;
+                                        return (
+                                            <tr key={s.rollNumber} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
+                                                <td className="px-4 py-3 font-medium text-blue-600">{s.rollNumber}</td>
+                                                <td className="px-4 py-3 text-slate-700">{s.name}</td>
+                                                <td className={`px-4 py-3 ${statusColor}`}>{statusText}</td>
+                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg?.utrNumber || "—"}</td>
+                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg ? `₹${reg.amountPaid || 0}` : "—"}</td>
+                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN") : "—"}</td>
+                                                <td className="px-4 py-3">
+                                                    {s.backlogs.length === 0 ? (
+                                                        <span className="text-slate-400 text-xs">None</span>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-1">
+                                                            {s.backlogs.map((b: any) => {
+                                                                const bColor = b.status === "APPROVED" ? "bg-green-50 text-green-700 border-green-200" : b.status === "REJECTED" ? "bg-red-50 text-red-700 border-red-200" : "bg-yellow-50 text-yellow-700 border-yellow-200";
+                                                                return (
+                                                                    <div key={b.id} className={`rounded px-2 py-1 text-[10px] font-medium border ${bColor}`}>
+                                                                        [{b.year}-{b.semester}] {b.status} — UTR: {b.utrNumber} (₹{b.amountPaid || 0})
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            ) : null}
         </div>
     );
 }
