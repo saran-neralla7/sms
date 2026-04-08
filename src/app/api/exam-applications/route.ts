@@ -126,10 +126,7 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: `Exam application is not active for 0${year}-0${semester}.` }, { status: 400 });
             }
 
-            const effectiveEndDate = new Date(setting.endDate);
-            effectiveEndDate.setHours(23, 59, 59, 999);
-
-            if (now < setting.startDate || now > effectiveEndDate) {
+            if (now < setting.startDate || now > setting.endDate) {
                 return NextResponse.json({ error: `Exam application window is closed for 0${year}-0${semester}.` }, { status: 400 });
             }
 

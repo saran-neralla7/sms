@@ -585,16 +585,16 @@ export default function AdminExamApplicationsPage() {
                                 {["1", "2"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                             <div>
-                                <label className="block text-xs text-slate-500 mb-1">Start Date</label>
-                                <input type="date" value={settingForm.startDate} onChange={e => setSettingForm(p => ({ ...p, startDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required />
+                                <label className="block text-xs text-slate-500 mb-1">Start Date & Time</label>
+                                <input type="datetime-local" value={settingForm.startDate} onChange={e => setSettingForm(p => ({ ...p, startDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required />
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-500 mb-1">End Date</label>
-                                <input type="date" value={settingForm.endDate} onChange={e => setSettingForm(p => ({ ...p, endDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required />
+                                <label className="block text-xs text-slate-500 mb-1">End Date & Time</label>
+                                <input type="datetime-local" value={settingForm.endDate} onChange={e => setSettingForm(p => ({ ...p, endDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required />
                             </div>
                             <div>
                                 <label className="block text-xs text-slate-500 mb-1">Late Fee End (Optional)</label>
-                                <input type="date" value={settingForm.lateFeeEndDate} onChange={e => setSettingForm(p => ({ ...p, lateFeeEndDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                                <input type="datetime-local" value={settingForm.lateFeeEndDate} onChange={e => setSettingForm(p => ({ ...p, lateFeeEndDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
                             </div>
                         </div>
                         <button type="submit" className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700">
@@ -622,9 +622,9 @@ export default function AdminExamApplicationsPage() {
                                         <tr key={s.id} className="hover:bg-slate-50">
                                             <td className="px-4 py-3 font-medium">{s.year}</td>
                                             <td className="px-4 py-3">{s.semester}</td>
-                                            <td className="px-4 py-3">{new Date(s.startDate).toLocaleDateString("en-IN")}</td>
-                                            <td className="px-4 py-3">{new Date(s.endDate).toLocaleDateString("en-IN")}</td>
-                                            <td className="px-4 py-3">{s.lateFeeEndDate ? new Date(s.lateFeeEndDate).toLocaleDateString("en-IN") : "—"}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(s.startDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(s.endDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">{s.lateFeeEndDate ? new Date(s.lateFeeEndDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}</td>
                                             <td className="px-4 py-3">
                                                 <button onClick={() => handleDeleteSetting(s.id)} className="rounded-lg bg-red-100 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-200">
                                                     <FaTrash />
