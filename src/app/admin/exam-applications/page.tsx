@@ -257,6 +257,7 @@ export default function AdminExamApplicationsPage() {
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Student Name</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Amount</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Submitted At</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Payment Date</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Status</th>
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
@@ -276,6 +277,9 @@ export default function AdminExamApplicationsPage() {
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">₹{app.amountPaid || "0"}</td>
+                                            <td className="px-4 py-3 font-medium text-slate-600">
+                                                {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
+                                            </td>
                                             <td className="px-4 py-3 font-medium text-slate-600">
                                                 {app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}
                                             </td>
@@ -462,7 +466,7 @@ export default function AdminExamApplicationsPage() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                                    <div className="grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
                                         <div>
                                             <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Payment Date</span>
                                             <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN") : "—"}</span>
@@ -470,6 +474,10 @@ export default function AdminExamApplicationsPage() {
                                         <div>
                                             <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Amount Paid</span>
                                             <span className="text-sm font-medium text-slate-900">{viewModal.amountPaid ? `₹${viewModal.amountPaid}` : "—"}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Submitted At</span>
+                                            <span className="text-sm font-medium text-slate-900">{viewModal.submittedAt ? new Date(viewModal.submittedAt).toLocaleString("en-IN") : "—"}</span>
                                         </div>
                                     </div>
 

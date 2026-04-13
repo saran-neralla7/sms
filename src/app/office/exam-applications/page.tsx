@@ -205,6 +205,7 @@ export default function OfficeExamApplicationsPage() {
                                         <th className="px-4 py-3 whitespace-nowrap">Subjects</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Amount Paid</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Submitted At</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Status</th>
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
                                     </tr>
@@ -231,6 +232,9 @@ export default function OfficeExamApplicationsPage() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className="text-sm font-medium text-slate-700">{app.amountPaid ? `₹${app.amountPaid}` : "—"}</span>
+                                            </td>
+                                            <td className="px-4 py-3 text-xs text-slate-600">
+                                                {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-col gap-2 min-w-[140px]">
@@ -447,7 +451,7 @@ export default function OfficeExamApplicationsPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                                        <div className="grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
                                             <div>
                                                 <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Payment Date</span>
                                                 <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN") : "—"}</span>
@@ -455,6 +459,10 @@ export default function OfficeExamApplicationsPage() {
                                             <div>
                                                 <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Amount Paid</span>
                                                 <span className="text-sm font-medium text-slate-900">{viewModal.amountPaid ? `₹${viewModal.amountPaid}` : "—"}</span>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Submitted At</span>
+                                                <span className="text-sm font-medium text-slate-900">{viewModal.submittedAt ? new Date(viewModal.submittedAt).toLocaleString("en-IN") : "—"}</span>
                                             </div>
                                         </div>
 
