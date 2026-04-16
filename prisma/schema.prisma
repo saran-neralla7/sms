@@ -25,14 +25,15 @@ model Department {
 }
 
 model Section {
-  id          String              @id @default(uuid())
-  name        String              @unique
-  createdAt   DateTime            @default(now())
-  history     AttendanceHistory[]
-  labBatches  LabBatch[]
-  students    Student[]
-  timetables  Timetable[]
-  departments Department[]        @relation("DepartmentToSection")
+  id                    String                  @id @default(uuid())
+  name                  String                  @unique
+  createdAt             DateTime                @default(now())
+  history               AttendanceHistory[]
+  labBatches            LabBatch[]
+  students              Student[]
+  timetables            Timetable[]
+  departments           Department[]            @relation("DepartmentToSection")
+  FacultySubjectMapping FacultySubjectMapping[]
 }
 
 model User {
@@ -53,49 +54,51 @@ model User {
 }
 
 model Faculty {
-  id            String     @id @default(uuid())
-  empCode       String     @unique
-  empName       String
-  shortName     String?
-  dob           DateTime
-  gender        String
-  joinDate      DateTime
-  resignDate    DateTime?
-  departmentId  String
-  designation   String
-  mobile        String
-  email         String?
-  bloodGroup    String?
-  basicSalary   Float?
-  fatherName    String?
-  motherName    String?
-  address       String?
-  qualification String?
-  aadharNo      String?
-  panNo         String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  department    Department @relation(fields: [departmentId], references: [id])
-  user          User?
+  id                    String                  @id @default(uuid())
+  empCode               String                  @unique
+  empName               String
+  shortName             String?
+  dob                   DateTime
+  gender                String
+  joinDate              DateTime
+  resignDate            DateTime?
+  departmentId          String
+  designation           String
+  mobile                String
+  email                 String?
+  bloodGroup            String?
+  basicSalary           Float?
+  fatherName            String?
+  motherName            String?
+  address               String?
+  qualification         String?
+  aadharNo              String?
+  panNo                 String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  department            Department              @relation(fields: [departmentId], references: [id])
+  user                  User?
+  FacultySubjectMapping FacultySubjectMapping[]
+  FeedbackResponse      FeedbackResponse[]
 }
 
 model Student {
-  id                    String            @id @default(uuid())
-  rollNumber            String            @unique
+  id                    String               @id @default(uuid())
+  rollNumber            String               @unique
   name                  String
   mobile                String
   year                  String
   semester              String
-  batchString           String?           @map("batch")
+  batchString           String?              @map("batch")
   sectionId             String
   departmentId          String
   regulationId          String?
   batchId               String?
-  isDetained            Boolean           @default(false)
+  isDetained            Boolean              @default(false)
   originalBatchId       String?
   labBatchId            String?
   photoUrl              String?
-  hallTicketNumber      String?           @unique
+  hallTicketNumber      String?              @unique
   eamcetRank            String?
   dateOfBirth           DateTime?
   dateOfReporting       DateTime?
@@ -111,23 +114,24 @@ model Student {
   emailId               String?
   aadharNumber          String?
   abcId                 String?
-  reimbursement         Boolean           @default(false)
-  isLateralEntry        Boolean           @default(false)
-  certificatesSubmitted Boolean           @default(false)
+  reimbursement         Boolean              @default(false)
+  isLateralEntry        Boolean              @default(false)
+  certificatesSubmitted Boolean              @default(false)
   domainMailId          String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
   examApplications      ExamApplication[]
   smsLogs               SMSLog[]
   results               SemesterResult[]
-  batch                 Batch?            @relation("CurrentBatch", fields: [batchId], references: [id])
-  department            Department        @relation(fields: [departmentId], references: [id])
-  labBatch              LabBatch?         @relation(fields: [labBatchId], references: [id])
-  originalBatch         Batch?            @relation("OriginalBatch", fields: [originalBatchId], references: [id])
-  regulation            Regulation?       @relation(fields: [regulationId], references: [id])
-  section               Section           @relation(fields: [sectionId], references: [id])
-  subjects              Subject[]         @relation("StudentToSubject")
+  batch                 Batch?               @relation("CurrentBatch", fields: [batchId], references: [id])
+  department            Department           @relation(fields: [departmentId], references: [id])
+  labBatch              LabBatch?            @relation(fields: [labBatchId], references: [id])
+  originalBatch         Batch?               @relation("OriginalBatch", fields: [originalBatchId], references: [id])
+  regulation            Regulation?          @relation(fields: [regulationId], references: [id])
+  section               Section              @relation(fields: [sectionId], references: [id])
+  subjects              Subject[]            @relation("StudentToSubject")
   internalMarks         InternalMark[]
+  FeedbackSubmission    FeedbackSubmission[]
 }
 
 model SemesterResult {
@@ -154,27 +158,29 @@ model Regulation {
 }
 
 model Subject {
-  id                   String                   @id @default(uuid())
-  name                 String
-  code                 String
-  year                 String
-  semester             String
-  type                 String
-  isElective           Boolean                  @default(false)
-  regulationId         String?
-  electiveSlotId       String?
-  departmentId         String
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
-  shortName            String?
-  history              AttendanceHistory[]
-  examAppSubjects      ExamApplicationSubject[]
-  department           Department               @relation(fields: [departmentId], references: [id])
-  electiveSlotRelation ElectiveSlot?            @relation(fields: [electiveSlotId], references: [id])
-  regulation           Regulation?              @relation(fields: [regulationId], references: [id])
-  timetables           Timetable[]
-  students             Student[]                @relation("StudentToSubject")
-  internalMarks        InternalMark[]
+  id                    String                   @id @default(uuid())
+  name                  String
+  code                  String
+  year                  String
+  semester              String
+  type                  String
+  isElective            Boolean                  @default(false)
+  regulationId          String?
+  electiveSlotId        String?
+  departmentId          String
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  shortName             String?
+  history               AttendanceHistory[]
+  examAppSubjects       ExamApplicationSubject[]
+  department            Department               @relation(fields: [departmentId], references: [id])
+  electiveSlotRelation  ElectiveSlot?            @relation(fields: [electiveSlotId], references: [id])
+  regulation            Regulation?              @relation(fields: [regulationId], references: [id])
+  timetables            Timetable[]
+  students              Student[]                @relation("StudentToSubject")
+  internalMarks         InternalMark[]
+  FacultySubjectMapping FacultySubjectMapping[]
+  FeedbackResponse      FeedbackResponse[]
 }
 
 model Period {
@@ -234,15 +240,17 @@ model ElectiveSlot {
 }
 
 model AcademicYear {
-  id                String              @id @default(uuid())
-  name              String              @unique
-  startDate         DateTime
-  endDate           DateTime
-  isCurrent         Boolean             @default(false)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  attendanceHistory AttendanceHistory[]
-  internalMarks     InternalMark[]
+  id                    String                  @id @default(uuid())
+  name                  String                  @unique
+  startDate             DateTime
+  endDate               DateTime
+  isCurrent             Boolean                 @default(false)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  attendanceHistory     AttendanceHistory[]
+  internalMarks         InternalMark[]
+  FacultySubjectMapping FacultySubjectMapping[]
+  FeedbackForm          FeedbackForm[]
 }
 
 model Batch {
@@ -338,27 +346,27 @@ model Timetable {
 }
 
 model ExamApplication {
-  id                String                   @id @default(uuid())
-  studentId         String
-  rollNumber        String
-  department        String
-  year              String
-  semester          String
-  utrNumber         String
-  paymentScreenshot String?
-  duplicateUtr      Boolean                  @default(false)
+  id                 String                   @id @default(uuid())
+  studentId          String
+  rollNumber         String
+  department         String
+  year               String
+  semester           String
+  utrNumber          String
+  paymentScreenshot  String?
+  duplicateUtr       Boolean                  @default(false)
   duplicateUtrRollNo String?
-  status            String                   @default("PENDING")
-  remarks           String?
-  approvedBy        String?
-  paymentDate       DateTime?
-  submittedAt       DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
-  amountPaid        Float?
-  student           Student                  @relation(fields: [studentId], references: [id])
-  subjects          ExamApplicationSubject[]
-  editRequested     Boolean                  @default(false)
-  editRequestReason String?
+  status             String                   @default("PENDING")
+  remarks            String?
+  approvedBy         String?
+  paymentDate        DateTime?
+  submittedAt        DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  amountPaid         Float?
+  student            Student                  @relation(fields: [studentId], references: [id])
+  subjects           ExamApplicationSubject[]
+  editRequested      Boolean                  @default(false)
+  editRequestReason  String?
 }
 
 model ExamApplicationSubject {
@@ -384,20 +392,89 @@ model ExamApplicationSetting {
 }
 
 model InternalMark {
-  id           String   @id @default(uuid())
-  studentId    String
-  subjectId    String
+  id             String   @id @default(uuid())
+  studentId      String
+  subjectId      String
   academicYearId String
-  marksObtained Float
-  maxMarks     Float    @default(30)
-  recordedById String   
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  marksObtained  Float
+  maxMarks       Float    @default(30)
+  recordedById   String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject      Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
-  recordedBy   User     @relation(fields: [recordedById], references: [id])
+  recordedBy   User         @relation(fields: [recordedById], references: [id])
 
   @@unique([studentId, subjectId, academicYearId])
+}
+
+model FacultySubjectMapping {
+  id             String   @id @default(uuid())
+  facultyId      String
+  subjectId      String
+  sectionId      String
+  academicYearId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  faculty      Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  section      Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@unique([facultyId, subjectId, sectionId, academicYearId], name: "unique_faculty_mapping")
+}
+
+model FeedbackQuestion {
+  id        String   @id @default(uuid())
+  text      String
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FeedbackForm {
+  id             String   @id @default(uuid())
+  title          String
+  description    String?
+  academicYearId String
+  startDate      DateTime
+  endDate        DateTime
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  submissions  FeedbackSubmission[]
+  responses    FeedbackResponse[]
+  academicYear AcademicYear         @relation(fields: [academicYearId], references: [id])
+}
+
+model FeedbackSubmission {
+  id          String   @id @default(uuid())
+  formId      String
+  studentId   String
+  submittedAt DateTime @default(now())
+
+  form    FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, studentId], name: "unique_student_submission")
+}
+
+model FeedbackResponse {
+  id            String   @id @default(uuid())
+  formId        String
+  facultyId     String
+  subjectId     String
+  ratings       Json
+  comments      String?
+  overallRating Float
+  createdAt     DateTime @default(now())
+
+  form    FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  faculty Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 }

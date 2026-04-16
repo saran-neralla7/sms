@@ -170,6 +170,27 @@ export default function AdminDashboardPage() {
             color: "bg-emerald-50 text-emerald-600"
         },
         {
+            title: "Faculty Mapping",
+            icon: <FaUsers className="h-6 w-6" />,
+            description: "Map faculty to subjects for attendance and feedback.",
+            href: "/admin/faculty-mapping",
+            color: "bg-blue-50 text-blue-600"
+        },
+        {
+            title: "Feedback Questions",
+            icon: <FaLayerGroup className="h-6 w-6" />,
+            description: "Define global questions for student feedback.",
+            href: "/admin/feedback/questions",
+            color: "bg-violet-50 text-violet-600"
+        },
+        {
+            title: "Feedback Windows",
+            icon: <FaCalendarCheck className="h-6 w-6" />,
+            description: "Manage feedback collection windows and analytics.",
+            href: "/admin/feedback/windows",
+            color: "bg-fuchsia-50 text-fuchsia-600"
+        },
+        {
             title: "Exam Applications",
             icon: <FaFileAlt className="h-6 w-6" />,
             description: "Configure exam dates, create office accounts, and view statistics.",

@@ -37,11 +37,11 @@ export default function FacultyDashboard() {
             color: "bg-emerald-500",
         },
         {
-            title: "My Profile",
-            icon: FaUserCircle,
-            description: "View your personal and professional details.",
-            href: "/faculty/profile",
-            color: "bg-amber-500",
+            title: "Student Feedback",
+            icon: FaChartBar,
+            description: "View anonymous feedback results from students.",
+            href: "/faculty/feedback",
+            color: "bg-fuchsia-500",
         },
     ];
 

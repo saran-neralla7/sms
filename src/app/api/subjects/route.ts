@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 export async function GET(request: Request) {
+    const session = await getServerSession(authOptions);
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");
     const year = searchParams.get("year");
@@ -13,6 +14,26 @@ export async function GET(request: Request) {
     if (departmentId) where.departmentId = departmentId;
     if (year) where.year = year;
     if (semester) where.semester = semester;
+
+    // FACULTY SUBJECT MAPPING FALLBACK LOGIC
+    const user = session?.user as any;
+    const isFaculty = user?.role === "FACULTY";
+    if (isFaculty && user?.facultyId) {
+        const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+        if (activeYear) {
+            const mappings = await prisma.facultySubjectMapping.findMany({
+                where: { facultyId: user.facultyId, academicYearId: activeYear.id, subject: { departmentId: departmentId || undefined, year: year || undefined, semester: semester || undefined } },
+                select: { subjectId: true }
+            });
+            const mappedIds = mappings.map(m => m.subjectId);
+            
+            // If faculty has mappings for this criteria, restrict subjects. 
+            // If empty, they fall back to seeing all subjects.
+            if (mappedIds.length > 0) {
+                where.id = { in: mappedIds };
+            }
+        }
+    }
 
     try {
         const subjects = await prisma.subject.findMany({

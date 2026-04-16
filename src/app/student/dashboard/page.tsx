@@ -7,8 +7,10 @@ import { FaCalendarAlt, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduat
 import Image from "next/image";
 import AttendanceGraph from "@/components/AttendanceGraph";
 import { formatISTDate } from "@/lib/dateUtils";
+import { useRouter } from "next/navigation";
 
 export default function StudentDashboardPage() {
+    const router = useRouter();
     const [student, setStudent] = useState<Student | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "results" | "internal-marks">("overview");
@@ -140,6 +142,12 @@ export default function StudentDashboardPage() {
                             <TabButton active={activeTab === "attendance"} onClick={() => setActiveTab("attendance")} label="Attendance" />
                             <TabButton active={activeTab === "results"} onClick={() => setActiveTab("results")} label="Results" />
                             <TabButton active={activeTab === "internal-marks"} onClick={() => setActiveTab("internal-marks")} label="Internal Marks" />
+                            <button
+                                onClick={() => router.push("/student/feedback")}
+                                className="px-6 py-2 rounded-xl text-sm font-bold transition-all duration-200 bg-violet-600 text-white shadow-lg shadow-violet-200 hover:bg-violet-700"
+                            >
+                                Faculty Feedback
+                            </button>
                         </div>
                     </div>
                 </div>
