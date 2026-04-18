@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FaSignOutAlt, FaBars, FaTimes, FaHome, FaFileAlt, FaCog } from "react-icons/fa";
+import { FaSignOutAlt, FaBars, FaTimes, FaHome, FaFileAlt, FaCog, FaCertificate } from "react-icons/fa";
 import { useState } from "react";
 
 export default function OfficeSidebar() {
@@ -14,6 +14,7 @@ export default function OfficeSidebar() {
     const navLinks = [
         { href: "/office/dashboard", label: "Dashboard", icon: <FaHome /> },
         { href: "/office/exam-applications", label: "Exam Applications", icon: <FaFileAlt /> },
+        { href: "/office/certificates", label: "Certificates", icon: <FaCertificate /> },
     ];
 
     if (!session || (session.user as any).role !== "OFFICE") return null;

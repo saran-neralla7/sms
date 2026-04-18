@@ -203,6 +203,13 @@ export default function AdminDashboardPage() {
             description: "Bulk upload internal marks via Excel templates.",
             href: "/admin/internal-marks",
             color: "bg-red-50 text-red-600"
+        },
+        {
+            title: "Certificates",
+            icon: <FaFileAlt className="h-6 w-6" />,
+            description: "Generate and manage Transfer Certificates.",
+            href: "/admin/certificates",
+            color: "bg-orange-50 text-orange-600"
         }
     ];
 

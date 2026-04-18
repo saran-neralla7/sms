@@ -51,6 +51,7 @@ model User {
   department            Department?            @relation(fields: [departmentId], references: [id])
   faculty               Faculty?               @relation(fields: [facultyId], references: [id])
   internalMarks         InternalMark[]
+  issuedCertificates    Certificate[]
 }
 
 model Faculty {
@@ -107,6 +108,8 @@ model Student {
   casteName             String?
   category              String?
   admissionType         String?
+  nationality           String?
+  religion              String?
   fatherName            String?
   motherName            String?
   address               String?
@@ -132,6 +135,7 @@ model Student {
   subjects              Subject[]            @relation("StudentToSubject")
   internalMarks         InternalMark[]
   FeedbackSubmission    FeedbackSubmission[]
+  certificates          Certificate[]
 }
 
 model SemesterResult {
@@ -477,4 +481,27 @@ model FeedbackResponse {
   form    FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
   faculty Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
   subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+}
+
+model CertificateCounter {
+  id              String   @id @default(uuid())
+  certificateType String   @unique // e.g., "TC"
+  currentNumber   Int
+  updatedAt       DateTime @updatedAt
+}
+
+model Certificate {
+  id              String   @id @default(uuid())
+  studentId       String
+  certificateNo   Int
+  certificateType String   @default("TC")
+  isDuplicate     Boolean  @default(false)
+  issuedById      String
+  issuedAt        DateTime @default(now())
+  fileUrl         String
+
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  issuedBy        User     @relation(fields: [issuedById], references: [id])
+
+  @@unique([certificateType, certificateNo], name: "unique_certificate_number")
 }
