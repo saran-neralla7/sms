@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     // Scoping
     const userRole = (session.user as any).role;
     const userDeptId = (session.user as any).departmentId;
-    const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole);
+    const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL", "OFFICE"].includes(userRole);
 
     const queryDeptId = searchParams.get("departmentId");
 
