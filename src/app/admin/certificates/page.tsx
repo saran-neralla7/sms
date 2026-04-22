@@ -90,13 +90,13 @@ export default function AdminCertificatesPage() {
             color: "orange"
         },
         SC: {
-            label: "Study Certificate",
+            label: "Study cum Conduct Certificate",
             shortLabel: "SC",
             icon: <FaGraduationCap size={18} />,
             issueRoute: `${basePath}/certificates/issue-sc`,
             issueLabel: "Issue New SC",
             prefix: "SC",
-            description: "Manage, generate, and track Study Certificates.",
+            description: "Manage, generate, and track Study cum Conduct Certificates.",
             color: "blue"
         }
     };

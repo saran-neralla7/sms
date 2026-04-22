@@ -7,11 +7,16 @@ import { generateCertificatePDF } from "@/lib/docx-pdf";
 function formatDateString(dateStr: string | Date | null | undefined): string {
     if (!dateStr) return "";
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return String(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr).trim();
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}-${month}-${year}`;
+}
+
+function stripNewlines(str: string | null | undefined): string {
+    if (!str) return "";
+    return String(str).replace(/[\r\n]+/g, ' ').trim();
 }
 
 export async function POST(req: Request) {
@@ -81,19 +86,19 @@ async function handleTransferCertificate(body: any, student: any, session: any, 
 
     const docData = {
         certificate_no: String(assignedNumber),
-        roll_number: student.rollNumber || "",
-        student_name: student.name || "",
-        parent_name: father_name || student.fatherName || "",
+        roll_number: stripNewlines(student.rollNumber),
+        student_name: stripNewlines(student.name),
+        parent_name: stripNewlines(father_name || student.fatherName),
         date_of_birth: formatDateString(date_of_birth || student.dateOfBirth),
-        nationality: nationality || student.nationality || "",
-        religion: religion || student.religion || "",
-        caste_name: caste_category || student.category || student.caste || "",
-        subcaste_name: subcaste_name || student.casteName || "",
+        nationality: stripNewlines(nationality || student.nationality),
+        religion: stripNewlines(religion || student.religion),
+        caste_name: stripNewlines(caste_category || student.category || student.caste),
+        subcaste_name: stripNewlines(subcaste_name || student.casteName),
         join_date: formatDateString(join_date || student.dateOfReporting || student.createdAt),
         left_date: formatDateString(left_date),
-        class_name: `${student.department?.name || ""} - ${student.section?.name || ""} (${student.year || ""} Year)`,
-        promotion: promotion || "",
-        reason_remarks: reason_remarks || "",
+        class_name: stripNewlines(`${student.department?.name || ""} - ${student.section?.name || ""} (${student.year || ""} Year)`),
+        promotion: stripNewlines(promotion),
+        reason_remarks: stripNewlines(reason_remarks),
         issue_date: formatDateString(today),
         duplicate_text: isDuplicate ? "DUPLICATE" : ""
     };
@@ -141,9 +146,21 @@ async function handleTransferCertificate(body: any, student: any, session: any, 
     return NextResponse.json({ success: true, url: downloadUrl, certificateNo: assignedNumber });
 }
 
-// ===== STUDY CERTIFICATE =====
+// ===== STUDY CUM CONDUCT CERTIFICATE =====
 async function handleStudyCertificate(body: any, student: any, session: any, today: Date) {
-    const { father_name, date_of_birth, academic_year, purpose } = body;
+    const { father_name, date_of_birth, academic_year, purpose, batch_year } = body;
+
+    // Must have a TC first
+    const existingTC = await prisma.certificate.findFirst({
+        where: { studentId: student.id, certificateType: "TC" },
+        orderBy: { certificateNo: 'desc' }
+    });
+
+    if (!existingTC) {
+        return NextResponse.json({ 
+            error: "Please issue a Transfer Certificate (TC) first to generate a Study cum Conduct Certificate."
+        }, { status: 400 });
+    }
 
     // Get next SC number
     const counter = await prisma.certificateCounter.findUnique({
@@ -152,18 +169,20 @@ async function handleStudyCertificate(body: any, student: any, session: any, tod
     const assignedNumber = (counter?.currentNumber || 0) + 1;
 
     const docData = {
-        certificate_no: String(assignedNumber),
-        roll_number: student.rollNumber || "",
-        student_name: student.name || "",
-        parent_name: father_name || student.fatherName || "",
-        date_of_birth: formatDateString(date_of_birth || student.dateOfBirth),
-        class_name: `${student.department?.name || ""} - ${student.section?.name || ""} (${student.year || ""} Year)`,
-        department: student.department?.name || "",
-        year: student.year || "",
-        section: student.section?.name || "",
-        academic_year: academic_year || "",
-        purpose: purpose || "",
+        certificate_no: String(assignedNumber), // Keeping this just in case
+        tc_number: String(existingTC.certificateNo),
         issue_date: formatDateString(today),
+        student_name: stripNewlines(student.name),
+        parent_name: stripNewlines(father_name || student.fatherName),
+        year_name: stripNewlines(student.year),
+        dept_name: stripNewlines(student.department?.name),
+        roll_number: stripNewlines(student.rollNumber),
+        batch_year: stripNewlines(batch_year || student.batch?.name || student.batchString),
+        
+        // Retaining some older ones just in case the template uses them
+        date_of_birth: formatDateString(date_of_birth || student.dateOfBirth),
+        academic_year: stripNewlines(academic_year),
+        purpose: stripNewlines(purpose)
     };
 
     const fileName = `sc_${assignedNumber}_${student.id}.pdf`;

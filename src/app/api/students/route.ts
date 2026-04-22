@@ -120,6 +120,7 @@ export async function GET(request: Request) {
                 include: {
                     section: true,
                     department: true,
+                    batch: true,
                     subjects: includeSubjects ? { select: { id: true } } : false
                 },
                 orderBy: { rollNumber: "asc" },

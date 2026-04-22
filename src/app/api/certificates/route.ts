@@ -11,10 +11,12 @@ export async function GET(req: Request) {
         }
 
         const url = new URL(req.url);
-        const type = url.searchParams.get("type") || "TC";
+        const type = url.searchParams.get("type");
+
+        const whereClause = type && type !== "ALL" ? { certificateType: type } : {};
 
         const certs = await prisma.certificate.findMany({
-            where: { certificateType: type },
+            where: whereClause,
             include: {
                 student: {
                     select: { name: true, rollNumber: true, department: true, section: true, batchString: true }

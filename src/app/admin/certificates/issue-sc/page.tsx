@@ -21,6 +21,7 @@ export default function IssueStudyCertificatePage() {
         purpose: "",
         father_name: "",
         date_of_birth: "",
+        batch_year: "",
     });
 
     const searchStudent = async (e: React.FormEvent) => {
@@ -41,6 +42,7 @@ export default function IssueStudyCertificatePage() {
                         ...prev,
                         father_name: exactMatch.fatherName || "",
                         date_of_birth: exactMatch.dateOfBirth ? new Date(exactMatch.dateOfBirth).toISOString().split("T")[0] : "",
+                        batch_year: exactMatch.batch?.name || exactMatch.batchString || "",
                     }));
                 } else {
                     setStatus({ type: "error", message: "No student found with that roll number." });
@@ -69,6 +71,7 @@ export default function IssueStudyCertificatePage() {
                     date_of_birth: formData.date_of_birth,
                     academic_year: formData.academic_year,
                     purpose: formData.purpose,
+                    batch_year: formData.batch_year,
                 }),
             });
 
@@ -95,7 +98,7 @@ export default function IssueStudyCertificatePage() {
                 <FaArrowLeft /> Back to Certificates
             </button>
 
-            <h1 className="text-2xl font-bold text-slate-900 mb-6">Issue Study Certificate</h1>
+            <h1 className="text-2xl font-bold text-slate-900 mb-6">Issue Study cum Conduct Certificate</h1>
 
             {/* Search */}
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm mb-6">
@@ -179,6 +182,12 @@ export default function IssueStudyCertificatePage() {
                                     placeholder="e.g., For Bank Loan, Scholarship"
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" />
                             </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-600 mb-1">Batch Year <span className="text-red-500">*</span></label>
+                                <input type="text" value={formData.batch_year} onChange={(e) => setFormData(f => ({ ...f, batch_year: e.target.value }))}
+                                    placeholder="e.g., 2025-2029"
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" />
+                            </div>
                         </div>
                     </div>
 
@@ -192,11 +201,11 @@ export default function IssueStudyCertificatePage() {
                         </button>
                         <button
                             onClick={handleGenerate}
-                            disabled={generating || !formData.father_name || !formData.date_of_birth || !formData.academic_year}
+                            disabled={generating || !formData.father_name || !formData.date_of_birth || !formData.academic_year || !formData.batch_year}
                             className="rounded-lg bg-blue-600 px-8 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             {generating ? <LogoSpinner /> : null}
-                            {generating ? "Generating..." : "Generate Study Certificate"}
+                            {generating ? "Generating..." : "Generate Study cum Conduct Certificate"}
                         </button>
                     </div>
                 </>

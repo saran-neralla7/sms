@@ -33,7 +33,7 @@ export async function POST(req: Request) {
                 where: { certificateType: cert.certificateType }
             });
 
-            if (counter && counter.currentNumber === cert.certificateNo && !cert.isDuplicate) {
+            if (counter && counter.currentNumber === cert.certificateNo) {
                 // It's the latest generation (and not a duplicate), so revert!
                 await tx.certificateCounter.update({
                     where: { certificateType: cert.certificateType },

@@ -14,7 +14,7 @@ interface TypeConfig {
 
 const TYPE_CONFIG: Record<CertType, TypeConfig> = {
     TC: { label: "TC", fullLabel: "Transfer Certificate", color: "orange" },
-    SC: { label: "SC", fullLabel: "Study Certificate", color: "blue" },
+    SC: { label: "SC", fullLabel: "Study cum Conduct Certificate", color: "blue" },
 };
 
 export default function CertificatesSettingsPage() {
@@ -250,7 +250,7 @@ export default function CertificatesSettingsPage() {
                 {/* SC Section */}
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mt-8">
                     <span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
-                    Study Certificate (SC)
+                    Study cum Conduct Certificate (SC)
                 </h2>
                 {renderCounterSection("SC")}
                 {renderTemplateSection("SC")}
