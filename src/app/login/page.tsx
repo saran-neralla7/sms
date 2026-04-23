@@ -50,7 +50,7 @@ export default function LoginPage() {
                 if (["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(targetRole)) {
                     router.push("/dashboard");
                 } else if (targetRole === "FACULTY") {
-                    router.push("/faculty/dashboard");
+                    router.push("/faculty");
                 } else if (targetRole === "OFFICE") {
                     router.push("/office/dashboard");
                 } else {

@@ -413,22 +413,39 @@ export default function StudentDashboardPage() {
                                                 <th className="px-6 py-3 font-semibold">Academic Year</th>
                                                 <th className="px-6 py-3 font-semibold">Subject Code</th>
                                                 <th className="px-6 py-3 font-semibold">Subject Name</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Marks Obtained</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Date Uploaded</th>
+                                                <th className="px-6 py-3 font-semibold text-right">MID-I</th>
+                                                <th className="px-6 py-3 font-semibold text-right">MID-II</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {student.internalMarks.map((mark: any) => (
-                                                <tr key={mark.id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="px-6 py-4 font-medium text-slate-700">{mark.academicYear?.name}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{mark.subject?.code}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{mark.subject?.name}</td>
-                                                    <td className="px-6 py-4 text-right font-bold text-slate-900">{mark.marksObtained}</td>
-                                                    <td className="px-6 py-4 text-right text-slate-400 text-xs">
-                                                        {new Date(mark.createdAt).toLocaleDateString()}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {(() => {
+                                                const groupedMarks = new Map();
+                                                student.internalMarks.forEach((mark: any) => {
+                                                    const key = `${mark.academicYearId}_${mark.subjectId}`;
+                                                    if (!groupedMarks.has(key)) {
+                                                        groupedMarks.set(key, {
+                                                            academicYear: mark.academicYear?.name,
+                                                            subjectCode: mark.subject?.code,
+                                                            subjectName: mark.subject?.name,
+                                                            midI: "-",
+                                                            midII: "-"
+                                                        });
+                                                    }
+                                                    const group = groupedMarks.get(key);
+                                                    if (mark.examType === "MID_I") group.midI = mark.marksObtained;
+                                                    else if (mark.examType === "MID_II") group.midII = mark.marksObtained;
+                                                    else group.midI = mark.marksObtained; // Fallback for old data
+                                                });
+                                                return Array.from(groupedMarks.values()).map((group: any, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-6 py-4 font-medium text-slate-700">{group.academicYear}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{group.subjectCode}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{group.subjectName}</td>
+                                                        <td className="px-6 py-4 text-right font-bold text-slate-900">{group.midI}</td>
+                                                        <td className="px-6 py-4 text-right font-bold text-slate-900">{group.midII}</td>
+                                                    </tr>
+                                                ));
+                                            })()}
                                         </tbody>
                                     </table>
                                 </div>

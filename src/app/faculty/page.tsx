@@ -1,27 +1,67 @@
 "use client";
 
+import { useSession } from "next-auth/react";
+import { motion } from "framer-motion";
+import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory } from "react-icons/fa";
+import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
-import { FaArrowLeft, FaChalkboardTeacher } from "react-icons/fa";
-import { useRouter } from "next/navigation";
 
-export default function FacultyPage() {
-    const router = useRouter();
+export default function FacultyIndexPage() {
+    const { data: session, status } = useSession();
+
+    if (status === "loading") {
+        return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
+    }
 
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4">
-            <div className="text-center">
-                <div className="mb-6 inline-flex h-24 w-24 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                    <FaChalkboardTeacher size={48} />
-                </div>
-                <h1 className="mb-2 text-3xl font-bold text-slate-900">Faculty Management</h1>
-                <p className="mb-8 text-lg text-slate-500">This module is currently under development.</p>
+        <div className="mx-auto max-w-5xl">
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
+                <h1 className="text-3xl font-extrabold text-slate-900">Faculty Gateway</h1>
+                <p className="mt-2 text-lg text-slate-600">
+                    Welcome, <span className="font-semibold text-blue-600">{(session?.user as any)?.name || (session?.user as any)?.username}</span>
+                </p>
+            </motion.div>
 
-                <button
-                    onClick={() => router.back()}
-                    className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 transition-all hover:bg-slate-50 hover:text-blue-600"
-                >
-                    <FaArrowLeft /> Go Back
-                </button>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                    <DashboardCard
+                        title="My Dashboard"
+                        icon={<FaUserTie className="h-6 w-6" />}
+                        description="View your profile, timetable, subjects, and student feedback."
+                        href="/faculty/dashboard"
+                        colorClass="bg-purple-50 text-purple-600"
+                    />
+                </motion.div>
+                
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                    <DashboardCard
+                        title="Mark Attendance"
+                        icon={<FaCheckSquare className="h-6 w-6" />}
+                        description="Mark daily attendance for your assigned sections."
+                        href="/attendance"
+                        colorClass="bg-green-50 text-green-600"
+                    />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                    <DashboardCard
+                        title="Attendance History"
+                        icon={<FaHistory className="h-6 w-6" />}
+                        description="View and edit previous attendance records."
+                        href="/attendance/history"
+                        colorClass="bg-orange-50 text-orange-600"
+                    />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                    <DashboardCard
+                        title="Reports"
+                        icon={<FaChartBar className="h-6 w-6" />}
+                        description="Generate cumulative attendance reports."
+                        href="/reports"
+                        colorClass="bg-blue-50 text-blue-600"
+                    />
+                </motion.div>
             </div>
         </div>
     );

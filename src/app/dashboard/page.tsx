@@ -11,7 +11,8 @@ import {
   FaPoll,
   FaFileAlt,
   FaCogs,
-  FaRupeeSign
+  FaRupeeSign,
+  FaClipboardList
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -97,6 +98,13 @@ export default function DashboardPage() {
         color: "bg-orange-50 text-orange-600"
       },
       {
+        title: "Internal Marks",
+        icon: <FaClipboardList className="h-6 w-6" />,
+        description: "Manage and upload internal marks for MID-I and MID-II.",
+        href: "/admin/internal-marks",
+        color: "bg-emerald-50 text-emerald-600"
+      },
+      {
         title: "Reports",
         icon: <FaFileAlt className="h-6 w-6" />,
         description: "Generate attendance, performance, and analytical reports.",
@@ -142,6 +150,13 @@ export default function DashboardPage() {
         description: "View past records and download reports.",
         href: "/attendance/history",
         color: "bg-teal-50 text-teal-600"
+      },
+      {
+        title: "Reports",
+        icon: <FaPoll className="h-6 w-6" />,
+        description: "Generate and view faculty reports.",
+        href: "/reports",
+        color: "bg-indigo-50 text-indigo-600"
       }
     ];
   }

@@ -1,6 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export async function GET(
+    req: NextRequest,
+    props: { params: Promise<{ id: string }> }
+) {
+    try {
+        const params = await props.params;
+        const { id } = params;
+
+        const faculty = await prisma.faculty.findUnique({
+            where: { id },
+            include: {
+                department: true,
+                FacultySubjectMapping: {
+                    include: {
+                        subject: true,
+                        section: true,
+                        academicYear: true
+                    }
+                },
+                FeedbackResponse: {
+                    include: {
+                        form: true,
+                        subject: true
+                    }
+                }
+            }
+        });
+
+        if (!faculty) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+
+        return NextResponse.json(faculty);
+    } catch (error) {
+        console.error("Error fetching faculty details:", error);
+        return NextResponse.json({ error: "Failed to fetch faculty details" }, { status: 500 });
+    }
+}
+
 export async function PUT(
     req: NextRequest,
     props: { params: Promise<{ id: string }> }

@@ -21,6 +21,7 @@ export async function POST(request: Request) {
         const year = formData.get("year") as string;
         const semester = formData.get("semester") as string;
         const sectionId = formData.get("sectionId") as string;
+        const examType = (formData.get("examType") as string) || "MID_I";
 
         // Overrides for previous semesters
         const subjectYear = formData.get("subjectYear") as string || year;
@@ -123,13 +124,14 @@ export async function POST(request: Request) {
                 // Strictly enforce non-negative marks
                 if (markVal < 0) markVal = 0;
 
-                // Prepare Upsert (Unique constraint: studentId, subjectId, academicYearId)
+                // Prepare Upsert (Unique constraint: studentId, subjectId, academicYearId, examType)
                 operations.push(prisma.internalMark.upsert({
                     where: {
-                        studentId_subjectId_academicYearId: {
+                        studentId_subjectId_academicYearId_examType: {
                             studentId,
                             subjectId: subCol.subjectId,
-                            academicYearId
+                            academicYearId,
+                            examType
                         }
                     },
                     update: {
@@ -140,6 +142,7 @@ export async function POST(request: Request) {
                         studentId,
                         subjectId: subCol.subjectId,
                         academicYearId,
+                        examType,
                         marksObtained: markVal,
                         recordedById: session.user.id
                     }

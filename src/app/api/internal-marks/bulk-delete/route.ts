@@ -14,7 +14,8 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { academicYearId, departmentId, year, semester, sectionId, subjectYear, subjectSemester } = body;
+        const { academicYearId, departmentId, year, semester, sectionId, subjectYear, subjectSemester, examType } = body;
+        const targetExamType = examType || "MID_I";
 
         if (!academicYearId || !departmentId || !year || !semester || !sectionId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -55,7 +56,8 @@ export async function POST(request: Request) {
             where: {
                 studentId: { in: studentIds },
                 subjectId: { in: subjectIds },
-                academicYearId: academicYearId
+                academicYearId: academicYearId,
+                examType: targetExamType
             }
         });
 

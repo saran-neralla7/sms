@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     const year = searchParams.get("year") as string;
     const semester = searchParams.get("semester") as string;
     const sectionId = searchParams.get("sectionId") as string;
+    const examType = searchParams.get("examType") || "MID_I";
 
     // Optional overrides for previous semester marks
     const subjectYear = searchParams.get("subjectYear") as string || year;
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
         return new NextResponse(buffer, {
             headers: {
                 "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "Content-Disposition": `attachment; filename="Internal_Marks_Template_Y${subjectYear}_S${subjectSemester}.xlsx"`,
+                "Content-Disposition": `attachment; filename="Internal_Marks_${examType}_Template_Y${subjectYear}_S${subjectSemester}.xlsx"`,
             },
         });
     } catch (error) {

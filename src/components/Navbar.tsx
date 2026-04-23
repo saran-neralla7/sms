@@ -35,7 +35,7 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                     {/* Logo / Home via Logo */}
                     <div className="flex items-center gap-4">
                         <Link 
-                            href={(session.user as any).role === "FACULTY" ? "/faculty/dashboard" : (session.user as any).role === "STUDENT" ? "/student/dashboard" : "/dashboard"} 
+                            href={(session.user as any).role === "FACULTY" ? "/faculty" : (session.user as any).role === "STUDENT" ? "/student/dashboard" : "/dashboard"} 
                             className="flex items-center gap-2"
                         >
                             <img
@@ -85,7 +85,7 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                         {/* Home Button - Hidden on Dashboard, for SMS User, and for Students */}
                         {!isDashboard && (session.user as any).role !== "SMS_USER" && (session.user as any).role !== "STUDENT" && (
                             <Link
-                                href={(session.user as any).role === "FACULTY" ? "/faculty/dashboard" : "/dashboard"}
+                                href={(session.user as any).role === "FACULTY" ? "/faculty" : "/dashboard"}
                                 className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700"
                                 title="Go to Dashboard"
                             >

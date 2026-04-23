@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { Faculty, Department } from "@/types";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
-import { FaEdit, FaPlus, FaTrash, FaSearch, FaUserTie, FaEnvelope, FaPhone, FaFileImport, FaDownload, FaTimes, FaCheck, FaExclamationTriangle, FaFilter } from "react-icons/fa";
+import { FaEdit, FaPlus, FaTrash, FaSearch, FaUserTie, FaEnvelope, FaPhone, FaFileImport, FaDownload, FaTimes, FaCheck, FaExclamationTriangle, FaFilter, FaCamera } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import Image from "next/image";
+import Link from "next/link";
 
 import { useSession } from "next-auth/react";
 
@@ -37,6 +38,15 @@ export default function FacultyPage() {
         failCount: 0,
         errors: []
     });
+
+    // Photo Upload State
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState<{
+        loading: boolean;
+        results: any[];
+        successCount: number;
+        failCount: number;
+    }>({ loading: false, results: [], successCount: 0, failCount: 0 });
 
     const [formData, setFormData] = useState({
         empCode: "",
@@ -104,6 +114,41 @@ export default function FacultyPage() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Template");
         XLSX.writeFile(wb, "faculty_import_template.xlsx");
+    };
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setUploadStatus({ loading: true, results: [], successCount: 0, failCount: 0 });
+        setIsUploadModalOpen(true);
+
+        const formData = new FormData();
+        Array.from(files).forEach((file) => formData.append("files", file));
+
+        try {
+            const res = await fetch("/api/upload-faculty-photos", {
+                method: "POST",
+                body: formData
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setUploadStatus({
+                    loading: false,
+                    results: data.results || [],
+                    successCount: data.successCount || 0,
+                    failCount: data.failCount || 0
+                });
+                fetchFaculty();
+            } else {
+                const errData = await res.json();
+                setUploadStatus({ loading: false, results: [{ status: "error", message: errData.error || "Upload failed" }], successCount: 0, failCount: 1 });
+            }
+        } catch (error) {
+            console.error("Photo upload error:", error);
+            setUploadStatus({ loading: false, results: [{ status: "error", message: "Network error" }], successCount: 0, failCount: 1 });
+        }
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -359,6 +404,19 @@ export default function FacultyPage() {
                     <div className="relative">
                         <input
                             type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handlePhotoUpload}
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                            title="Upload photos named with EmpCode (e.g. EMP001.jpg)"
+                        />
+                        <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
+                            <FaCamera size={12} /> Photos
+                        </button>
+                    </div>
+                    <div className="relative">
+                        <input
+                            type="file"
                             accept=".xlsx,.xls"
                             onChange={handleFileUpload}
                             className="absolute inset-0 cursor-pointer opacity-0"
@@ -446,9 +504,29 @@ export default function FacultyPage() {
                                 filteredFaculty.map((f) => (
                                     <tr key={f.id} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="px-6 py-4">
-                                            <div>
-                                                <p className="font-semibold text-slate-900">{f.empName}</p>
-                                                <p className="text-xs font-mono text-slate-500">{f.empCode}</p>
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 overflow-hidden rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center">
+                                                    {(f as any).photoUrl ? (
+                                                        <Image 
+                                                            src={(f as any).photoUrl} 
+                                                            alt={f.empName} 
+                                                            width={40} 
+                                                            height={40} 
+                                                            className="h-full w-full object-cover" 
+                                                            onError={(e) => {
+                                                                (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(f.empName)}&background=f1f5f9&color=94a3b8`;
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <FaUserTie className="text-slate-400" />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <Link href={`/admin/faculty/${f.id}`} className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                                                        {f.empName}
+                                                    </Link>
+                                                    <p className="text-xs font-mono text-slate-500">{f.empCode}</p>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-600">{f.designation}</td>
@@ -637,11 +715,72 @@ export default function FacultyPage() {
                     )}
                 </div>
             </Modal>
+
+            {/* Photo Upload Status Modal */}
+            <Modal
+                isOpen={isUploadModalOpen}
+                onClose={() => !uploadStatus.loading && setIsUploadModalOpen(false)}
+                title="Photo Upload Status"
+            >
+                <div className="space-y-4">
+                    {uploadStatus.loading ? (
+                        <div className="flex flex-col items-center justify-center py-8">
+                            <LogoSpinner />
+                            <p className="mt-4 text-sm font-medium text-slate-500 animate-pulse">Uploading photos...</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="rounded-xl bg-green-50 p-4 text-center border border-green-100">
+                                    <p className="text-3xl font-black text-green-600">{uploadStatus.successCount}</p>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-green-700 mt-1">Uploaded</p>
+                                </div>
+                                <div className="rounded-xl bg-red-50 p-4 text-center border border-red-100">
+                                    <p className="text-3xl font-black text-red-600">{uploadStatus.failCount}</p>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-red-700 mt-1">Failed</p>
+                                </div>
+                            </div>
+                            {uploadStatus.failCount > 0 && (
+                                <div className="rounded-xl border border-red-100 bg-red-50/50 p-4">
+                                    <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-red-700">
+                                        <FaExclamationTriangle /> Failed Uploads
+                                    </h4>
+                                    <ul className="max-h-60 overflow-y-auto pr-2 space-y-2">
+                                        {uploadStatus.results.filter(r => r.status === "error").map((err, idx) => (
+                                            <li key={idx} className="text-xs text-red-600 flex items-start gap-2 bg-white p-2 rounded border border-red-100 shadow-sm">
+                                                <span className="font-semibold min-w-max">{err.file || "Unknown"}</span>
+                                                <span className="text-red-500 break-all">{err.message || "Upload failed"}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            <div className="flex justify-end pt-4 border-t border-slate-100">
+                                <button
+                                    onClick={() => setIsUploadModalOpen(false)}
+                                    className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-slate-700 transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 }
 
-function Input({ label, value, onChange, type = "text", required, disabled }: { label: string, value: string, onChange: (v: string) => void, type?: string, required?: boolean, disabled?: boolean }) {
+interface InputProps {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    type?: string;
+    required?: boolean;
+    disabled?: boolean;
+}
+
+function Input({ label, value, onChange, type = "text", required, disabled }: InputProps) {
     return (
         <div>
             <label className="mb-1 block text-xs font-semibold text-slate-500">{label}</label>

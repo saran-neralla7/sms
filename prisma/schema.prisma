@@ -75,6 +75,7 @@ model Faculty {
   qualification         String?
   aadharNo              String?
   panNo                 String?
+  photoUrl              String?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
   department            Department              @relation(fields: [departmentId], references: [id])
@@ -400,6 +401,7 @@ model InternalMark {
   studentId      String
   subjectId      String
   academicYearId String
+  examType       String   @default("MID_I") // MID_I or MID_II
   marksObtained  Float
   maxMarks       Float    @default(30)
   recordedById   String
@@ -411,7 +413,7 @@ model InternalMark {
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
   recordedBy   User         @relation(fields: [recordedById], references: [id])
 
-  @@unique([studentId, subjectId, academicYearId])
+  @@unique([studentId, subjectId, academicYearId, examType])
 }
 
 model FacultySubjectMapping {

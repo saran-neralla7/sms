@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     }
 
     const role = (session.user as any).role;
-    const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL"]; // Matches middleware
+    const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"]; // Matches middleware
 
     if (!allowedRoles.includes(role)) {
         redirect("/dashboard"); // Unauthorized users go to their dashboard

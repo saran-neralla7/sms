@@ -682,41 +682,55 @@ export default function StudentProfilePage() {
                                                 <th className="px-6 py-3 font-semibold">Academic Year</th>
                                                 <th className="px-6 py-3 font-semibold">Subject Code</th>
                                                 <th className="px-6 py-3 font-semibold">Subject Name</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Marks Obtained</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Date Uploaded</th>
-                                                <th className="px-6 py-3 font-semibold text-center">Actions</th>
+                                                <th className="px-6 py-3 font-semibold text-center">MID-I</th>
+                                                <th className="px-6 py-3 font-semibold text-center">MID-II</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {student.internalMarks.map((mark: any) => (
-                                                <tr key={mark.id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="px-6 py-4 font-medium text-slate-700">{mark.academicYear?.name}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{mark.subject?.code}</td>
-                                                    <td className="px-6 py-4 text-slate-600">{mark.subject?.name}</td>
-                                                    <td className="px-6 py-4 text-right font-bold text-purple-600">{mark.marksObtained}</td>
-                                                    <td className="px-6 py-4 text-right text-slate-400 text-xs">
-                                                        {new Date(mark.createdAt).toLocaleDateString()}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex justify-center gap-3">
-                                                            <button
-                                                                onClick={() => handleEditInternalMark(mark)}
-                                                                className="text-blue-500 hover:text-blue-700 text-sm font-semibold transition-colors"
-                                                                title="Edit Mark"
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteInternalMark(mark)}
-                                                                className="text-red-500 hover:text-red-700 text-sm font-semibold transition-colors"
-                                                                title="Delete Mark"
-                                                            >
-                                                                Delete
-                                                            </button>
+                                            {(() => {
+                                                const groupedMarks = new Map();
+                                                student.internalMarks.forEach((mark: any) => {
+                                                    const key = `${mark.academicYearId}_${mark.subjectId}`;
+                                                    if (!groupedMarks.has(key)) {
+                                                        groupedMarks.set(key, {
+                                                            academicYear: mark.academicYear?.name,
+                                                            subjectCode: mark.subject?.code,
+                                                            subjectName: mark.subject?.name,
+                                                            midIMark: null,
+                                                            midIIMark: null
+                                                        });
+                                                    }
+                                                    const group = groupedMarks.get(key);
+                                                    if (mark.examType === "MID_I") group.midIMark = mark;
+                                                    else if (mark.examType === "MID_II") group.midIIMark = mark;
+                                                    else group.midIMark = mark; // Fallback
+                                                });
+
+                                                const ActionButtons = ({ mark }: { mark: any }) => {
+                                                    if (!mark) return <span className="text-slate-300">-</span>;
+                                                    return (
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <span className="font-bold text-slate-900 w-8 text-right mr-2">{mark.marksObtained}</span>
+                                                            <button onClick={() => handleEditInternalMark(mark)} className="text-blue-500 hover:bg-blue-50 p-1 rounded" title="Edit">Edit</button>
+                                                            <button onClick={() => handleDeleteInternalMark(mark)} className="text-red-500 hover:bg-red-50 p-1 rounded" title="Delete">Del</button>
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                    );
+                                                };
+
+                                                return Array.from(groupedMarks.values()).map((group: any, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-6 py-4 font-medium text-slate-700">{group.academicYear}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{group.subjectCode}</td>
+                                                        <td className="px-6 py-4 text-slate-600">{group.subjectName}</td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <ActionButtons mark={group.midIMark} />
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <ActionButtons mark={group.midIIMark} />
+                                                        </td>
+                                                    </tr>
+                                                ));
+                                            })()}
                                         </tbody>
                                     </table>
                                 </div>

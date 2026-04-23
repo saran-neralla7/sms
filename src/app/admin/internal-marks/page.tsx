@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { FaFileDownload, FaFileUpload, FaTrashAlt } from "react-icons/fa";
+import { FaFileDownload, FaFileUpload, FaTrashAlt, FaSearch, FaFilter } from "react-icons/fa";
+import * as XLSX from "xlsx";
 import LogoSpinner from "@/components/LogoSpinner";
 import Modal from "@/components/Modal";
 
@@ -25,6 +26,7 @@ export default function InternalMarksUploadPage() {
     const [year, setYear] = useState("");
     const [semester, setSemester] = useState("");
     const [selectedSection, setSelectedSection] = useState("");
+    const [selectedExamType, setSelectedExamType] = useState("MID_I");
 
     const [isOldMarks, setIsOldMarks] = useState(false);
     const [subjectYear, setSubjectYear] = useState("");
@@ -38,6 +40,75 @@ export default function InternalMarksUploadPage() {
     const [successMessage, setSuccessMessage] = useState("");
     const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
     const [bulkDeleting, setBulkDeleting] = useState(false);
+
+    // Matrix View State
+    const [matrixData, setMatrixData] = useState<any[]>([]);
+    const [matrixLoading, setMatrixLoading] = useState(false);
+    const [showMatrix, setShowMatrix] = useState(false);
+
+    const loadMatrix = async () => {
+        if (!selectedAcademicYear || !selectedDept || !year || !semester || !selectedSection) {
+            setSuccessMessage("Please select all dropdowns to view the matrix.");
+            setIsSuccessModalOpen(true);
+            return;
+        }
+
+        setMatrixLoading(true);
+        setShowMatrix(true);
+        try {
+            const queryParams: any = {
+                academicYearId: selectedAcademicYear,
+                departmentId: selectedDept,
+                year,
+                semester,
+                sectionId: selectedSection,
+            };
+            if (isOldMarks && subjectYear && subjectSemester) {
+                queryParams.subjectYear = subjectYear;
+                queryParams.subjectSemester = subjectSemester;
+            }
+            const query = new URLSearchParams(queryParams);
+            const res = await fetch(`/api/internal-marks?${query.toString()}`);
+            if (res.ok) {
+                setMatrixData(await res.json());
+            } else {
+                setSuccessMessage("Failed to load matrix.");
+                setIsSuccessModalOpen(true);
+            }
+        } catch (e) {
+            console.error(e);
+            setSuccessMessage("Error loading matrix.");
+            setIsSuccessModalOpen(true);
+        } finally {
+            setMatrixLoading(false);
+        }
+    };
+
+    const exportMatrix = () => {
+        if (matrixData.length === 0) return;
+
+        const subjects = Array.from(new Set(
+            matrixData.flatMap(r => Object.keys(r.marks))
+        )).sort();
+
+        const rows = matrixData.map(r => {
+            const row: any = {
+                "Roll Number": r.rollNumber,
+                "Name": r.name,
+                "Section": r.sectionName,
+            };
+            subjects.forEach(sub => {
+                row[`${sub} MID-I`] = r.marks[sub]?.MID_I ?? "-";
+                row[`${sub} MID-II`] = r.marks[sub]?.MID_II ?? "-";
+            });
+            return row;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "InternalMarks");
+        XLSX.writeFile(wb, `InternalMarks_${year}_${semester}_Sec${matrixData[0]?.sectionName || 'All'}.xlsx`);
+    };
 
     useEffect(() => {
         if (status === "authenticated") {
@@ -103,7 +174,8 @@ export default function InternalMarksUploadPage() {
             departmentId: selectedDept,
             year,
             semester,
-            sectionId: selectedSection
+            sectionId: selectedSection,
+            examType: selectedExamType
         };
 
         if (isOldMarks && subjectYear && subjectSemester) {
@@ -135,6 +207,7 @@ export default function InternalMarksUploadPage() {
         formData.append("year", year);
         formData.append("semester", semester);
         formData.append("sectionId", selectedSection);
+        formData.append("examType", selectedExamType);
 
         if (isOldMarks && subjectYear && subjectSemester) {
             formData.append("subjectYear", subjectYear);
@@ -181,6 +254,7 @@ export default function InternalMarksUploadPage() {
                 year,
                 semester,
                 sectionId: selectedSection,
+                examType: selectedExamType,
                 subjectYear: isOldMarks ? subjectYear : undefined,
                 subjectSemester: isOldMarks ? subjectSemester : undefined
             };
@@ -273,6 +347,16 @@ export default function InternalMarksUploadPage() {
                         >
                             <option value="">Select Section</option>
                             {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Exam Type</label>
+                        <select
+                            value={selectedExamType} onChange={(e) => setSelectedExamType(e.target.value)}
+                            className="block w-full rounded-md border border-slate-300 p-2 text-sm"
+                        >
+                            <option value="MID_I">MID-I</option>
+                            <option value="MID_II">MID-II</option>
                         </select>
                     </div>
                 </div>
@@ -368,7 +452,86 @@ export default function InternalMarksUploadPage() {
                             </button>
                         </div>
                     </div>
+
+                    {/* 4. View Matrix Row */}
+                    <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex-1">
+                            <h3 className="flex items-center gap-2 font-bold text-indigo-800 text-lg"><FaFilter className="text-indigo-600" /> 4. View Internal Marks Matrix</h3>
+                            <p className="mt-1 text-sm text-indigo-600/80 mb-2">Display all MID-I and MID-II marks side-by-side for the selected students.</p>
+                        </div>
+                        <div className="shrink-0 flex items-center justify-end whitespace-nowrap">
+                            <button
+                                onClick={loadMatrix}
+                                disabled={matrixLoading}
+                                className="flex min-w-[160px] items-center justify-center gap-2 rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                            >
+                                <FaSearch />
+                                {matrixLoading ? "Loading..." : "Load Matrix"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
+
+                {showMatrix && (
+                    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-slate-800">Internal Marks Matrix</h2>
+                            <button
+                                onClick={exportMatrix}
+                                disabled={matrixData.length === 0}
+                                className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+                            >
+                                <FaFileDownload /> Export Data
+                            </button>
+                        </div>
+
+                        {matrixLoading ? (
+                            <div className="py-12 flex justify-center"><LogoSpinner /></div>
+                        ) : matrixData.length === 0 ? (
+                            <div className="py-12 text-center text-slate-500">No students found for this selection.</div>
+                        ) : (
+                            <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                                    <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-700">
+                                        <tr>
+                                            <th className="p-3 border-b border-r border-slate-200 sticky left-0 bg-slate-50 z-10" rowSpan={2}>Roll No</th>
+                                            <th className="p-3 border-b border-r border-slate-200 sticky left-[100px] bg-slate-50 z-10" rowSpan={2}>Name</th>
+                                            {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(sub => (
+                                                <th key={sub} className="p-3 border-b border-r border-slate-200 text-center bg-slate-100" colSpan={2}>{sub}</th>
+                                            ))}
+                                        </tr>
+                                        <tr>
+                                            {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(sub => (
+                                                <React.Fragment key={`${sub}-sub`}>
+                                                    <th className="p-2 border-b border-r border-slate-200 text-center bg-blue-50 text-[10px] text-blue-700">MID-I</th>
+                                                    <th className="p-2 border-b border-r border-slate-200 text-center bg-purple-50 text-[10px] text-purple-700">MID-II</th>
+                                                </React.Fragment>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {matrixData.map((res, idx) => (
+                                            <tr key={res.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="p-3 border-r border-slate-200 font-mono font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{res.rollNumber}</td>
+                                                <td className="p-3 border-r border-slate-200 text-slate-700 sticky left-[100px] bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] truncate max-w-[200px]" title={res.name}>{res.name}</td>
+                                                {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(subCode => {
+                                                    const mid1 = res.marks[subCode]?.MID_I ?? "-";
+                                                    const mid2 = res.marks[subCode]?.MID_II ?? "-";
+                                                    return (
+                                                        <React.Fragment key={`${res.id}-${subCode}`}>
+                                                            <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-700">{mid1}</td>
+                                                            <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-700">{mid2}</td>
+                                                        </React.Fragment>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Success/Error Modal */}
