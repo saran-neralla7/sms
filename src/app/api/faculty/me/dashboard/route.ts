@@ -19,7 +19,11 @@ export async function GET(req: NextRequest) {
                 department: true,
                 FacultySubjectMapping: {
                     include: {
-                        subject: true,
+                        subject: {
+                            include: {
+                                department: true
+                            }
+                        },
                         section: true,
                         academicYear: true
                     }

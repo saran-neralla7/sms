@@ -11,7 +11,7 @@ export async function GET() {
         }
 
         const student = await prisma.student.findUnique({
-            where: { id: session.user.id },
+            where: { rollNumber: session.user.username as string },
             include: { section: true }
         });
 
@@ -28,22 +28,44 @@ export async function GET() {
             return NextResponse.json({ forms: [] });
         }
 
-        // Find active forms for this academic year
+        // Find active forms for this academic year, targeted at this student's section, year, and semester
         const activeForms = await prisma.feedbackForm.findMany({
             where: {
                 academicYearId: activeAcademicYear.id,
                 isActive: true,
                 startDate: { lte: now },
-                endDate: { gte: now }
+                endDate: { gte: now },
+                targetSections: {
+                    some: {
+                        id: student.sectionId
+                    }
+                },
+                // Filter by student's year and semester if set on the form
+                OR: [
+                    { targetYear: null },
+                    { targetYear: parseInt(String(student.year)) }
+                ]
+            },
+            include: {
+                template: {
+                    include: {
+                        questions: { orderBy: { order: "asc" }, where: { isActive: true } }
+                    }
+                }
             }
         });
 
-        if (activeForms.length === 0) {
+        // Further filter: if targetSemester is set on form, student's semester must match
+        const filteredForms = activeForms.filter((f: any) =>
+            f.targetSemester === null || f.targetSemester === student.semester
+        );
+
+        if (filteredForms.length === 0) {
             return NextResponse.json({ forms: [] });
         }
 
         // Check if student has already submitted
-        const formsWithStatus = await Promise.all(activeForms.map(async (form) => {
+        const formsWithStatus = await Promise.all(filteredForms.map(async (form: any) => {
             const submission = await prisma.feedbackSubmission.findUnique({
                 where: { unique_student_submission: { formId: form.id, studentId: student.id } }
             });
@@ -52,27 +74,30 @@ export async function GET() {
                 return { ...form, submitted: true };
             }
 
-            // Fetch mapped faculty for the student's section
-            const mappings = await prisma.facultySubjectMapping.findMany({
-                where: {
-                    sectionId: student.sectionId,
-                    academicYearId: activeAcademicYear.id
-                },
-                include: {
-                    faculty: { select: { id: true, empName: true, department: { select: { code: true } } } },
-                    subject: { select: { id: true, name: true, code: true } }
-                }
-            });
+            let mappings: any[] = [];
+            
+            if (form.template?.type === "FACULTY_MAPPED") {
+                // Fetch mapped faculty for the student's EXACT section, year, semester, academic year
+                mappings = await prisma.facultySubjectMapping.findMany({
+                    where: {
+                        sectionId: student.sectionId,
+                        academicYearId: activeAcademicYear.id
+                    },
+                    include: {
+                        faculty: { select: { id: true, empName: true, photoUrl: true, department: { select: { code: true } } } },
+                        subject: { select: { id: true, name: true, code: true } }
+                    }
+                });
+            }
 
-            const questions = await prisma.feedbackQuestion.findMany({
-                where: { isActive: true },
-                orderBy: { order: "asc" }
-            });
-
-            return { ...form, submitted: false, mappings, questions };
+            return { ...form, submitted: false, mappings, questions: form.template?.questions || [] };
         }));
 
-        return NextResponse.json({ forms: formsWithStatus });
+        return NextResponse.json({ 
+            forms: formsWithStatus,
+            studentInfo: { year: student.year, semester: student.semester },
+            academicYear: activeAcademicYear.name
+        });
 
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

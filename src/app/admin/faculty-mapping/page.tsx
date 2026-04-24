@@ -24,8 +24,8 @@ export default function FacultyMappingPage() {
     const [semester, setSemester] = useState("");
     const [selectedSection, setSelectedSection] = useState("");
 
-    // Mappings state: subjectId -> facultyId
-    const [mappings, setMappings] = useState<Record<string, string>>({});
+    // Mappings state: subjectId -> array of facultyIds
+    const [mappings, setMappings] = useState<Record<string, string[]>>({});
 
     useEffect(() => {
         Promise.all([
@@ -69,10 +69,13 @@ export default function FacultyMappingPage() {
             const mapRes = await fetch(`/api/admin/faculty-mappings?sectionId=${selectedSection}&academicYearId=${selectedAy}`);
             const mapData = await mapRes.json();
             
-            const currentMappings: Record<string, string> = {};
+            const currentMappings: Record<string, string[]> = {};
             if (Array.isArray(mapData)) {
                 mapData.forEach(m => {
-                    currentMappings[m.subjectId] = m.facultyId;
+                    if (!currentMappings[m.subjectId]) {
+                        currentMappings[m.subjectId] = [];
+                    }
+                    currentMappings[m.subjectId].push(m.facultyId);
                 });
             }
             setMappings(currentMappings);
@@ -87,11 +90,14 @@ export default function FacultyMappingPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const payload = Object.entries(mappings)
-                .filter(([_, facultyId]) => facultyId) // Only save if faculty is selected
-                .map(([subjectId, facultyId]) => ({
-                    subjectId, facultyId
-                }));
+            const payload: any[] = [];
+            Object.entries(mappings).forEach(([subjectId, facultyIds]) => {
+                facultyIds.forEach(facultyId => {
+                    if (facultyId) {
+                        payload.push({ subjectId, facultyId });
+                    }
+                });
+            });
 
             const res = await fetch("/api/admin/faculty-mappings", {
                 method: "POST",
@@ -151,11 +157,11 @@ export default function FacultyMappingPage() {
                     <div className="flex gap-2">
                         <select value={year} onChange={(e) => setYear(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="">Year</option>
-                            {[1, 2, 3, 4].map(y => <option key={y} value={y}>Y{y}</option>)}
+                            {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <select value={semester} onChange={(e) => setSemester(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="">Sem</option>
-                            {[1, 2].map(s => <option key={s} value={s}>S{s}</option>)}
+                            {[1, 2].map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
                 </div>
@@ -195,18 +201,53 @@ export default function FacultyMappingPage() {
                                     <td className="px-6 py-4 font-mono text-slate-500">{sub.code}</td>
                                     <td className="px-6 py-4 text-xs font-medium text-slate-500">{sub.type}</td>
                                     <td className="px-6 py-4">
-                                        <select 
-                                            value={mappings[sub.id] || ""}
-                                            onChange={(e) => setMappings({ ...mappings, [sub.id]: e.target.value })}
-                                            className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                        >
-                                            <option value="">-- No Faculty Assigned --</option>
-                                            {allFaculty.map(fac => (
-                                                <option key={fac.id} value={fac.id}>
-                                                    {fac.empName} ({fac.department.code}) - {fac.empCode}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        {sub.type === "LAB" ? (
+                                            <div className="flex flex-col gap-2">
+                                                <select 
+                                                    value={mappings[sub.id]?.[0] || ""}
+                                                    onChange={(e) => {
+                                                        const current = mappings[sub.id] || [];
+                                                        setMappings({ ...mappings, [sub.id]: [e.target.value, current[1] || ""] });
+                                                    }}
+                                                    className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                                >
+                                                    <option value="">-- Primary Faculty --</option>
+                                                    {allFaculty.map(fac => (
+                                                        <option key={fac.id} value={fac.id}>
+                                                            {fac.empName} ({fac.department.code}) - {fac.empCode}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <select 
+                                                    value={mappings[sub.id]?.[1] || ""}
+                                                    onChange={(e) => {
+                                                        const current = mappings[sub.id] || [];
+                                                        setMappings({ ...mappings, [sub.id]: [current[0] || "", e.target.value] });
+                                                    }}
+                                                    className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                                >
+                                                    <option value="">-- Secondary Faculty (Optional) --</option>
+                                                    {allFaculty.map(fac => (
+                                                        <option key={fac.id} value={fac.id}>
+                                                            {fac.empName} ({fac.department.code}) - {fac.empCode}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        ) : (
+                                            <select 
+                                                value={mappings[sub.id]?.[0] || ""}
+                                                onChange={(e) => setMappings({ ...mappings, [sub.id]: [e.target.value] })}
+                                                className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                            >
+                                                <option value="">-- No Faculty Assigned --</option>
+                                                {allFaculty.map(fac => (
+                                                    <option key={fac.id} value={fac.id}>
+                                                        {fac.empName} ({fac.department.code}) - {fac.empCode}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

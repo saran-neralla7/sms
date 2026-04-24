@@ -6,13 +6,15 @@ import { authOptions } from "@/lib/auth";
 export async function GET() {
     try {
         const session = await getServerSession(authOptions);
-        if (!session?.user || session.user.role !== "ADMIN") {
+        if (!session?.user || !["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(session.user.role)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const forms = await prisma.feedbackForm.findMany({
             include: {
                 academicYear: true,
+                template: true,
+                targetSections: { select: { id: true, name: true } },
                 _count: {
                     select: { submissions: true, responses: true }
                 }
@@ -28,26 +30,37 @@ export async function GET() {
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session?.user || session.user.role !== "ADMIN") {
+        if (!session?.user || !["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(session.user.role)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const body = await req.json();
-        const { title, description, academicYearId, startDate, endDate, isActive } = body;
+        const { title, description, academicYearId, templateId, startDate, endDate, isActive, sectionIds, targetYear, targetSemester } = body;
 
-        if (!title || !academicYearId || !startDate || !endDate) {
+        if (!title || !academicYearId || !templateId || !startDate || !endDate) {
             return NextResponse.json({ error: "Required fields missing" }, { status: 400 });
         }
 
+        const data: any = {
+            title,
+            description,
+            academicYearId,
+            templateId,
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+            isActive: isActive !== undefined ? isActive : true,
+            targetYear: targetYear ? parseInt(targetYear) : null,
+            targetSemester: targetSemester ? parseInt(targetSemester) : null
+        };
+
+        if (Array.isArray(sectionIds) && sectionIds.length > 0) {
+            data.targetSections = {
+                connect: sectionIds.map((id: string) => ({ id }))
+            };
+        }
+
         const form = await prisma.feedbackForm.create({
-            data: {
-                title,
-                description,
-                academicYearId,
-                startDate: new Date(startDate),
-                endDate: new Date(endDate),
-                isActive: isActive !== undefined ? isActive : true
-            }
+            data
         });
 
         return NextResponse.json(form);

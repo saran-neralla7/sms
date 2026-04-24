@@ -37,20 +37,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        const setting = await prisma.examApplicationSetting.upsert({
-            where: { year_semester: { year, semester } },
-            update: {
-                startDate: new Date(startDate),
-                endDate: new Date(endDate),
-                lateFeeEndDate: lateFeeEndDate ? new Date(lateFeeEndDate) : null,
-                isActive: true
-            },
-            create: {
+        const setting = await prisma.examApplicationSetting.create({
+            data: {
+                name: body.name || null,
+                type: body.type || "REGULAR",
                 year,
                 semester,
                 startDate: new Date(startDate),
                 endDate: new Date(endDate),
                 lateFeeEndDate: lateFeeEndDate ? new Date(lateFeeEndDate) : null,
+                isActive: true
             }
         });
 

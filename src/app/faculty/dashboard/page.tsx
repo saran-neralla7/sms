@@ -207,10 +207,15 @@ export default function FacultyDashboard() {
                                             <div key={mapping.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4 hover:shadow-md transition-shadow">
                                                 <div className="flex justify-between items-start">
                                                     <div>
-                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                                                            {mapping.academicYear?.name}
-                                                        </span>
-                                                        <h4 className="font-bold text-slate-900 mt-2 text-lg leading-tight">{mapping.subject?.name}</h4>
+                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                                                {mapping.academicYear?.name}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
+                                                                {mapping.subject?.department?.code || "DEPT"} - Year {mapping.subject?.year} Sem {mapping.subject?.semester}
+                                                            </span>
+                                                        </div>
+                                                        <h4 className="font-bold text-slate-900 text-lg leading-tight">{mapping.subject?.name}</h4>
                                                         <p className="text-sm font-mono text-slate-500 mt-1">{mapping.subject?.code}</p>
                                                     </div>
                                                 </div>

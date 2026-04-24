@@ -24,15 +24,26 @@ export async function GET(request: Request) {
             }
         }
 
-        const applications = await prisma.examApplication.findMany({ where });
+        const applications = await prisma.examApplication.findMany({ 
+            where,
+            include: { setting: true }
+        });
 
-        // Group by department + year + semester
-        const grouped: Record<string, { department: string; year: string; semester: string; total: number; pending: number; approved: number; rejected: number }> = {};
+        // Group by department + year + semester + settingId
+        const grouped: Record<string, any> = {};
 
         for (const app of applications) {
-            const key = `${app.department}__${app.year}__${app.semester}`;
+            const settingId = app.settingId || "HISTORY";
+            const key = `${app.department}__${app.year}__${app.semester}__${settingId}`;
             if (!grouped[key]) {
-                grouped[key] = { department: app.department, year: app.year, semester: app.semester, total: 0, pending: 0, approved: 0, rejected: 0 };
+                grouped[key] = { 
+                    department: app.department, 
+                    year: app.year, 
+                    semester: app.semester, 
+                    settingId: app.settingId,
+                    settingName: app.setting ? (app.setting.name || app.setting.type) : "Legacy Data (History)",
+                    total: 0, pending: 0, approved: 0, rejected: 0 
+                };
             }
             grouped[key].total += 1;
             if (app.status === "PENDING") grouped[key].pending += 1;

@@ -38,20 +38,21 @@ export async function GET() {
         responses.forEach(res => {
             totalRating += res.overallRating;
             
-            if (!subjectStats[res.subjectId]) {
-                subjectStats[res.subjectId] = {
-                    subject: res.subject,
+            const subjectId = res.subjectId || "UNKNOWN";
+            if (!subjectStats[subjectId]) {
+                subjectStats[subjectId] = {
+                    subject: res.subject || { name: "Unknown", code: "N/A" },
                     totalResponses: 0,
                     totalScore: 0,
                     comments: []
                 };
             }
             
-            subjectStats[res.subjectId].totalResponses += 1;
-            subjectStats[res.subjectId].totalScore += res.overallRating;
+            subjectStats[subjectId].totalResponses += 1;
+            subjectStats[subjectId].totalScore += res.overallRating;
             
             if (res.comments && res.comments.trim() !== "") {
-                subjectStats[res.subjectId].comments.push(res.comments);
+                subjectStats[subjectId].comments.push(res.comments);
             }
         });
 

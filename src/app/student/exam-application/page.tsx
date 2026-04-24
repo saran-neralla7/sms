@@ -8,6 +8,9 @@ import { FaCheckCircle, FaTimesCircle, FaClock, FaDownload, FaExclamationTriangl
 import jsPDF from "jspdf";
 
 interface SemesterData {
+    settingId: string;
+    type: string;
+    name?: string;
     year: string;
     semester: string;
     subjects: any[];
@@ -59,13 +62,16 @@ export default function ExamApplicationPage() {
                 // For each valid setting, fetch its subjects and construct the form state
                 const semestersData: SemesterData[] = [];
                 for (const s of validSettings) {
-                    // Skip if the student already applied for this exact semester
-                    if (apps.some((a: any) => a.year === s.year && a.semester === s.semester)) continue;
+                    // Skip if the student already applied for this exact setting
+                    if (apps.some((a: any) => a.settingId === s.id)) continue;
 
-                    const res = await fetch(`/api/subjects?departmentId=${studentData.departmentId}&year=${s.year}&semester=${s.semester}`);
+                    const res = await fetch(`/api/students/me/eligible-subjects?year=${s.year}&semester=${s.semester}&type=${s.type}`);
                     const subs = await res.ok ? await res.json() : [];
 
                     semestersData.push({
+                        settingId: s.id,
+                        type: s.type,
+                        name: s.name,
                         year: s.year,
                         semester: s.semester,
                         subjects: subs,
@@ -81,7 +87,7 @@ export default function ExamApplicationPage() {
                 semestersData.sort((a, b) => getSemNumber(b.year, b.semester) - getSemNumber(a.year, a.semester));
                 setActiveSemesters(semestersData);
                 if (semestersData.length > 0) {
-                    setExpandedSemester(`${semestersData[0].year}-${semestersData[0].semester}`);
+                    setExpandedSemester(semestersData[0].settingId);
                 }
             }
             setLoading(false);
@@ -308,10 +314,10 @@ export default function ExamApplicationPage() {
         let isValid = true;
         const newSemesters = [...activeSemesters];
         activeSubmissions.forEach(sub => {
-            const idx = activeSemesters.findIndex(s => s.year === sub.year && s.semester === sub.semester);
+            const idx = activeSemesters.findIndex(s => s.settingId === sub.settingId);
             if (!sub.utrNumber.trim() || !sub.amountPaid.trim() || !sub.paymentDate.trim()) {
                 newSemesters[idx].error = "UTR Number, Amount Paid, and Payment Date are required for this semester.";
-                setExpandedSemester(`${sub.year}-${sub.semester}`);
+                setExpandedSemester(sub.settingId);
                 isValid = false;
             } else {
                 newSemesters[idx].error = undefined;
@@ -331,7 +337,9 @@ export default function ExamApplicationPage() {
             subjectIds: sem.selectedSubjects,
             utrNumber: sem.utrNumber.trim(),
             amountPaid: sem.amountPaid.trim(),
-            paymentDate: sem.paymentDate
+            paymentDate: sem.paymentDate,
+            settingId: sem.settingId,
+            type: sem.type
         }));
 
         const formData = new FormData();
@@ -348,10 +356,10 @@ export default function ExamApplicationPage() {
             const data = await res.json(); // This is an array of created applications
             
             // Remove submitted semesters from active list
-            const submittedKeys = payload.map(p => `${p.year}-${p.semester}`);
-            const remaining = activeSemesters.filter(sem => !submittedKeys.includes(`${sem.year}-${sem.semester}`));
+            const submittedKeys = payload.map(p => p.settingId);
+            const remaining = activeSemesters.filter(sem => !submittedKeys.includes(sem.settingId));
             setActiveSemesters(remaining);
-            if (remaining.length > 0) setExpandedSemester(`${remaining[0].year}-${remaining[0].semester}`);
+            if (remaining.length > 0) setExpandedSemester(remaining[0].settingId);
             
             setExistingApps(prev => [...data, ...prev]);
             setSuccess(true);
@@ -457,7 +465,7 @@ export default function ExamApplicationPage() {
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {activeSemesters.map((sem, idx) => {
-                                const semKey = `${sem.year}-${sem.semester}`;
+                                const semKey = sem.settingId;
                                 const isExpanded = expandedSemester === semKey;
                                 const isSelected = sem.selectedSubjects.length > 0;
 
@@ -474,7 +482,7 @@ export default function ExamApplicationPage() {
                                                 </div>
                                                 <div>
                                                     <h3 className={`font-bold ${isSelected ? 'text-red-900' : 'text-slate-700'}`}>
-                                                        {sem.year === student.year && sem.semester === student.semester ? "Current Semester" : "Backlog Semester"}
+                                                        {sem.name ? sem.name : (sem.type === "REGULAR" ? "Current Semester (Regular)" : "Backlog Semester (Supplementary)")}
                                                     </h3>
                                                     <p className="text-xs text-slate-500">{sem.selectedSubjects.length} subjects selected</p>
                                                 </div>

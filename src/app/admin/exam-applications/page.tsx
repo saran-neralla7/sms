@@ -22,7 +22,7 @@ export default function AdminExamApplicationsPage() {
     // Settings state
     const [settings, setSettings] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
-    const [settingForm, setSettingForm] = useState({ year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "" });
+    const [settingForm, setSettingForm] = useState({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "" });
     const [settingsLoading, setSettingsLoading] = useState(true);
 
     // Office account state
@@ -80,7 +80,7 @@ export default function AdminExamApplicationsPage() {
         if (res.ok) {
             const s = await res.json();
             setSettings(prev => [...prev.filter(p => p.id !== s.id), s]);
-            setSettingForm({ year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "" });
+            setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "" });
         }
     };
 
@@ -120,6 +120,11 @@ export default function AdminExamApplicationsPage() {
         setLoadingApps(true);
         window.history.pushState({ view: "details" }, "", `?view=details`);
         const params = new URLSearchParams({ department: card.department, year: card.year, semester: card.semester });
+        if (card.settingId === null) {
+            params.append("history", "true");
+        } else {
+            params.append("settingId", card.settingId);
+        }
         const res = await fetch(`/api/exam-applications?${params}`);
         if (res.ok) {
             const data = await res.json();
@@ -202,7 +207,8 @@ export default function AdminExamApplicationsPage() {
                                 <FaClock /> Back to Stats
                             </button>
                             <h1 className="text-2xl font-extrabold text-slate-900">{selectedCard.department}</h1>
-                            <p className="text-slate-500">Year {selectedCard.year} — Semester {selectedCard.semester}</p>
+                            <p className="text-slate-500 font-medium">{selectedCard.settingName}</p>
+                            <p className="text-xs text-slate-400 mt-1">Year {selectedCard.year} — Semester {selectedCard.semester}</p>
                         </div>
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                             <input 
@@ -221,7 +227,7 @@ export default function AdminExamApplicationsPage() {
                                 <option value="EDIT_REQUESTS">Edit Requests ({applications.filter(a => a.editRequested).length})</option>
                             </select>
                             <button
-                                onClick={() => window.open(`/api/exam-applications/export?department=${selectedCard.department}&year=${selectedCard.year}&semester=${selectedCard.semester}`, "_blank")}
+                                onClick={() => window.open(`/api/exam-applications/export?department=${selectedCard.department}&year=${selectedCard.year}&semester=${selectedCard.semester}${selectedCard.settingId ? `&settingId=${selectedCard.settingId}` : `&history=true`}`, "_blank")}
                                 className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors justify-center"
                             >
                                 <FaDownload /> Export Excel
@@ -593,15 +599,32 @@ export default function AdminExamApplicationsPage() {
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <form onSubmit={handleCreateSetting} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm mb-6">
                         <h2 className="text-lg font-bold text-slate-800 mb-4">Add / Update Application Window</h2>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-                            <select value={settingForm.year} onChange={e => setSettingForm(p => ({ ...p, year: e.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required>
-                                <option value="">Year</option>
-                                {["1", "2", "3", "4"].map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
-                            <select value={settingForm.semester} onChange={e => setSettingForm(p => ({ ...p, semester: e.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required>
-                                <option value="">Semester</option>
-                                {["1", "2"].map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Cycle Name (Optional)</label>
+                                <input type="text" placeholder="e.g. April 2026 Exams" value={settingForm.name} onChange={e => setSettingForm(p => ({ ...p, name: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Exam Type</label>
+                                <select value={settingForm.type} onChange={e => setSettingForm(p => ({ ...p, type: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required>
+                                    <option value="REGULAR">Regular</option>
+                                    <option value="SUPPLY">Supply / Backlog</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Year</label>
+                                <select value={settingForm.year} onChange={e => setSettingForm(p => ({ ...p, year: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required>
+                                    <option value="">Year</option>
+                                    {["1", "2", "3", "4"].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Semester</label>
+                                <select value={settingForm.semester} onChange={e => setSettingForm(p => ({ ...p, semester: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required>
+                                    <option value="">Semester</option>
+                                    {["1", "2"].map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
                             <div>
                                 <label className="block text-xs text-slate-500 mb-1">Start Date & Time</label>
                                 <input type="datetime-local" value={settingForm.startDate} onChange={e => setSettingForm(p => ({ ...p, startDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" required />
@@ -627,6 +650,7 @@ export default function AdminExamApplicationsPage() {
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                                     <tr>
+                                        <th className="px-4 py-3">Type</th>
                                         <th className="px-4 py-3">Year</th>
                                         <th className="px-4 py-3">Semester</th>
                                         <th className="px-4 py-3">Start</th>
@@ -638,6 +662,12 @@ export default function AdminExamApplicationsPage() {
                                 <tbody className="divide-y divide-slate-100">
                                     {settings.map((s: any) => (
                                         <tr key={s.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-col">
+                                                    <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold w-fit ${s.type === 'SUPPLY' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{s.type}</span>
+                                                    {s.name && <span className="text-xs text-slate-500 mt-1">{s.name}</span>}
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3 font-medium">{s.year}</td>
                                             <td className="px-4 py-3">{s.semester}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">{new Date(s.startDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
@@ -721,11 +751,16 @@ export default function AdminExamApplicationsPage() {
                                     (overviewYear === "ALL" || s.year === overviewYear) &&
                                     (overviewSem === "ALL" || s.semester === overviewSem)
                                 ).map((card: any, i: number) => (
-                                    <motion.div key={`${card.department}-${card.year}-${card.semester}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                                    <motion.div key={`${card.department}-${card.year}-${card.semester}-${card.settingId || 'history'}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                                         <button
                                             onClick={() => loadApplications(card)}
                                             className="w-full text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                                         >
+                                            <div className="mb-2">
+                                                <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold w-fit ${card.settingId ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-700'}`}>
+                                                    {card.settingName}
+                                                </span>
+                                            </div>
                                             <h3 className="text-lg font-bold text-slate-800">{card.department}</h3>
                                             <p className="text-sm text-slate-500 mb-4">Year {card.year} • Semester {card.semester}</p>
                                             <div className="text-2xl font-extrabold text-blue-600 mb-3">{card.total} <span className="text-sm font-medium text-slate-500">total</span></div>

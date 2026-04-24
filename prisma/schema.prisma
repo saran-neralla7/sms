@@ -34,6 +34,7 @@ model Section {
   timetables            Timetable[]
   departments           Department[]            @relation("DepartmentToSection")
   FacultySubjectMapping FacultySubjectMapping[]
+  feedbackForms         FeedbackForm[]          @relation("FeedbackFormSections")
 }
 
 model User {
@@ -372,6 +373,9 @@ model ExamApplication {
   subjects           ExamApplicationSubject[]
   editRequested      Boolean                  @default(false)
   editRequestReason  String?
+  type               String                   @default("REGULAR") // REGULAR or SUPPLY
+  settingId          String?
+  setting            ExamApplicationSetting?  @relation(fields: [settingId], references: [id], onDelete: SetNull)
 }
 
 model ExamApplicationSubject {
@@ -383,17 +387,18 @@ model ExamApplicationSubject {
 }
 
 model ExamApplicationSetting {
-  id             String    @id @default(uuid())
+  id             String            @id @default(uuid())
+  name           String?           // e.g. "April 2026 Exams"
+  type           String            @default("REGULAR") // REGULAR or SUPPLY
   year           String
   semester       String
   startDate      DateTime
   endDate        DateTime
   lateFeeEndDate DateTime?
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@unique([year, semester])
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  applications   ExamApplication[]
 }
 
 model InternalMark {
@@ -433,29 +438,50 @@ model FacultySubjectMapping {
   @@unique([facultyId, subjectId, sectionId, academicYearId], name: "unique_faculty_mapping")
 }
 
+model FeedbackTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        String   @default("FACULTY_MAPPED") // FACULTY_MAPPED or GENERAL
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions   FeedbackQuestion[]
+  forms       FeedbackForm[]
+}
+
 model FeedbackQuestion {
-  id        String   @id @default(uuid())
-  text      String
-  order     Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  templateId  String
+  text        String
+  type        String   @default("SCALE_1_5") // SCALE_1_5 or TEXT
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  template    FeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
 model FeedbackForm {
   id             String   @id @default(uuid())
+  templateId     String
   title          String
   description    String?
   academicYearId String
+  targetYear     Int?
+  targetSemester Int?
   startDate      DateTime
   endDate        DateTime
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  template     FeedbackTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear         @relation(fields: [academicYearId], references: [id])
   submissions  FeedbackSubmission[]
   responses    FeedbackResponse[]
-  academicYear AcademicYear         @relation(fields: [academicYearId], references: [id])
+  targetSections Section[]            @relation("FeedbackFormSections")
 }
 
 model FeedbackSubmission {
@@ -473,16 +499,16 @@ model FeedbackSubmission {
 model FeedbackResponse {
   id            String   @id @default(uuid())
   formId        String
-  facultyId     String
-  subjectId     String
+  facultyId     String?
+  subjectId     String?
   ratings       Json
   comments      String?
   overallRating Float
   createdAt     DateTime @default(now())
 
   form    FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
-  faculty Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
-  subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  faculty Faculty?     @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject Subject?     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 }
 
 model CertificateCounter {

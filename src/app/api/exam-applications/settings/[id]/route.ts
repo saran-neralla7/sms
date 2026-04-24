@@ -24,6 +24,8 @@ export async function PATCH(
         if (body.endDate) data.endDate = new Date(body.endDate);
         if (body.lateFeeEndDate !== undefined) data.lateFeeEndDate = body.lateFeeEndDate ? new Date(body.lateFeeEndDate) : null;
         if (body.isActive !== undefined) data.isActive = body.isActive;
+        if (body.name !== undefined) data.name = body.name;
+        if (body.type) data.type = body.type;
 
         const updated = await prisma.examApplicationSetting.update({
             where: { id: params.id },

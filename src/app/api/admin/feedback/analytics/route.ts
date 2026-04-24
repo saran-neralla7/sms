@@ -33,12 +33,15 @@ export async function GET(req: Request) {
         // Group by Faculty Subject
         const facultyStats: any = {};
         responses.forEach(res => {
-            const key = `${res.facultyId}_${res.subjectId}`;
+            const key = res.facultyId && res.subjectId 
+                ? `${res.facultyId}_${res.subjectId}` 
+                : "GENERAL";
+            
             if (!facultyStats[key]) {
                 facultyStats[key] = {
-                    facultyName: res.faculty.empName,
-                    department: res.faculty.department.code,
-                    subjectName: `${res.subject.name} (${res.subject.code})`,
+                    facultyName: res.faculty?.empName || "General Form",
+                    department: res.faculty?.department?.code || "N/A",
+                    subjectName: res.subject ? `${res.subject.name} (${res.subject.code})` : "General Feedback",
                     totalResponses: 0,
                     totalScore: 0
                 };

@@ -43,6 +43,12 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    if (searchParams.get("settingId")) {
+        where.settingId = searchParams.get("settingId");
+    } else if (searchParams.get("history") === "true") {
+        where.settingId = null;
+    }
+
     try {
         const applications = await prisma.examApplication.findMany({
             where,
@@ -106,9 +112,9 @@ export async function POST(request: Request) {
         const applicationsToCreate = [];
 
         for (const app of applicationsData) {
-            const { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr, paymentDate } = app;
+            const { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr, paymentDate, settingId, type } = app;
 
-            if (!year || !semester || !utrNumber || !paymentDate || !Array.isArray(subjectIds) || subjectIds.length === 0) {
+            if (!year || !semester || !utrNumber || !paymentDate || !settingId || !type || !Array.isArray(subjectIds) || subjectIds.length === 0) {
                 return NextResponse.json({ error: `Missing required fields (including Payment Date) for 0${year}-0${semester} application.` }, { status: 400 });
             }
 
@@ -119,7 +125,7 @@ export async function POST(request: Request) {
 
             // Check freeze window for this specific semester
             const setting = await prisma.examApplicationSetting.findUnique({
-                where: { year_semester: { year, semester } }
+                where: { id: settingId }
             });
 
             if (!setting || !setting.isActive) {
@@ -130,12 +136,12 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: `Exam application window is closed for 0${year}-0${semester}.` }, { status: 400 });
             }
 
-            // Check for existing application for this specific semester
+            // Check for existing application for this specific setting
             const existing = await prisma.examApplication.findFirst({
-                where: { studentId: student.id, year, semester }
+                where: { studentId: student.id, settingId: settingId }
             });
             if (existing) {
-                return NextResponse.json({ error: `You have already submitted an application for 0${year}-0${semester}.` }, { status: 400 });
+                return NextResponse.json({ error: `You have already submitted an application for this exam cycle.` }, { status: 400 });
             }
 
             // Check duplicate UTR across the whole system
@@ -155,6 +161,8 @@ export async function POST(request: Request) {
                 paymentDate: new Date(paymentDate),
                 duplicateUtr: !!duplicateUtrRecord,
                 duplicateUtrRollNo: duplicateUtrRecord ? duplicateUtrRecord.rollNumber : null,
+                type,
+                settingId,
                 subjects: {
                     create: subjectIds.map((sid: string) => ({ subjectId: sid }))
                 }

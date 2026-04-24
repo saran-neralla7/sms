@@ -177,10 +177,10 @@ export default function AdminDashboardPage() {
             color: "bg-blue-50 text-blue-600"
         },
         {
-            title: "Feedback Questions",
+            title: "Feedback Templates",
             icon: <FaLayerGroup className="h-6 w-6" />,
-            description: "Define global questions for student feedback.",
-            href: "/admin/feedback/questions",
+            description: "Define templates and questions for student feedback.",
+            href: "/admin/feedback/templates",
             color: "bg-violet-50 text-violet-600"
         },
         {

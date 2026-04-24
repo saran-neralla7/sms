@@ -852,6 +852,88 @@ export default function StudentProfilePage() {
                     )}
                 </div>
             </Modal>
+
+            {/* Edit Internal Mark Modal */}
+            <Modal
+                isOpen={isEditMarkModalOpen}
+                onClose={() => {
+                    setIsEditMarkModalOpen(false);
+                    setSelectedMarkForEdit(null);
+                }}
+                title="Edit Internal Mark"
+            >
+                {selectedMarkForEdit && (
+                    <form onSubmit={submitEditInternalMark} className="space-y-4">
+                        <div className="rounded-md bg-slate-50 p-4">
+                            <p className="text-sm text-slate-600 font-semibold mb-1">Subject</p>
+                            <p className="text-md text-slate-900 font-bold">{selectedMarkForEdit.subject?.name} ({selectedMarkForEdit.subject?.code})</p>
+                            <p className="text-xs text-slate-500 mt-2">Exam: {selectedMarkForEdit.examType}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Marks Obtained</label>
+                            <input
+                                type="number"
+                                step="0.5"
+                                required
+                                value={editMarkValue}
+                                onChange={(e) => setEditMarkValue(e.target.value)}
+                                className="w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={() => setIsEditMarkModalOpen(false)}
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={editMarkLoading}
+                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 shadow-sm disabled:opacity-50"
+                            >
+                                {editMarkLoading ? "Saving..." : "Save Changes"}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
+            {/* Delete Internal Mark Modal */}
+            <Modal
+                isOpen={isDeleteMarkModalOpen}
+                onClose={() => {
+                    setIsDeleteMarkModalOpen(false);
+                    setSelectedMarkForDelete(null);
+                }}
+                title="Confirm Deletion"
+            >
+                {selectedMarkForDelete && (
+                    <div className="space-y-4">
+                        <p className="text-slate-600">Are you sure you want to delete this internal mark? This action cannot be undone.</p>
+                        <div className="rounded-md bg-red-50 p-4 border border-red-100">
+                            <p className="font-bold text-slate-900">{selectedMarkForDelete.subject?.name}</p>
+                            <p className="text-sm text-slate-700">{selectedMarkForDelete.examType}: <span className="font-bold text-red-600">{selectedMarkForDelete.marksObtained} Marks</span></p>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4">
+                            <button
+                                onClick={() => setIsDeleteMarkModalOpen(false)}
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={submitDeleteInternalMark}
+                                disabled={deleteMarkLoading}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 shadow-sm disabled:opacity-50"
+                            >
+                                {deleteMarkLoading ? "Deleting..." : "Delete Mark"}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div >
     );
 }

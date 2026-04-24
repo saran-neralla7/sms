@@ -29,6 +29,11 @@ export async function GET(request: Request) {
     if (searchParams.get("year")) where.year = searchParams.get("year");
     if (searchParams.get("semester")) where.semester = searchParams.get("semester");
     if (searchParams.get("status")) where.status = searchParams.get("status");
+    if (searchParams.get("settingId")) {
+        where.settingId = searchParams.get("settingId");
+    } else if (searchParams.get("history") === "true") {
+        where.settingId = null;
+    }
 
     try {
         const applications = await prisma.examApplication.findMany({

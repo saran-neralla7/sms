@@ -26,6 +26,11 @@ export default function ResultsPage() {
     });
     const [availableSections, setAvailableSections] = useState<any[]>([]);
 
+    // Edit Modal State
+    const [editModeResult, setEditModeResult] = useState<any | null>(null);
+    const [editForm, setEditForm] = useState<{ sgpa: string, cgpa: string, grades: any[] }>({ sgpa: "", cgpa: "", grades: [] });
+    const [isSaving, setIsSaving] = useState(false);
+
     const clearFilters = () => {
         setYear("");
         setSemester("");
@@ -140,6 +145,68 @@ export default function ResultsPage() {
 
         setUploadData(processed);
         setIsUploadMode(true);
+    };
+
+    const handleDeleteResult = async (id: string, rollNumber: string) => {
+        if (!confirm(`Are you sure you want to delete the result record for ${rollNumber}?`)) return;
+        
+        try {
+            const res = await fetch(`/api/results/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                setResults(prev => prev.filter(r => r.id !== id));
+            } else {
+                alert("Failed to delete result");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting result");
+        }
+    };
+
+    const handleEditSave = async () => {
+        if (!editModeResult) return;
+        setIsSaving(true);
+        try {
+            const res = await fetch(`/api/results/${editModeResult.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editForm),
+            });
+            if (res.ok) {
+                const updatedResult = await res.json();
+                setResults(prev => prev.map(r => r.id === updatedResult.result.id ? { ...r, ...updatedResult.result } : r));
+                setEditModeResult(null);
+            } else {
+                alert("Failed to update result");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error updating result");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleEditClick = (res: any) => {
+        setEditModeResult(res);
+        setEditForm({
+            sgpa: res.sgpa || "",
+            cgpa: res.cgpa || "",
+            grades: Array.isArray(res.grades) ? JSON.parse(JSON.stringify(res.grades)) : []
+        });
+    };
+
+    const handleGradeChange = (subjectCode: string, newGrade: string) => {
+        setEditForm(prev => {
+            const newGrades = [...prev.grades];
+            const idx = newGrades.findIndex(g => g.subjectCode === subjectCode);
+            if (idx >= 0) {
+                newGrades[idx].grade = newGrade;
+            } else {
+                newGrades.push({ subjectCode, grade: newGrade });
+            }
+            return { ...prev, grades: newGrades };
+        });
     };
 
     const handleUploadSubmit = async () => {
@@ -421,6 +488,7 @@ export default function ResultsPage() {
                                                 {allSubjects.map(sub => (
                                                     <th key={sub} className="p-2 border border-slate-300 text-center min-w-[80px] bg-slate-50">{sub}</th>
                                                 ))}
+                                                <th className="p-2 border border-slate-300 text-center min-w-[120px] bg-slate-50">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-200">
@@ -448,6 +516,22 @@ export default function ResultsPage() {
                                                             </td>
                                                         );
                                                     })}
+                                                    <td className="p-2 border border-slate-300 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button 
+                                                                onClick={() => handleEditClick(res)}
+                                                                className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-colors"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteResult(res.id, res.student?.rollNumber || "Unknown")}
+                                                                className="text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -598,6 +682,76 @@ export default function ResultsPage() {
                 </div>
             )}
             {/* End Template Modal */}
+
+            {/* Edit Modal */}
+            {editModeResult && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm overflow-y-auto">
+                    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 my-8">
+                        <div className="flex items-center justify-between mb-6 border-b pb-4">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900">Edit Result Record</h3>
+                                <p className="text-sm text-slate-500">{editModeResult.student?.rollNumber} - {editModeResult.student?.name}</p>
+                            </div>
+                            <button onClick={() => setEditModeResult(null)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100"><FaTimes /></button>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">SGPA</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        value={editForm.sgpa}
+                                        onChange={e => setEditForm(prev => ({ ...prev, sgpa: e.target.value }))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">CGPA</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        value={editForm.cgpa}
+                                        onChange={e => setEditForm(prev => ({ ...prev, cgpa: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 className="font-semibold text-slate-800 mb-2 border-b pb-1">Subject Grades</h4>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {editForm.grades.map((gradeInfo: any, idx: number) => (
+                                        <div key={idx} className="bg-slate-50 border border-slate-200 p-2 rounded">
+                                            <label className="block text-xs font-bold text-slate-600 mb-1 truncate" title={gradeInfo.subjectCode}>
+                                                {gradeInfo.subjectCode}
+                                            </label>
+                                            <input 
+                                                type="text"
+                                                className="w-full rounded border border-slate-300 px-2 py-1 text-sm text-center uppercase font-bold"
+                                                value={gradeInfo.grade}
+                                                onChange={e => handleGradeChange(gradeInfo.subjectCode, e.target.value)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                {editForm.grades.length === 0 && <p className="text-sm text-slate-500">No grades recorded for this student.</p>}
+                            </div>
+                        </div>
+
+                        <div className="pt-6 mt-6 border-t flex justify-end gap-3">
+                            <button onClick={() => setEditModeResult(null)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button
+                                onClick={handleEditSave}
+                                disabled={isSaving}
+                                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                {isSaving ? "Saving..." : "Save Changes"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* End Edit Modal */}
         </div >
     );
 }

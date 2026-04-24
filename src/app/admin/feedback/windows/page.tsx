@@ -10,27 +10,45 @@ export default function FeedbackWindowsPage() {
     const [forms, setForms] = useState<any[]>([]);
     const [academicYears, setAcademicYears] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [templateId, setTemplateId] = useState("");
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [academicYearId, setAcademicYearId] = useState("");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    
+    // New state for section targeting
+    const [departments, setDepartments] = useState<any[]>([]);
+    const [selectedDept, setSelectedDept] = useState("");
+    const [selectedYear, setSelectedYear] = useState("");
+    const [selectedSemester, setSelectedSemester] = useState("");
+    const [availableSections, setAvailableSections] = useState<any[]>([]);
+    const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
+    const [isSaving, setIsSaving] = useState(false);
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [formsRes, ayRes] = await Promise.all([
+            const [formsRes, ayRes, templatesRes, deptsRes] = await Promise.all([
                 fetch("/api/admin/feedback/forms"),
-                fetch("/api/academic-years")
+                fetch("/api/academic-years"),
+                fetch("/api/admin/feedback/templates"),
+                fetch("/api/departments")
             ]);
             
             if (formsRes.ok) setForms(await formsRes.json());
+            if (deptsRes.ok) setDepartments(await deptsRes.json());
             if (ayRes.ok) {
                 const ayData = await ayRes.json();
                 setAcademicYears(ayData);
                 const currentAy = ayData.find((a: any) => a.isCurrent);
                 if (currentAy) setAcademicYearId(currentAy.id);
+            }
+            if (templatesRes.ok) {
+                const tempData = await templatesRes.json();
+                setTemplates(tempData);
+                if (tempData.length > 0) setTemplateId(tempData[0].id);
             }
         } catch (e) {
             console.error(e);
@@ -43,8 +61,26 @@ export default function FeedbackWindowsPage() {
         fetchData();
     }, []);
 
+    useEffect(() => {
+        if (selectedDept && selectedYear && selectedSemester) {
+            fetch(`/api/sections?departmentId=${selectedDept}`)
+                .then(res => res.json())
+                .then(data => setAvailableSections(data))
+                .catch(err => console.error(err));
+        } else {
+            setAvailableSections([]);
+        }
+    }, [selectedDept, selectedYear, selectedSemester]);
+
+    const handleSectionToggle = (id: string) => {
+        setSelectedSectionIds(prev => 
+            prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+        );
+    };
+
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSaving(true);
         try {
             const res = await fetch("/api/admin/feedback/forms", {
                 method: "POST",
@@ -53,8 +89,12 @@ export default function FeedbackWindowsPage() {
                     title, 
                     description, 
                     academicYearId, 
+                    templateId,
                     startDate, 
-                    endDate 
+                    endDate,
+                    sectionIds: selectedSectionIds,
+                    targetYear: selectedYear ? parseInt(selectedYear) : null,
+                    targetSemester: selectedSemester ? parseInt(selectedSemester) : null
                 })
             });
 
@@ -63,12 +103,31 @@ export default function FeedbackWindowsPage() {
                 setDescription("");
                 setStartDate("");
                 setEndDate("");
+                setSelectedSectionIds([]);
                 fetchData();
             } else {
                 alert("Failed to add feedback window");
             }
         } catch (e) {
             console.error(e);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this feedback window? All associated responses will be permanently deleted!")) return;
+        
+        try {
+            const res = await fetch(`/api/admin/feedback/forms/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                setForms(prev => prev.filter(f => f.id !== id));
+            } else {
+                alert("Failed to delete feedback window");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting feedback window");
         }
     };
 
@@ -102,6 +161,21 @@ export default function FeedbackWindowsPage() {
                                 placeholder="E.g., Mid-Sem Feedback 2024"
                                 required
                             />
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="mb-1 block text-sm font-semibold text-slate-600">Template</label>
+                            <select 
+                                value={templateId}
+                                onChange={(e) => setTemplateId(e.target.value)}
+                                className="w-full rounded-md border border-slate-300 p-2 text-sm focus:border-fuchsia-500 focus:outline-none focus:ring-1 focus:ring-fuchsia-500"
+                                required
+                            >
+                                <option value="">Select Template</option>
+                                {templates.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name} ({t.type === "FACULTY_MAPPED" ? "Mapped" : "General"})</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="mb-4">
@@ -141,8 +215,82 @@ export default function FeedbackWindowsPage() {
                             />
                         </div>
 
-                        <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-md bg-fuchsia-600 px-4 py-2 font-bold text-white shadow-sm hover:bg-fuchsia-700">
-                            <FaPlus /> Create Window
+                        <div className="mb-6 border-t pt-4">
+                            <h3 className="text-sm font-bold text-slate-700 mb-3">Target Sections</h3>
+                            
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Department</label>
+                                    <select 
+                                        value={selectedDept}
+                                        onChange={(e) => setSelectedDept(e.target.value)}
+                                        className="w-full rounded-md border border-slate-300 p-1.5 text-xs focus:border-fuchsia-500 focus:outline-none"
+                                        required
+                                    >
+                                        <option value="">Select Dept</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.code}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Year</label>
+                                    <select 
+                                        value={selectedYear}
+                                        onChange={(e) => setSelectedYear(e.target.value)}
+                                        className="w-full rounded-md border border-slate-300 p-1.5 text-xs focus:border-fuchsia-500 focus:outline-none"
+                                        required
+                                    >
+                                        <option value="">Select Year</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Semester</label>
+                                    <select 
+                                        value={selectedSemester}
+                                        onChange={(e) => setSelectedSemester(e.target.value)}
+                                        className="w-full rounded-md border border-slate-300 p-1.5 text-xs focus:border-fuchsia-500 focus:outline-none"
+                                        required
+                                    >
+                                        <option value="">Select Semester</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {availableSections.length > 0 ? (
+                                <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded p-2 bg-slate-50">
+                                    {availableSections.map(s => (
+                                        <label key={s.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                            <input 
+                                                type="checkbox"
+                                                checked={selectedSectionIds.includes(s.id)}
+                                                onChange={() => handleSectionToggle(s.id)}
+                                                className="rounded text-fuchsia-600 focus:ring-fuchsia-500"
+                                            />
+                                            {s.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-xs text-slate-500 italic">
+                                    Select Dept, Year, and Semester to view sections.
+                                </div>
+                            )}
+                            {selectedSectionIds.length > 0 && (
+                                <div className="mt-2 text-xs font-semibold text-fuchsia-600">
+                                    {selectedSectionIds.length} sections selected
+                                </div>
+                            )}
+                        </div>
+
+                        <button type="submit" disabled={isSaving || selectedSectionIds.length === 0} className="flex w-full items-center justify-center gap-2 rounded-md bg-fuchsia-600 px-4 py-2 font-bold text-white shadow-sm hover:bg-fuchsia-700 disabled:opacity-50">
+                            <FaPlus /> {isSaving ? "Creating..." : "Create Window"}
                         </button>
                     </form>
                 </div>
@@ -176,7 +324,9 @@ export default function FeedbackWindowsPage() {
                                             <tr key={f.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3 font-medium text-slate-800">
                                                     {f.title}
-                                                    <div className="text-xs text-slate-400 font-normal">{f.academicYear.name}</div>
+                                                    <div className="text-xs text-slate-400 font-normal mt-0.5">
+                                                        {f.academicYear?.name} • {f.template?.name}
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-slate-600 text-xs">
                                                     <div>{new Date(f.startDate).toLocaleDateString()}</div>
@@ -190,12 +340,21 @@ export default function FeedbackWindowsPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    <button 
-                                                        onClick={() => router.push(`/admin/feedback/analytics/${f.id}`)}
-                                                        className="inline-flex rounded bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
-                                                    >
-                                                        View Analytics
-                                                    </button>
+                                                    <div className="flex justify-end gap-2">
+                                                        <button 
+                                                            onClick={() => router.push(`/admin/feedback/analytics/${f.id}`)}
+                                                            className="inline-flex rounded bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                                        >
+                                                            View Analytics
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDelete(f.id)}
+                                                            className="inline-flex items-center justify-center rounded bg-red-50 p-2 text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
+                                                            title="Delete Form and Responses"
+                                                        >
+                                                            <FaTrash size={12} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

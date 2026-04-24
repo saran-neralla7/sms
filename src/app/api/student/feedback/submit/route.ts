@@ -18,9 +18,18 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
         }
 
+        // Lookup student by rollNumber (username), not by User.id
+        const student = await prisma.student.findUnique({
+            where: { rollNumber: session.user.username as string }
+        });
+
+        if (!student) {
+            return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        }
+
         // Check if already submitted
         const existingSubmission = await prisma.feedbackSubmission.findUnique({
-            where: { unique_student_submission: { formId, studentId: session.user.id } }
+            where: { unique_student_submission: { formId, studentId: student.id } }
         });
 
         if (existingSubmission) {
@@ -33,22 +42,23 @@ export async function POST(req: Request) {
             await tx.feedbackSubmission.create({
                 data: {
                     formId,
-                    studentId: session.user.id
+                    studentId: student.id
                 }
             });
 
             // 2. Map and insert anonymous responses
             const responseData = responses.map((res: any) => {
-                // Calculate average rating dynamically
-                const ratingValues = Object.values(res.ratings) as number[];
+                // Calculate average rating dynamically (only for SCALE_1_5 answers)
+                // Filter out non-numeric values
+                const ratingValues = Object.values(res.ratings).filter(v => typeof v === 'number') as number[];
                 const overallRating = ratingValues.length > 0 
                     ? ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length 
                     : 0;
 
                 return {
                     formId,
-                    facultyId: res.facultyId,
-                    subjectId: res.subjectId,
+                    facultyId: res.facultyId || null,
+                    subjectId: res.subjectId || null,
                     ratings: res.ratings || {},
                     comments: res.comments || null,
                     overallRating
