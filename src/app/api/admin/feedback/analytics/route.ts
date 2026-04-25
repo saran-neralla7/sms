@@ -30,33 +30,64 @@ export async function GET(req: Request) {
         const totalScore = responses.reduce((acc, r) => acc + r.overallRating, 0);
         const overallAverage = responses.length > 0 ? (totalScore / responses.length).toFixed(2) : 0;
 
-        // Group by Faculty Subject
+        // Calculate overall unique respondents (number of unique students who submitted)
+        // Since FeedbackResponse doesn't have studentId, we must count distinct submissions
+        const submissions = await prisma.feedbackSubmission.count({
+            where: { formId }
+        });
+
+        // Group by Faculty
         const facultyStats: any = {};
         responses.forEach(res => {
-            const key = res.facultyId && res.subjectId 
-                ? `${res.facultyId}_${res.subjectId}` 
-                : "GENERAL";
+            const facKey = res.facultyId || "GENERAL";
             
-            if (!facultyStats[key]) {
-                facultyStats[key] = {
+            if (!facultyStats[facKey]) {
+                facultyStats[facKey] = {
                     facultyName: res.faculty?.empName || "General Form",
                     department: res.faculty?.department?.code || "N/A",
+                    totalResponses: 0,
+                    totalScore: 0,
+                    subjects: {} // To store subject breakdown
+                };
+            }
+            
+            const subjKey = res.subjectId || "GENERAL";
+            if (!facultyStats[facKey].subjects[subjKey]) {
+                facultyStats[facKey].subjects[subjKey] = {
                     subjectName: res.subject ? `${res.subject.name} (${res.subject.code})` : "General Feedback",
                     totalResponses: 0,
                     totalScore: 0
                 };
             }
-            facultyStats[key].totalResponses += 1;
-            facultyStats[key].totalScore += res.overallRating;
+
+            // Add to Faculty overall
+            facultyStats[facKey].totalResponses += 1;
+            facultyStats[facKey].totalScore += res.overallRating;
+
+            // Add to Subject breakdown
+            facultyStats[facKey].subjects[subjKey].totalResponses += 1;
+            facultyStats[facKey].subjects[subjKey].totalScore += res.overallRating;
         });
 
-        const breakdown = Object.values(facultyStats).map((stat: any) => ({
-            ...stat,
-            average: stat.totalResponses > 0 ? (stat.totalScore / stat.totalResponses).toFixed(2) : 0
-        })).sort((a: any, b: any) => b.average - a.average);
+        // Calculate averages and format output
+        const breakdown = Object.values(facultyStats).map((fac: any) => {
+            const subjectsList = Object.values(fac.subjects).map((sub: any) => ({
+                subjectName: sub.subjectName,
+                respondents: sub.totalResponses,
+                average: sub.totalResponses > 0 ? (sub.totalScore / sub.totalResponses).toFixed(2) : "0.00"
+            }));
+
+            return {
+                facultyName: fac.facultyName,
+                department: fac.department,
+                subjects: subjectsList,
+                respondents: fac.totalResponses,
+                average: fac.totalResponses > 0 ? (fac.totalScore / fac.totalResponses).toFixed(2) : "0.00"
+            };
+        }).sort((a: any, b: any) => parseFloat(b.average) - parseFloat(a.average));
 
         return NextResponse.json({
-            totalResponses: responses.length,
+            totalRespondents: submissions,
             overallAverage,
             breakdown
         });

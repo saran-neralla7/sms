@@ -382,6 +382,7 @@ export default function StudentFeedbackPage() {
                                         <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
                                             <span className="text-xs bg-white/10 text-slate-300 px-3 py-1 rounded-full font-semibold">📅 {academicYear}</span>
                                             <span className="text-xs bg-white/10 text-slate-300 px-3 py-1 rounded-full font-semibold">Year {studentInfo.year} · Sem {studentInfo.semester}</span>
+                                            <span className="text-xs bg-white/10 text-slate-300 px-3 py-1 rounded-full font-semibold">Batch: {studentInfo.batch}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -449,19 +450,7 @@ export default function StudentFeedbackPage() {
                                 );
                             })}
 
-                            {/* Additional Comments (Optional) */}
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
-                                <p className="text-sm font-semibold text-slate-700 mb-2">
-                                    Additional Comments <span className="font-normal text-slate-400">(Optional)</span>
-                                </p>
-                                <textarea
-                                    className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 resize-none shadow-inner"
-                                    rows={2}
-                                    placeholder="Constructive feedback is appreciated..."
-                                    value={answers[form.id]?.[mappingKey]?.comments || ""}
-                                    onChange={(e) => handleCommentChange(form.id, mappingKey, e.target.value)}
-                                />
-                            </div>
+
                         </div>
 
                         {/* Navigation */}

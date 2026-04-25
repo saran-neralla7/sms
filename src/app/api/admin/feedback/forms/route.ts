@@ -35,7 +35,7 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const { title, description, academicYearId, templateId, startDate, endDate, isActive, sectionIds, targetYear, targetSemester } = body;
+        const { title, description, academicYearId, templateId, startDate, endDate, isActive, sectionIds, targetYear, targetSemester, targetDepartmentId, targetBatchId } = body;
 
         if (!title || !academicYearId || !templateId || !startDate || !endDate) {
             return NextResponse.json({ error: "Required fields missing" }, { status: 400 });
@@ -50,7 +50,9 @@ export async function POST(req: Request) {
             endDate: new Date(endDate),
             isActive: isActive !== undefined ? isActive : true,
             targetYear: targetYear ? parseInt(targetYear) : null,
-            targetSemester: targetSemester ? parseInt(targetSemester) : null
+            targetSemester: targetSemester ? parseInt(targetSemester) : null,
+            targetDepartmentId: targetDepartmentId || null,
+            targetBatchId: targetBatchId || null
         };
 
         if (Array.isArray(sectionIds) && sectionIds.length > 0) {

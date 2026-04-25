@@ -39,18 +39,25 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const { sectionId, academicYearId, mappings } = body;
+        const { sectionId, academicYearId, departmentId, mappings } = body;
         // mappings is array of { subjectId, facultyId }
 
-        if (!sectionId || !academicYearId) {
-            return NextResponse.json({ error: "sectionId and academicYearId are required" }, { status: 400 });
+        if (!sectionId || !academicYearId || !departmentId) {
+            return NextResponse.json({ error: "sectionId, academicYearId and departmentId are required" }, { status: 400 });
         }
 
         // Transaction to sync mappings
         await prisma.$transaction(async (tx) => {
-            // Delete existing mappings for this section and academic year
+            // Delete existing mappings for this section, academic year and DEPARTMENT
+            // Since section is shared across departments, we must only delete the subjects belonging to the currently edited department
             await tx.facultySubjectMapping.deleteMany({
-                where: { sectionId, academicYearId }
+                where: { 
+                    sectionId, 
+                    academicYearId,
+                    subject: {
+                        departmentId: departmentId
+                    }
+                }
             });
 
             // Insert new mappings

@@ -28,12 +28,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         const submittedStudentIds = new Set(form.submissions.map((s: any) => s.studentId));
         const targetSectionIds = form.targetSections.map((s: any) => s.id);
 
-        // Build student filter - only show students in targeted sections AND matching year/semester
+        // Build student filter - only show students in targeted sections AND matching year/semester/department
         const studentFilter: any = {
             sectionId: { in: targetSectionIds }
         };
-        if (formData.targetYear) studentFilter.year = formData.targetYear;
-        if (formData.targetSemester) studentFilter.semester = formData.targetSemester;
+        if (formData.targetYear) studentFilter.year = String(formData.targetYear);
+        if (formData.targetSemester) studentFilter.semester = String(formData.targetSemester);
+        if (formData.targetDepartmentId) studentFilter.departmentId = formData.targetDepartmentId;
+        if (formData.targetBatchId) studentFilter.batchId = formData.targetBatchId;
 
         // Get only students in the targeted sections with matching year/semester
         const students = await prisma.student.findMany({

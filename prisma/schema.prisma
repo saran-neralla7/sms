@@ -22,6 +22,7 @@ model Department {
   timetables Timetable[]
   users      User[]
   sections   Section[]           @relation("DepartmentToSection")
+  feedbackForms FeedbackForm[]
 }
 
 model Section {
@@ -268,6 +269,7 @@ model Batch {
   updatedAt        DateTime  @updatedAt
   students         Student[] @relation("CurrentBatch")
   detainedStudents Student[] @relation("OriginalBatch")
+  feedbackForms    FeedbackForm[]
 }
 
 model LabBatch {
@@ -471,6 +473,8 @@ model FeedbackForm {
   academicYearId String
   targetYear     Int?
   targetSemester Int?
+  targetDepartmentId String?
+  targetBatchId  String?
   startDate      DateTime
   endDate        DateTime
   isActive       Boolean  @default(true)
@@ -479,6 +483,8 @@ model FeedbackForm {
 
   template     FeedbackTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
   academicYear AcademicYear         @relation(fields: [academicYearId], references: [id])
+  targetDepartment Department?      @relation(fields: [targetDepartmentId], references: [id])
+  targetBatch  Batch?               @relation(fields: [targetBatchId], references: [id])
   submissions  FeedbackSubmission[]
   responses    FeedbackResponse[]
   targetSections Section[]            @relation("FeedbackFormSections")

@@ -191,6 +191,13 @@ export default function AdminDashboardPage() {
             color: "bg-fuchsia-50 text-fuchsia-600"
         },
         {
+            title: "Feedback Analysis",
+            icon: <FaFileAlt className="h-6 w-6" />,
+            description: "Generate detailed feedback reports and matrices.",
+            href: "/admin/feedback/analysis",
+            color: "bg-rose-50 text-rose-600"
+        },
+        {
             title: "Exam Applications",
             icon: <FaFileAlt className="h-6 w-6" />,
             description: "Configure exam dates, create office accounts, and view statistics.",

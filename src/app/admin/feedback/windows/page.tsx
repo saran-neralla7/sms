@@ -20,7 +20,9 @@ export default function FeedbackWindowsPage() {
     
     // New state for section targeting
     const [departments, setDepartments] = useState<any[]>([]);
+    const [batches, setBatches] = useState<any[]>([]);
     const [selectedDept, setSelectedDept] = useState("");
+    const [selectedBatch, setSelectedBatch] = useState("");
     const [selectedYear, setSelectedYear] = useState("");
     const [selectedSemester, setSelectedSemester] = useState("");
     const [availableSections, setAvailableSections] = useState<any[]>([]);
@@ -30,15 +32,17 @@ export default function FeedbackWindowsPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [formsRes, ayRes, templatesRes, deptsRes] = await Promise.all([
+            const [formsRes, ayRes, templatesRes, deptsRes, batchesRes] = await Promise.all([
                 fetch("/api/admin/feedback/forms"),
                 fetch("/api/academic-years"),
                 fetch("/api/admin/feedback/templates"),
-                fetch("/api/departments")
+                fetch("/api/departments"),
+                fetch("/api/batches")
             ]);
             
             if (formsRes.ok) setForms(await formsRes.json());
             if (deptsRes.ok) setDepartments(await deptsRes.json());
+            if (batchesRes.ok) setBatches(await batchesRes.json());
             if (ayRes.ok) {
                 const ayData = await ayRes.json();
                 setAcademicYears(ayData);
@@ -94,7 +98,9 @@ export default function FeedbackWindowsPage() {
                     endDate,
                     sectionIds: selectedSectionIds,
                     targetYear: selectedYear ? parseInt(selectedYear) : null,
-                    targetSemester: selectedSemester ? parseInt(selectedSemester) : null
+                    targetSemester: selectedSemester ? parseInt(selectedSemester) : null,
+                    targetDepartmentId: selectedDept,
+                    targetBatchId: selectedBatch || null
                 })
             });
 
@@ -104,6 +110,7 @@ export default function FeedbackWindowsPage() {
                 setStartDate("");
                 setEndDate("");
                 setSelectedSectionIds([]);
+                setSelectedBatch("");
                 fetchData();
             } else {
                 alert("Failed to add feedback window");
@@ -248,7 +255,20 @@ export default function FeedbackWindowsPage() {
                                         <option value="4">4</option>
                                     </select>
                                 </div>
-                                <div className="col-span-2">
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Batch</label>
+                                    <select 
+                                        value={selectedBatch}
+                                        onChange={(e) => setSelectedBatch(e.target.value)}
+                                        className="w-full rounded-md border border-slate-300 p-1.5 text-xs focus:border-fuchsia-500 focus:outline-none"
+                                    >
+                                        <option value="">All Batches</option>
+                                        {batches.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="col-span-1">
                                     <label className="mb-1 block text-xs font-semibold text-slate-600">Semester</label>
                                     <select 
                                         value={selectedSemester}
@@ -256,7 +276,7 @@ export default function FeedbackWindowsPage() {
                                         className="w-full rounded-md border border-slate-300 p-1.5 text-xs focus:border-fuchsia-500 focus:outline-none"
                                         required
                                     >
-                                        <option value="">Select Semester</option>
+                                        <option value="">Select Sem</option>
                                         <option value="1">1</option>
                                         <option value="2">2</option>
                                     </select>

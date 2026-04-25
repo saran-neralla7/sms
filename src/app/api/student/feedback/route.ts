@@ -12,7 +12,7 @@ export async function GET() {
 
         const student = await prisma.student.findUnique({
             where: { rollNumber: session.user.username as string },
-            include: { section: true }
+            include: { section: true, batch: true }
         });
 
         if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
@@ -40,10 +40,19 @@ export async function GET() {
                         id: student.sectionId
                     }
                 },
-                // Filter by student's year and semester if set on the form
+                // Filter by student's department if set on the form
                 OR: [
-                    { targetYear: null },
-                    { targetYear: parseInt(String(student.year)) }
+                    { targetDepartmentId: null },
+                    { targetDepartmentId: student.departmentId }
+                ],
+                // AND filter by student's batch if set on the form
+                AND: [
+                    {
+                        OR: [
+                            { targetBatchId: null },
+                            { targetBatchId: student.batchId }
+                        ]
+                    }
                 ]
             },
             include: {
@@ -55,9 +64,10 @@ export async function GET() {
             }
         });
 
-        // Further filter: if targetSemester is set on form, student's semester must match
+        // Further filter: if targetYear or targetSemester is set on form, student must match
         const filteredForms = activeForms.filter((f: any) =>
-            f.targetSemester === null || f.targetSemester === student.semester
+            (f.targetYear === null || f.targetYear === parseInt(String(student.year))) &&
+            (f.targetSemester === null || f.targetSemester === parseInt(String(student.semester)))
         );
 
         if (filteredForms.length === 0) {
@@ -81,7 +91,12 @@ export async function GET() {
                 mappings = await prisma.facultySubjectMapping.findMany({
                     where: {
                         sectionId: student.sectionId,
-                        academicYearId: activeAcademicYear.id
+                        academicYearId: activeAcademicYear.id,
+                        subject: {
+                            departmentId: student.departmentId,
+                            year: String(student.year),
+                            semester: String(student.semester)
+                        }
                     },
                     include: {
                         faculty: { select: { id: true, empName: true, photoUrl: true, department: { select: { code: true } } } },
@@ -95,7 +110,11 @@ export async function GET() {
 
         return NextResponse.json({ 
             forms: formsWithStatus,
-            studentInfo: { year: student.year, semester: student.semester },
+            studentInfo: { 
+                year: student.year, 
+                semester: student.semester,
+                batch: student.batchString || student.batch?.name || "N/A"
+            },
             academicYear: activeAcademicYear.name
         });
 

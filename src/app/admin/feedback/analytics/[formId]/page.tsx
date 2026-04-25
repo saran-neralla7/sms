@@ -183,11 +183,11 @@ export default function AdminFeedbackAnalyticsPage({ params }: { params: Promise
                                 </div>
                                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex items-center gap-6">
                                     <div className="h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
-                                        <span className="text-2xl font-black">{analyticsData.totalResponses}</span>
+                                        <span className="text-2xl font-black">{analyticsData.totalRespondents}</span>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-bold text-slate-800">Total Evaluations</h3>
-                                        <p className="text-sm text-slate-500">Anonymous faculty evaluations</p>
+                                        <h3 className="text-lg font-bold text-slate-800">Total Respondents</h3>
+                                        <p className="text-sm text-slate-500">Unique students who submitted feedback</p>
                                     </div>
                                 </div>
                             </div>
@@ -199,8 +199,8 @@ export default function AdminFeedbackAnalyticsPage({ params }: { params: Promise
                                         <tr>
                                             <th className="px-6 py-4">Faculty Name</th>
                                             <th className="px-6 py-4">Department</th>
-                                            <th className="px-6 py-4">Subject</th>
-                                            <th className="px-6 py-4 text-center">Evaluations</th>
+                                            <th className="px-6 py-4">Subjects & Respondents</th>
+                                            <th className="px-6 py-4 text-center">Total Respondents</th>
                                             <th className="px-6 py-4 text-center">Avg Rating</th>
                                         </tr>
                                     </thead>
@@ -209,11 +209,23 @@ export default function AdminFeedbackAnalyticsPage({ params }: { params: Promise
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                                 <td className="px-6 py-4 font-bold text-slate-800">{row.facultyName}</td>
                                                 <td className="px-6 py-4 text-slate-500">{row.department}</td>
-                                                <td className="px-6 py-4 text-slate-600">{row.subjectName}</td>
-                                                <td className="px-6 py-4 text-center font-bold text-slate-600">{row.totalResponses}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        {row.subjects.map((sub: any, sIdx: number) => (
+                                                            <div key={sIdx} className="flex justify-between items-center bg-slate-50 px-3 py-1.5 rounded-md text-xs border border-slate-100">
+                                                                <span className="font-semibold text-slate-700 truncate max-w-[200px]" title={sub.subjectName}>{sub.subjectName}</span>
+                                                                <div className="flex gap-3">
+                                                                    <span className="text-slate-500">{sub.respondents} respondents</span>
+                                                                    <span className="font-bold text-slate-700">{sub.average} <FaStar className="inline text-yellow-400 mb-0.5" /></span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-bold text-slate-600">{row.respondents}</td>
                                                 <td className="px-6 py-4 text-center">
-                                                    <div className="inline-flex items-center gap-1 font-bold rounded-lg px-3 py-1 bg-slate-100">
-                                                        {row.average} <FaStar className="text-yellow-400" />
+                                                    <div className="inline-flex items-center gap-1 font-bold rounded-lg px-3 py-1 bg-violet-100 text-violet-800">
+                                                        {row.average} <FaStar className="text-yellow-500" />
                                                     </div>
                                                 </td>
                                             </tr>

@@ -27,6 +27,15 @@ export default function FacultyMappingPage() {
     // Mappings state: subjectId -> array of facultyIds
     const [mappings, setMappings] = useState<Record<string, string[]>>({});
 
+    // Modal state
+    const [modalConfig, setModalConfig] = useState({ isOpen: false, message: "", isError: false });
+
+    const showModal = (message: string, isError: boolean) => {
+        setModalConfig({ isOpen: true, message, isError });
+    };
+
+    const closeModal = () => setModalConfig({ isOpen: false, message: "", isError: false });
+
     useEffect(() => {
         Promise.all([
             fetch("/api/academic-years").then(res => res.json()),
@@ -54,7 +63,7 @@ export default function FacultyMappingPage() {
 
     const handleLoadSubjects = async () => {
         if (!selectedAy || !selectedDept || !year || !semester || !selectedSection) {
-            alert("Please select all fields.");
+            showModal("Please select all fields.", true);
             return;
         }
 
@@ -105,18 +114,19 @@ export default function FacultyMappingPage() {
                 body: JSON.stringify({
                     sectionId: selectedSection,
                     academicYearId: selectedAy,
+                    departmentId: selectedDept,
                     mappings: payload
                 })
             });
 
             if (res.ok) {
-                alert("Mappings saved successfully!");
+                showModal("Mappings saved successfully!", false);
             } else {
-                alert("Failed to save mappings.");
+                showModal("Failed to save mappings.", true);
             }
         } catch (e) {
             console.error(e);
-            alert("Error saving mappings.");
+            showModal("Error saving mappings.", true);
         } finally {
             setSaving(false);
         }
@@ -124,6 +134,39 @@ export default function FacultyMappingPage() {
 
     return (
         <div className="mx-auto max-w-6xl animate-in fade-in">
+            {/* Modal */}
+            {modalConfig.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in zoom-in-95">
+                        <div className="text-center">
+                            {modalConfig.isError ? (
+                                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 mb-4">
+                                    <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                            ) : (
+                                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 mb-4">
+                                    <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            )}
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">{modalConfig.isError ? "Error" : "Success"}</h3>
+                            <p className="text-slate-600 mb-6">{modalConfig.message}</p>
+                            <button
+                                onClick={closeModal}
+                                className={`w-full rounded-xl py-3 font-bold text-white transition-all active:scale-95 ${
+                                    modalConfig.isError ? "bg-red-600 hover:bg-red-700 shadow-red-200" : "bg-green-600 hover:bg-green-700 shadow-green-200"
+                                } shadow-lg`}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <button onClick={() => router.push("/admin")} className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 mb-2">
