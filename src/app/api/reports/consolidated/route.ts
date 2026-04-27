@@ -67,7 +67,8 @@ export async function GET(request: Request) {
                 year,
                 semester,
                 sectionId,
-                departmentId: departmentId || undefined
+                departmentId: departmentId || undefined,
+                isAlumni: false
             },
             select: { id: true, rollNumber: true, name: true },
             orderBy: { rollNumber: "asc" }

@@ -11,6 +11,10 @@ interface Alumni {
     name: string;
     mobile: string;
     passingYear: string;
+    graduationDate?: string;
+    batch?: { name: string };
+    academicYear?: { name: string };
+    department?: { name: string; code: string };
 }
 
 import ConfirmationModal from "@/components/ConfirmationModal";
@@ -214,24 +218,34 @@ export default function AlumniPage() {
                             <tr>
                                 <th className="px-6 py-4">Roll Number</th>
                                 <th className="px-6 py-4">Name</th>
-                                <th className="px-6 py-4">Mobile</th>
+                                <th className="px-6 py-4">Department</th>
+                                <th className="px-6 py-4">Batch</th>
+                                <th className="px-6 py-4">Academic Year</th>
                                 <th className="px-6 py-4">Passing Year</th>
+                                <th className="px-6 py-4">Graduation Date</th>
+                                <th className="px-6 py-4">Mobile</th>
                                 <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
-                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
+                                <tr><td colSpan={9} className="px-6 py-12 text-center text-slate-500"><div className="flex justify-center"><LogoSpinner fullScreen={false} /></div></td></tr>
                             ) : filteredAlumni.map((student) => (
                                 <tr key={student.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-sm font-mono text-slate-600">{student.rollNumber}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-slate-900">{student.name}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{student.mobile}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">{student.department?.code || "—"}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">{student.batch?.name || "—"}</td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">{student.academicYear?.name || "—"}</td>
                                     <td className="px-6 py-4 text-sm">
                                         <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
                                             {student.passingYear}
                                         </span>
                                     </td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">
+                                        {student.graduationDate ? new Date(student.graduationDate).toLocaleDateString("en-IN") : "—"}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">{student.mobile}</td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button
@@ -254,7 +268,7 @@ export default function AlumniPage() {
                             ))}
                             {filteredAlumni.length === 0 && !loading && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
                                         No alumni found matching your criteria.
                                     </td>
                                 </tr>

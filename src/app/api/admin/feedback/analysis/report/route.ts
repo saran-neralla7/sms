@@ -125,7 +125,9 @@ export async function GET(req: Request) {
 
         // Format metadata for header
         const metadata = {
+            formTitle: form.title,
             course: form.targetDepartment?.code || "ALL",
+            year: form.targetYear ? String(form.targetYear) : null,
             semester: form.targetSemester ? String(form.targetSemester) : "ALL",
             academicYear: form.academicYear?.name || "-",
             batch: batchName,

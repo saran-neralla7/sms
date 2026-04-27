@@ -19,6 +19,23 @@ function stripNewlines(str: string | null | undefined): string {
     return String(str).replace(/[\r\n]+/g, ' ').trim();
 }
 
+/** Convert integer year (1-4) to Roman numeral string */
+function toRoman(num: number | string | null | undefined): string {
+    const n = parseInt(String(num));
+    const map: Record<number, string> = { 1: "I", 2: "II", 3: "III", 4: "IV" };
+    return map[n] || String(num ?? "");
+}
+
+/** Build the TC class_name field: "IV/IV B.Tech Department Name" */
+function buildClassName(student: any): string {
+    const year = student.year ?? "";
+    const totalYears = 4; // always 4-year B.Tech
+    const roman = toRoman(year);
+    const total = toRoman(totalYears);
+    const dept = student.department?.name || "";
+    return `${roman}/${total} B.Tech ${dept}`.trim();
+}
+
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -33,14 +50,20 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Student ID missing" }, { status: 400 });
         }
 
-        // Fetch student
+        // Fetch student (alumni are still in the Student table with isAlumni=true)
         let student = await prisma.student.findUnique({
             where: { id: studentId },
             include: { department: true, section: true, batch: true }
         });
 
         if (!student) {
+            // Fallback: try Alumni table by searching all alumni (for edge cases)
             return NextResponse.json({ error: "Student not found" }, { status: 404 });
+        }
+
+        // If student is alumni, ensure year/sem are locked to 4/2 for correct class_name
+        if (student.isAlumni) {
+            student = { ...student, year: "4", semester: "2" };
         }
 
         const today = new Date();
@@ -96,7 +119,7 @@ async function handleTransferCertificate(body: any, student: any, session: any, 
         subcaste_name: stripNewlines(subcaste_name || student.casteName),
         join_date: formatDateString(join_date || student.dateOfReporting || student.createdAt),
         left_date: formatDateString(left_date),
-        class_name: stripNewlines(`${student.department?.name || ""} - ${student.section?.name || ""} (${student.year || ""} Year)`),
+        class_name: buildClassName(student),
         promotion: stripNewlines(promotion),
         reason_remarks: stripNewlines(reason_remarks),
         issue_date: formatDateString(today),
@@ -174,7 +197,7 @@ async function handleStudyCertificate(body: any, student: any, session: any, tod
         issue_date: formatDateString(today),
         student_name: stripNewlines(student.name),
         parent_name: stripNewlines(father_name || student.fatherName),
-        year_name: stripNewlines(student.year),
+        year_name: stripNewlines(toRoman(student.year)),
         dept_name: stripNewlines(student.department?.name),
         roll_number: stripNewlines(student.rollNumber),
         batch_year: stripNewlines(batch_year || student.batch?.name || student.batchString),

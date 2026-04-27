@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FaArrowLeft, FaSearch, FaUser, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
+import { FaArrowLeft, FaSearch, FaUser, FaCheckCircle, FaExclamationTriangle, FaGraduationCap } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import LogoSpinner from "@/components/LogoSpinner";
 
@@ -19,7 +19,7 @@ export default function IssueCertificatePage() {
         nationality: "INDIAN",
         religion: "HINDU",
         subcaste_name: "",
-        left_date: new Date().toISOString().split("T")[0],
+        left_date: "",           // intentionally empty — admin must enter manually
         promotion: "YES",
         reason_remarks: "COURSE COMPLETED",
         father_name: "",
@@ -34,13 +34,15 @@ export default function IssueCertificatePage() {
         setStatus({ type: null, message: "" });
         
         try {
-            // Find student by roll number
-            const res = await fetch(`/api/students?q=${searchQuery.toUpperCase()}`);
+            // Step 1: Search active students (including alumni flagged students)
+            const res = await fetch(`/api/students?q=${searchQuery.toUpperCase()}&showAlumni=true&limit=-1`);
             if (res.ok) {
                 const result = await res.json();
                 const students = Array.isArray(result) ? result : (result.data || []);
-                const exactMatch = students.find((s: any) => s.rollNumber.toUpperCase() === searchQuery.toUpperCase());
-                
+                const exactMatch = students.find((s: any) =>
+                    s.rollNumber.toUpperCase() === searchQuery.toUpperCase()
+                );
+
                 if (exactMatch) {
                     setStudent(exactMatch);
                     setFormData(prev => ({
@@ -51,7 +53,8 @@ export default function IssueCertificatePage() {
                         father_name: exactMatch.fatherName || "",
                         date_of_birth: exactMatch.dateOfBirth ? new Date(exactMatch.dateOfBirth).toISOString().split("T")[0] : "",
                         caste_category: exactMatch.category || exactMatch.caste || "",
-                        join_date: exactMatch.dateOfReporting ? new Date(exactMatch.dateOfReporting).toISOString().split("T")[0] : ""
+                        join_date: exactMatch.dateOfReporting ? new Date(exactMatch.dateOfReporting).toISOString().split("T")[0] : "",
+                        left_date: ""   // admin must enter manually
                     }));
                 } else {
                     setStatus({ type: "error", message: "Student not found with that Roll Number." });
@@ -175,7 +178,15 @@ export default function IssueCertificatePage() {
             {/* Step 2: Fill Out Details */}
             {student && !status.url && !duplicateNeeded && (
                 <form onSubmit={handleGenerate} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-12">
-                    <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center justify-between">
+                    <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col gap-2">
+                        {/* Alumni Banner */}
+                        {student.isAlumni && (
+                            <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800">
+                                <FaGraduationCap className="text-amber-600" />
+                                <span className="font-semibold">Alumni Student</span>
+                                <span className="text-amber-600">— This student has graduated. TC will show IV/IV B.Tech.</span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-3">
                             <div className="h-10 w-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
                                 <FaUser />
@@ -183,7 +194,7 @@ export default function IssueCertificatePage() {
                             <div>
                                 <h3 className="font-bold text-slate-900">{student.name}</h3>
                                 <p className="text-xs font-medium text-slate-500">
-                                    {student.rollNumber} • {student.department?.code} • {student.year} Year
+                                    {student.rollNumber} • {student.department?.code} • {student.isAlumni ? "IV Year (Alumni)" : `${student.year} Year`}
                                 </p>
                             </div>
                         </div>

@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { year, semester, startDate, endDate, lateFeeEndDate } = body;
+        const { year, semester, startDate, endDate, lateFeeEndDate, academicYearId } = body;
 
         if (!year || !semester || !startDate || !endDate) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -46,7 +46,8 @@ export async function POST(request: Request) {
                 startDate: new Date(startDate),
                 endDate: new Date(endDate),
                 lateFeeEndDate: lateFeeEndDate ? new Date(lateFeeEndDate) : null,
-                isActive: true
+                isActive: true,
+                academicYearId: academicYearId || null
             }
         });
 

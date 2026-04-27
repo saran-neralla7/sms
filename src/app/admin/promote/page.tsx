@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Student } from "@/types";
-import { FaGraduationCap, FaArrowRight, FaCheckSquare, FaSquare, FaFilter, FaSearch, FaExchangeAlt, FaArrowLeft } from "react-icons/fa";
+import { FaGraduationCap, FaArrowRight, FaCheckSquare, FaFilter, FaExchangeAlt, FaArrowLeft, FaUserGraduate } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
-
-
 
 interface FilterState {
     batchId: string;
@@ -35,6 +33,19 @@ export default function PromotePageRedesign() {
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [promoting, setPromoting] = useState(false);
 
+    // ====== TABS ======
+    const [activeTab, setActiveTab] = useState<"promote" | "graduate">("promote");
+
+    // ====== GRADUATE TO ALUMNI STATE ======
+    const [academicYears, setAcademicYears] = useState<any[]>([]);
+    const [gradStudents, setGradStudents] = useState<Student[]>([]);
+    const [gradSelectedIds, setGradSelectedIds] = useState<Set<string>>(new Set());
+    const [gradLoading, setGradLoading] = useState(false);
+    const [gradFilters, setGradFilters] = useState({ batchId: "", departmentId: "" });
+    const [gradForm, setGradForm] = useState({ academicYearId: "", graduationDate: "" });
+    const [gradConfirmOpen, setGradConfirmOpen] = useState(false);
+    const [graduating, setGraduating] = useState(false);
+
     // --- Effects ---
     useEffect(() => {
         fetchMetadata();
@@ -52,13 +63,15 @@ export default function PromotePageRedesign() {
     // --- Actions ---
     const fetchMetadata = async () => {
         try {
-            const [batchRes, deptRes] = await Promise.all([
+            const [batchRes, deptRes, ayRes] = await Promise.all([
                 fetch("/api/batches"),
-                fetch("/api/departments")
+                fetch("/api/departments"),
+                fetch("/api/academic-years")
             ]);
 
             if (batchRes.ok) setBatches(await batchRes.json());
             if (deptRes.ok) setDepartments(await deptRes.json());
+            if (ayRes.ok) setAcademicYears(await ayRes.json());
         } catch (e) { console.error(e); }
     };
 
@@ -120,16 +133,12 @@ export default function PromotePageRedesign() {
         setPromoting(true);
 
         try {
-            // We reuse the existing endpoint but payload might need adjustment
-            // Or create a new one. `api/students/promote` seems flexible.
-            // Payload: studentIds, targetYear, targetSemester, targetBatchId?
-
             const payload = {
                 studentIds: pendingStudents.map(s => s.id),
-                targetYear: destFilters.year, // "2"
-                targetSemester: destFilters.semester, // "1"
-                targetBatchId: destFilters.batchId, // Move to this batch
-                isAlumni: destFilters.year === "Alumni" // Special case
+                targetYear: destFilters.year,
+                targetSemester: destFilters.semester,
+                targetBatchId: destFilters.batchId,
+                isAlumni: false
             };
 
             const res = await fetch("/api/students/promote", {
@@ -141,7 +150,7 @@ export default function PromotePageRedesign() {
             if (res.ok) {
                 setStatus({ type: "success", message: `Successfully moved ${pendingStudents.length} students!` });
                 setPendingStudents([]);
-                fetchSourceStudents(); // Refresh source
+                fetchSourceStudents();
                 setTimeout(() => setStatus({ type: null, message: "" }), 3000);
             } else {
                 const data = await res.json();
@@ -152,6 +161,63 @@ export default function PromotePageRedesign() {
         } finally {
             setPromoting(false);
             setIsConfirmOpen(false);
+        }
+    };
+
+    // ====== GRADUATE ACTIONS ======
+    const fetchGradStudents = async () => {
+        if (!gradFilters.batchId && !gradFilters.departmentId) return;
+        setGradLoading(true);
+        try {
+            const params = new URLSearchParams({ year: "4", semester: "2", limit: "-1" });
+            if (gradFilters.batchId) params.append("batchId", gradFilters.batchId);
+            if (gradFilters.departmentId) params.append("departmentId", gradFilters.departmentId);
+            const res = await fetch(`/api/students?${params}`);
+            if (res.ok) {
+                const result = await res.json();
+                const all = Array.isArray(result) ? result : (result.data || []);
+                // Exclude detained students
+                setGradStudents(all.filter((s: any) => !s.isDetained));
+                setGradSelectedIds(new Set());
+            }
+        } catch (e) { console.error(e); }
+        finally { setGradLoading(false); }
+    };
+
+    useEffect(() => { fetchGradStudents(); }, [gradFilters]);
+
+    const handleGraduate = async () => {
+        if (gradSelectedIds.size === 0) return;
+        if (!gradForm.academicYearId || !gradForm.graduationDate) {
+            setStatus({ type: "error", message: "Please select Academic Year and Graduation Date" });
+            return;
+        }
+        setGraduating(true);
+        try {
+            const res = await fetch("/api/students/promote", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    studentIds: Array.from(gradSelectedIds),
+                    isAlumni: true,
+                    academicYearId: gradForm.academicYearId,
+                    graduationDate: gradForm.graduationDate
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: "success", message: `${data.graduated} students graduated to Alumni successfully!` });
+                setGradSelectedIds(new Set());
+                fetchGradStudents();
+                setTimeout(() => setStatus({ type: null, message: "" }), 4000);
+            } else {
+                setStatus({ type: "error", message: data.error || "Graduation failed." });
+            }
+        } catch (e) {
+            setStatus({ type: "error", message: "Network error." });
+        } finally {
+            setGraduating(false);
+            setGradConfirmOpen(false);
         }
     };
 
@@ -233,7 +299,7 @@ export default function PromotePageRedesign() {
             <div className="mb-6 flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Student Transfer & Promotion</h1>
-                    <p className="text-sm text-slate-500">Move students between batches, years, or semesters.</p>
+                    <p className="text-sm text-slate-500">Move students between batches, years, or graduate them to Alumni.</p>
                 </div>
                 {status.message && (
                     <div className={`px-4 py-2 rounded-lg text-sm font-bold ${status.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -242,6 +308,135 @@ export default function PromotePageRedesign() {
                 )}
             </div>
 
+            {/* Tabs */}
+            <div className="mb-6 flex gap-2 border-b border-slate-200">
+                <button
+                    onClick={() => setActiveTab("promote")}
+                    className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
+                        activeTab === "promote" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    <FaArrowRight className="inline mr-2" />Promote / Transfer
+                </button>
+                <button
+                    onClick={() => setActiveTab("graduate")}
+                    className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
+                        activeTab === "graduate" ? "border-amber-600 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    <FaGraduationCap className="inline mr-2" />Graduate to Alumni
+                </button>
+            </div>
+
+            {/* ====== GRADUATE TAB ====== */}
+            {activeTab === "graduate" && (
+                <div className="space-y-6">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <p className="text-sm text-amber-800 font-medium">
+                            ⚠️ This will permanently mark selected students as Alumni. Their academic records are preserved.
+                            Only non-detained Year 4 Semester 2 students are shown.
+                        </p>
+                    </div>
+
+                    {/* Grad Filters */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div>
+                            <label className="text-xs font-semibold text-slate-500">Batch</label>
+                            <select value={gradFilters.batchId} onChange={e => setGradFilters(p => ({...p, batchId: e.target.value}))}
+                                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none">
+                                <option value="">All Batches</option>
+                                {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-500">Department</label>
+                            <select value={gradFilters.departmentId} onChange={e => setGradFilters(p => ({...p, departmentId: e.target.value}))}
+                                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none">
+                                <option value="">All Departments</option>
+                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-500">Academic Year <span className="text-red-500">*</span></label>
+                            <select value={gradForm.academicYearId} onChange={e => setGradForm(p => ({...p, academicYearId: e.target.value}))}
+                                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none">
+                                <option value="">Select Year</option>
+                                {academicYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-500">Graduation Date <span className="text-red-500">*</span></label>
+                            <input type="date" value={gradForm.graduationDate} onChange={e => setGradForm(p => ({...p, graduationDate: e.target.value}))}
+                                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none" />
+                        </div>
+                    </div>
+
+                    {/* Student List */}
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                            <span className="font-semibold text-slate-700">
+                                Eligible Students — Year 4 Sem 2 (Non-Detained): {gradStudents.length}
+                            </span>
+                            <button onClick={() => {
+                                if (gradSelectedIds.size === gradStudents.length) setGradSelectedIds(new Set());
+                                else setGradSelectedIds(new Set(gradStudents.map(s => s.id)));
+                            }} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                                {gradSelectedIds.size === gradStudents.length ? "Deselect All" : "Select All"}
+                            </button>
+                        </div>
+                        <div className="max-h-[500px] overflow-y-auto p-2">
+                            {gradLoading ? (
+                                <div className="flex h-32 items-center justify-center text-slate-400">Loading...</div>
+                            ) : gradStudents.length === 0 ? (
+                                <div className="flex h-32 items-center justify-center text-sm text-slate-400">
+                                    No eligible students found. Filter by batch/department above.
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    {gradStudents.map(s => (
+                                        <div key={s.id} onClick={() => {
+                                            const next = new Set(gradSelectedIds);
+                                            if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                                            setGradSelectedIds(next);
+                                        }} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2 transition-all ${
+                                            gradSelectedIds.has(s.id) ? "border-amber-200 bg-amber-50" : "border-slate-100 hover:bg-slate-50"
+                                        }`}>
+                                            <div className={`flex h-5 w-5 items-center justify-center rounded border ${
+                                                gradSelectedIds.has(s.id) ? "border-amber-500 bg-amber-500 text-white" : "border-slate-300 bg-white"
+                                            }`}>
+                                                {gradSelectedIds.has(s.id) && <FaCheckSquare size={12} />}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-mono text-xs font-bold text-slate-600">{s.rollNumber}</p>
+                                                <p className="text-sm font-medium text-slate-900">{s.name}</p>
+                                            </div>
+                                            <div className="text-xs text-slate-400">{(s as any).department?.code} • {(s as any).batch?.name}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-slate-200">
+                            <button
+                                onClick={() => {
+                                    if (!gradForm.academicYearId || !gradForm.graduationDate) {
+                                        setStatus({ type: "error", message: "Please select Academic Year and Graduation Date first." });
+                                        return;
+                                    }
+                                    setGradConfirmOpen(true);
+                                }}
+                                disabled={gradSelectedIds.size === 0 || graduating}
+                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 py-3 font-bold text-white shadow-md transition-all hover:bg-amber-700 disabled:bg-slate-300 disabled:shadow-none"
+                            >
+                                <FaGraduationCap /> Graduate {gradSelectedIds.size} Student{gradSelectedIds.size !== 1 ? "s" : ""} to Alumni
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ====== PROMOTE TAB ====== */}
+            {activeTab === "promote" && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
                 {/* --- Left Column: Source --- */}
                 <div className="lg:col-span-5 flex flex-col gap-4">
@@ -363,15 +558,25 @@ export default function PromotePageRedesign() {
                     </div>
                 </div>
             </div>
+            )} {/* end promote tab */}
 
             <ConfirmationModal
                 isOpen={isConfirmOpen}
                 onClose={() => setIsConfirmOpen(false)}
                 onConfirm={handlePromote}
                 title="Confirm Student Transfer"
-                message={`Are you sure you want to move ${pendingStudents.length} students to Batch {id} (Year ${destFilters.year}, Sem ${destFilters.semester})?`}
+                message={`Are you sure you want to move ${pendingStudents.length} students to Batch (Year ${destFilters.year}, Sem ${destFilters.semester})?`}
                 confirmText={promoting ? "Processing..." : "Yes, Transfer"}
-                isDangerous={false} // Blue button
+                isDangerous={false}
+            />
+            <ConfirmationModal
+                isOpen={gradConfirmOpen}
+                onClose={() => setGradConfirmOpen(false)}
+                onConfirm={handleGraduate}
+                title="Graduate Students to Alumni"
+                message={`Are you sure you want to graduate ${gradSelectedIds.size} students? This marks them as Alumni. Their academic history is preserved.`}
+                confirmText={graduating ? "Graduating..." : "Yes, Graduate"}
+                isDangerous={true}
             />
         </div>
     );

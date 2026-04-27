@@ -54,7 +54,8 @@ export async function POST(request: Request) {
                 departmentId: historyRecord.departmentId,
                 year: historyRecord.year,
                 semester: historyRecord.semester,
-                sectionId: historyRecord.sectionId
+                sectionId: historyRecord.sectionId,
+                isAlumni: false
             }
         });
 

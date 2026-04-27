@@ -21,7 +21,9 @@ export async function GET(request: Request) {
                 passingYear: 'desc',
             },
             include: {
-                department: true
+                department: true,
+                batch: true,
+                academicYear: true
             }
         });
 

@@ -15,14 +15,15 @@ export async function POST(request: Request) {
             date,
             year,
             semester,
-            sectionId,      // Single section (Legacy/Fallback)
-            sectionIds,     // NEW: Multi-section array
+            sectionId,
+            sectionIds,
             departmentId,
             subjectId,
             periodId,
             periodIds,
             labBatchId,
-            students
+            students,
+            academicYearId  // NEW: passed from frontend cookie
         } = body;
 
         console.log("Attendance Submission Payload:", {
@@ -89,10 +90,14 @@ export async function POST(request: Request) {
         // Normalize Sections: If sectionIds provided, use it. Else use [sectionId]
         const targetSectionIds: string[] = (sectionIds && sectionIds.length > 0) ? sectionIds : [sectionId];
 
-        // Get Active Academic Year
-        const activeYear = await prisma.academicYear.findFirst({
-            where: { isCurrent: true }
-        });
+        // Get Academic Year: use passed academicYearId (from cookie) or fall back to isCurrent
+        let resolvedAcademicYearId: string | null = academicYearId || null;
+        if (!resolvedAcademicYearId) {
+            const activeYear = await prisma.academicYear.findFirst({
+                where: { isCurrent: true }
+            });
+            resolvedAcademicYearId = activeYear?.id || null;
+        }
 
         // Pre-fetch valid students for all target sections to prevent UI stale-state mixing
         // CRITICAL: Filter by departmentId + year + semester to prevent cross-department mixing
@@ -102,7 +107,8 @@ export async function POST(request: Request) {
                 sectionId: { in: targetSectionIds },
                 departmentId,
                 year: String(year),
-                semester: String(semester)
+                semester: String(semester),
+                isAlumni: false  // exclude alumni from attendance
             },
             select: { rollNumber: true, sectionId: true, name: true, mobile: true, studentContactNumber: true }
         });
@@ -243,7 +249,7 @@ export async function POST(request: Request) {
                             semester,
                             sectionId: sid,
                             departmentId,
-                            academicYearId: activeYear?.id || null,
+                            academicYearId: resolvedAcademicYearId,
                             periodId: pid,
                             subjectId: finalSubjectId || null,
                             status: "Completed",

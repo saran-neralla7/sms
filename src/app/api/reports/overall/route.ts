@@ -61,7 +61,8 @@ export async function GET(request: Request) {
         if (activeRollNumbers.size > 0) {
             students = await prisma.student.findMany({
                 where: {
-                    rollNumber: { in: Array.from(activeRollNumbers) }
+                    rollNumber: { in: Array.from(activeRollNumbers) },
+                    isAlumni: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }
@@ -72,7 +73,8 @@ export async function GET(request: Request) {
                     year,
                     semester,
                     sectionId,
-                    departmentId: departmentId || undefined
+                    departmentId: departmentId || undefined,
+                    isAlumni: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }

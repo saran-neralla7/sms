@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
         const studentWhere: any = {
             departmentId,
             year: year,
-            semester: semester
+            semester: semester,
+            isAlumni: false
         };
         if (sectionId) {
             studentWhere.sectionId = sectionId;

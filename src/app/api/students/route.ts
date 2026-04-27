@@ -33,9 +33,13 @@ export async function GET(request: Request) {
     const skip = isAll ? 0 : (page - 1) * limit;
     const take = isAll ? undefined : limit;
 
-    const where: any = {};
+    const where: any = { isAlumni: false }; // exclude alumni by default
+    const showAlumni = searchParams.get("showAlumni") === "true";
+    if (showAlumni) delete where.isAlumni; // allow viewing alumni when explicitly requested
+
     if (year) where.year = year;
     if (semester) where.semester = semester;
+
 
     if (sectionIds) {
         where.sectionId = { in: sectionIds.split(",") };

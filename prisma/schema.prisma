@@ -99,6 +99,8 @@ model Student {
   regulationId          String?
   batchId               String?
   isDetained            Boolean              @default(false)
+  isAlumni              Boolean              @default(false)
+  alumniId              String?              // links to Alumni.id after graduation
   originalBatchId       String?
   labBatchId            String?
   photoUrl              String?
@@ -228,14 +230,26 @@ model AttendanceHistory {
 }
 
 model Alumni {
-  id           String      @id @default(uuid())
-  rollNumber   String      @unique
-  name         String
-  mobile       String
-  passingYear  String
-  departmentId String?
-  createdAt    DateTime    @default(now())
-  department   Department? @relation(fields: [departmentId], references: [id])
+  id              String       @id @default(uuid())
+  rollNumber      String       @unique
+  name            String
+  mobile          String
+  passingYear     String       // e.g. "2026" — derived from graduation year
+  graduationDate  DateTime?    // actual date student left the institution
+  dateOfReporting DateTime?    // original join date
+  dateOfBirth     DateTime?
+  fatherName      String?
+  nationality     String?
+  religion        String?
+  category        String?
+  casteName       String?
+  batchId         String?      // which batch they graduated from
+  academicYearId  String?      // which academic year they graduated in
+  departmentId    String?
+  createdAt       DateTime     @default(now())
+  department      Department?  @relation(fields: [departmentId], references: [id])
+  batch           Batch?       @relation(fields: [batchId], references: [id])
+  academicYear    AcademicYear? @relation(fields: [academicYearId], references: [id])
 }
 
 model ElectiveSlot {
@@ -247,17 +261,19 @@ model ElectiveSlot {
 }
 
 model AcademicYear {
-  id                    String                  @id @default(uuid())
-  name                  String                  @unique
-  startDate             DateTime
-  endDate               DateTime
-  isCurrent             Boolean                 @default(false)
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  attendanceHistory     AttendanceHistory[]
-  internalMarks         InternalMark[]
-  FacultySubjectMapping FacultySubjectMapping[]
-  FeedbackForm          FeedbackForm[]
+  id                      String                    @id @default(uuid())
+  name                    String                    @unique
+  startDate               DateTime
+  endDate                 DateTime
+  isCurrent               Boolean                   @default(false)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  attendanceHistory       AttendanceHistory[]
+  internalMarks           InternalMark[]
+  FacultySubjectMapping   FacultySubjectMapping[]
+  FeedbackForm            FeedbackForm[]
+  alumni                  Alumni[]
+  examSettings            ExamApplicationSetting[]
 }
 
 model Batch {
@@ -270,6 +286,7 @@ model Batch {
   students         Student[] @relation("CurrentBatch")
   detainedStudents Student[] @relation("OriginalBatch")
   feedbackForms    FeedbackForm[]
+  alumni           Alumni[]
 }
 
 model LabBatch {
@@ -398,9 +415,11 @@ model ExamApplicationSetting {
   endDate        DateTime
   lateFeeEndDate DateTime?
   isActive       Boolean           @default(true)
+  academicYearId String?           // links to academic year
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   applications   ExamApplication[]
+  academicYear   AcademicYear?     @relation(fields: [academicYearId], references: [id])
 }
 
 model InternalMark {
