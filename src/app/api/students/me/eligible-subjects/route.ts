@@ -56,18 +56,27 @@ export async function GET(request: Request) {
                 return NextResponse.json([]);
             }
 
-            // Grades is typically a JSON object like {"Code": "Grade", "Code2": "F"}
-            // E.g. {"CSM1201": "O", "CSM1202": "F", "CSM1203": "AB"}
-            const gradesObj = typeof result.grades === "string" ? JSON.parse(result.grades) : result.grades;
+            // grades is an ARRAY of { grade: string, subjectCode: string }
+            // subjectCode format: "2209106 - Engineering Graphics" — we need only the code prefix before " - "
+            const gradesArr: { grade: string; subjectCode: string }[] = Array.isArray(result.grades)
+                ? result.grades as any[]
+                : Object.entries(result.grades as Record<string, string>).map(([subjectCode, grade]) => ({ subjectCode, grade }));
+
             const failingGrades = ["F", "AB", "ABSENT", "FAIL"];
             const failedSubjectCodes: string[] = [];
 
-            for (const [code, grade] of Object.entries(gradesObj)) {
-                const gradeStr = String(grade).toUpperCase().trim();
+            for (const entry of gradesArr) {
+                const gradeStr = String(entry.grade).toUpperCase().trim();
                 if (failingGrades.includes(gradeStr)) {
-                    failedSubjectCodes.push(code);
+                    // Extract only the code part: "2209106 - Engineering Graphics" → "2209106"
+                    const codeOnly = entry.subjectCode.includes(" - ")
+                        ? entry.subjectCode.split(" - ")[0].trim()
+                        : entry.subjectCode.trim();
+                    failedSubjectCodes.push(codeOnly);
                 }
             }
+
+            console.log(`SUPPLY: student=${student.id} y=${year} s=${semester} failedCodes=${JSON.stringify(failedSubjectCodes)}`);
 
             if (failedSubjectCodes.length === 0) {
                 return NextResponse.json([]); // No failed subjects

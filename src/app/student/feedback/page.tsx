@@ -6,9 +6,9 @@ import LogoSpinner from "@/components/LogoSpinner";
 
 const RATING_COLORS: Record<number, { label: string }> = {
     1: { label: "Poor" },
-    2: { label: "Below Average" },
-    3: { label: "Average" },
-    4: { label: "Good" },
+    2: { label: "Fair" },
+    3: { label: "Good" },
+    4: { label: "Very Good" },
     5: { label: "Excellent" },
 };
 

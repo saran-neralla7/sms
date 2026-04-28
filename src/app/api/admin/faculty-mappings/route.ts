@@ -50,15 +50,21 @@ export async function POST(req: Request) {
         await prisma.$transaction(async (tx) => {
             // Delete existing mappings for this section, academic year and DEPARTMENT
             // Since section is shared across departments, we must only delete the subjects belonging to the currently edited department
-            await tx.facultySubjectMapping.deleteMany({
-                where: { 
-                    sectionId, 
-                    academicYearId,
-                    subject: {
-                        departmentId: departmentId
-                    }
-                }
+            const subjectsInDept = await tx.subject.findMany({
+                where: { departmentId: departmentId },
+                select: { id: true }
             });
+            const subjectIds = subjectsInDept.map(s => s.id);
+
+            if (subjectIds.length > 0) {
+                await tx.facultySubjectMapping.deleteMany({
+                    where: { 
+                        sectionId, 
+                        academicYearId,
+                        subjectId: { in: subjectIds }
+                    }
+                });
+            }
 
             // Insert new mappings
             if (mappings && mappings.length > 0) {
@@ -68,13 +74,15 @@ export async function POST(req: Request) {
                         subjectId: m.subjectId,
                         sectionId,
                         academicYearId
-                    }))
+                    })),
+                    skipDuplicates: true
                 });
             }
         });
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
+        console.error("Faculty Mapping POST error:", error?.message, error?.code);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

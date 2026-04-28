@@ -37,7 +37,7 @@ export default function FeedbackAnalysisPage() {
         // Fetch Metadata for Overall Tab
         Promise.all([
             fetch("/api/academic-years").then(r => r.json()),
-            fetch("/api/departments").then(r => r.json())
+            fetch("/api/departments?all=true").then(r => r.json())
         ]).then(([years, depts]) => {
             if (Array.isArray(years)) {
                 setAcademicYears(years);
@@ -275,6 +275,50 @@ export default function FeedbackAnalysisPage() {
                     {/* PRINTABLE REPORT SECTION */}
                     {!loadingReport && reportData && reportData.reports && (
                 <div className={`print-container ${printSubjectIndex !== null ? 'print-single-mode' : ''}`}>
+
+                    {/* SUMMARY REPORT PAGE */}
+                    <div className={`report-page relative mb-16 bg-white p-0 md:p-8 rounded-xl shadow-sm md:border border-slate-200 md:mb-8 ${printSubjectIndex !== null ? 'no-print hidden' : ''}`}>
+                         {/* Header */}
+                         <div className="text-center font-bold mb-4" style={{ fontFamily: 'Times New Roman, serif' }}>
+                             <div className="text-[17px]">Feedback Analysis of {reportData.metadata.year ? `${reportData.metadata.year}/IV` : ""} B.Tech {reportData.metadata.semester} Sem</div>
+                             <div className="text-[15px] underline mt-1">ACADEMIC YEAR: {reportData.metadata.academicYear}</div>
+                         </div>
+                         
+                         {/* Table */}
+                         <table className="w-full border-collapse border-[2px] border-black" style={{ fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
+                            <thead>
+                                <tr>
+                                    <th colSpan={9} className="border border-black p-1.5 text-center bg-white font-bold">{reportData.metadata.course} Engineering</th>
+                                </tr>
+                                <tr className="bg-white font-bold">
+                                    <th className="border border-black p-1.5 text-center">Subject</th>
+                                    <th className="border border-black p-1.5 text-center">Faculty</th>
+                                    <th className="border border-black p-1.5 text-center">Excellents</th>
+                                    <th className="border border-black p-1.5 text-center">Very Good</th>
+                                    <th className="border border-black p-1.5 text-center">Good</th>
+                                    <th className="border border-black p-1.5 text-center">Fair</th>
+                                    <th className="border border-black p-1.5 text-center">Poor</th>
+                                    <th className="border border-black p-1.5 text-center">Total scripts</th>
+                                    <th className="border border-black p-1.5 text-center">Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {reportData.reports.map((report: any, idx: number) => (
+                                    <tr key={idx}>
+                                        <td className="border border-black p-1.5 text-center uppercase">{report.subjectName.split('(')[0].trim()}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.facultyName}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.excellents || 0}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.veryGood || 0}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.good || 0}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.fair || 0}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.poor || 0}</td>
+                                        <td className="border border-black p-1.5 text-center">{report.totalRatings || 0}</td>
+                                        <td className="border border-black p-1.5 text-center font-bold">{report.overallAverage}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                         </table>
+                    </div>
 
                     {/* COLLEGE HEADER — only shown in print (fixed = appears on every page) */}
 

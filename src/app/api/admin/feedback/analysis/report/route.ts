@@ -85,6 +85,12 @@ export async function GET(req: Request) {
                     subjectName: res.subject ? `${res.subject.name} (${res.subject.code})` : "General Subject",
                     respondents: 0,
                     overallTotalScore: 0,
+                    excellents: 0,
+                    veryGood: 0,
+                    good: 0,
+                    fair: 0,
+                    poor: 0,
+                    totalRatings: 0,
                     rows: []
                 };
             }
@@ -96,7 +102,16 @@ export async function GET(req: Request) {
             
             // Map individual rating answers in the order of the rating questions
             const rowAnswers = ratingQuestions.map((q: any) => {
-                return ratingsMap[q.id] || "-";
+                const val = ratingsMap[q.id];
+                if (val !== undefined && typeof val === 'number') {
+                    groups[groupKey].totalRatings += 1;
+                    if (val === 5) groups[groupKey].excellents += 1;
+                    else if (val === 4) groups[groupKey].veryGood += 1;
+                    else if (val === 3) groups[groupKey].good += 1;
+                    else if (val === 2) groups[groupKey].fair += 1;
+                    else if (val === 1) groups[groupKey].poor += 1;
+                }
+                return val || "-";
             });
 
             // Extract remarks
