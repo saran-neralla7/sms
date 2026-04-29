@@ -388,6 +388,7 @@ model ExamApplication {
   submittedAt        DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
   amountPaid         Float?
+  payments           Json?                    // Array of { utrNumber: string, amountPaid: number, paymentDate: string }
   student            Student                  @relation(fields: [studentId], references: [id])
   subjects           ExamApplicationSubject[]
   editRequested      Boolean                  @default(false)
@@ -416,6 +417,8 @@ model ExamApplicationSetting {
   lateFeeEndDate DateTime?
   isActive       Boolean           @default(true)
   academicYearId String?           // links to academic year
+  regularFee     String?           // Fee for regular semesters
+
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   applications   ExamApplication[]

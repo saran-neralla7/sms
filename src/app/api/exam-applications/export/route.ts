@@ -45,26 +45,64 @@ export async function GET(request: Request) {
             orderBy: { submittedAt: "asc" }
         });
 
-        const rows = applications.map((app: any, i: any) => ({
-            "S.No": i + 1,
-            "Roll Number": app.rollNumber,
-            "Student Name": app.student?.name || "",
-            "Department": app.department,
-            "Year": app.year,
-            "Semester": app.semester,
-            "Subjects": app.subjects.map((s: any) => `${s.subject.code} - ${s.subject.name}`).join(", "),
-            "UTR Number": app.utrNumber,
-            "Amount Paid": app.amountPaid || "",
-            "Duplicate UTR": app.duplicateUtr ? "YES" : "NO",
-            "Payment Date": app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—",
-            "Status": app.status,
-            "Submitted On": new Date(app.submittedAt).toLocaleDateString("en-IN"),
-            "Approved By": app.approvedBy || "",
-            "Remarks": app.remarks || ""
-        }));
+        const rows: any[] = [];
+        let sno = 1;
+        const merges: any[] = [];
+
+        applications.forEach((app: any) => {
+            const currentSno = sno++;
+            
+            const payments = Array.isArray(app.payments) && app.payments.length > 0 
+                ? app.payments 
+                : [{ utrNumber: app.utrNumber, amountPaid: app.amountPaid, paymentDate: app.paymentDate }];
+
+            const totalAmount = payments.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
+
+            const startRow = rows.length + 1; // +1 because the header is at row 0
+
+            payments.forEach((p: any) => {
+                rows.push({
+                    "S.No": currentSno,
+                    "Roll Number": app.rollNumber,
+                    "Student Name": app.student?.name || "",
+                    "Department": app.department,
+                    "Year": app.year,
+                    "Semester": app.semester,
+                    "Subjects": app.subjects.map((s: any) => `${s.subject.code} - ${s.subject.name}`).join(", "),
+                    "Status": app.status,
+                    "Submitted On": new Date(app.submittedAt).toLocaleDateString("en-IN"),
+                    "Approved By": app.approvedBy || "",
+                    "Remarks": app.remarks || "",
+                    "UTR Number": p.utrNumber || "",
+                    "Amount Paid": p.amountPaid || "",
+                    "Total Amount": totalAmount,
+                    "Duplicate UTR": app.duplicateUtr ? "YES" : "NO",
+                    "Payment Date": p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-IN") : "—",
+                });
+            });
+
+            const endRow = rows.length; // The last pushed row will be at this 0-indexed excel row
+
+            if (payments.length > 1) {
+                // Merge columns 0 to 10 (S.No through Remarks) 
+                for (let c = 0; c <= 10; c++) {
+                    merges.push({ s: { r: startRow, c: c }, e: { r: endRow, c: c } });
+                }
+                // Merge col 13 (Total Amount) and col 14 (Duplicate UTR)
+                merges.push({ s: { r: startRow, c: 13 }, e: { r: endRow, c: 13 } });
+                merges.push({ s: { r: startRow, c: 14 }, e: { r: endRow, c: 14 } });
+            }
+        });
 
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.json_to_sheet(rows);
+
+        // Apply merges if any exist
+        if (merges.length > 0) {
+            if (!ws["!merges"]) ws["!merges"] = [];
+            ws["!merges"].push(...merges);
+        }
+
         XLSX.utils.book_append_sheet(wb, ws, "Exam Applications");
         const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 

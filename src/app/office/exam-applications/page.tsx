@@ -205,13 +205,17 @@ export default function OfficeExamApplicationsPage() {
                                         <th className="px-4 py-3 whitespace-nowrap">Subjects</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Amount Paid</th>
+                                        <th className="px-4 py-3 whitespace-nowrap font-bold text-slate-800">Total Amount</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Submitted At</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Status</th>
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map((app: any) => (
+                                    {filtered.map((app: any) => {
+                                        const paymentsList = Array.isArray(app.payments) && app.payments.length > 0 ? app.payments : [{ amountPaid: app.amountPaid }];
+                                        const totalAmount = paymentsList.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
+                                        return (
                                         <tr key={app.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
                                             <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
@@ -222,17 +226,26 @@ export default function OfficeExamApplicationsPage() {
                                                     ))}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <span className="font-mono text-xs">{app.utrNumber}</span>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {paymentsList.map((p: any, i: number) => (
+                                                        <span key={i} className="font-mono text-xs whitespace-nowrap">{p.utrNumber || "—"}</span>
+                                                    ))}
+                                                </div>
                                                 {app.duplicateUtr && (
                                                     <button onClick={() => setDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
                                                         <FaExclamationTriangle /> DUPLICATE
                                                     </button>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <span className="text-sm font-medium text-slate-700">{app.amountPaid ? `₹${app.amountPaid}` : "—"}</span>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {paymentsList.map((p: any, i: number) => (
+                                                        <span key={i} className="text-sm font-medium text-slate-700 whitespace-nowrap">{p.amountPaid ? `₹${p.amountPaid}` : "—"}</span>
+                                                    ))}
+                                                </div>
                                             </td>
+                                            <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top">₹{totalAmount}</td>
                                             <td className="px-4 py-3 text-xs text-slate-600">
                                                 {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
                                             </td>
@@ -295,7 +308,8 @@ export default function OfficeExamApplicationsPage() {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

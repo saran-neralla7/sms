@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaPlus, FaTrash, FaUserPlus, FaCalendarAlt, FaCheckCircle, FaClock, FaTimesCircle, FaDownload, FaTimes, FaImage, FaSearch, FaFileExcel, FaClipboardList } from "react-icons/fa";
+import { FaPlus, FaTrash, FaUserPlus, FaCalendarAlt, FaCheckCircle, FaClock, FaTimesCircle, FaDownload, FaTimes, FaImage, FaSearch, FaFileExcel, FaClipboardList, FaEdit } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import * as XLSX from "xlsx";
 
@@ -22,7 +22,8 @@ export default function AdminExamApplicationsPage() {
     // Settings state
     const [settings, setSettings] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
-    const [settingForm, setSettingForm] = useState({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "" });
+    const [settingForm, setSettingForm] = useState({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "" });
+    const [editingSettingId, setEditingSettingId] = useState<string | null>(null);
     const [settingsLoading, setSettingsLoading] = useState(true);
 
     // Office account state
@@ -70,18 +71,47 @@ export default function AdminExamApplicationsPage() {
         return () => window.removeEventListener("popstate", handlePopState);
     }, []);
 
-    const handleCreateSetting = async (e: React.FormEvent) => {
+    const handleSaveSetting = async (e: React.FormEvent) => {
         e.preventDefault();
-        const res = await fetch("/api/exam-applications/settings", {
-            method: "POST",
+        const url = "/api/exam-applications/settings";
+        const method = editingSettingId ? "PUT" : "POST";
+        const body = editingSettingId ? JSON.stringify({ id: editingSettingId, ...settingForm }) : JSON.stringify(settingForm);
+        
+        const res = await fetch(url, {
+            method,
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(settingForm)
+            body
         });
         if (res.ok) {
             const s = await res.json();
-            setSettings(prev => [...prev.filter(p => p.id !== s.id), s]);
-            setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "" });
+            if (editingSettingId) {
+                setSettings(prev => prev.map(p => p.id === s.id ? s : p));
+                setEditingSettingId(null);
+            } else {
+                setSettings(prev => [...prev, s]);
+            }
+            setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "" });
         }
+    };
+
+    const handleEditSettingClick = (s: any) => {
+        setEditingSettingId(s.id);
+        const formatDateTime = (dateStr: string) => {
+            if (!dateStr) return "";
+            const d = new Date(dateStr);
+            return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        };
+        setSettingForm({
+            name: s.name || "",
+            type: s.type || "REGULAR",
+            year: s.year || "",
+            semester: s.semester || "",
+            startDate: formatDateTime(s.startDate),
+            endDate: formatDateTime(s.endDate),
+            lateFeeEndDate: formatDateTime(s.lateFeeEndDate),
+            regularFee: s.regularFee || ""
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const handleDeleteSetting = async (id: string) => {
@@ -262,7 +292,8 @@ export default function AdminExamApplicationsPage() {
                                         <th className="px-4 py-3 whitespace-nowrap">Roll No</th>
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Student Name</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Amount</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Amount Paid</th>
+                                        <th className="px-4 py-3 whitespace-nowrap font-bold text-slate-800">Total Amount</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Submitted At</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Payment Date</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Status</th>
@@ -270,19 +301,33 @@ export default function AdminExamApplicationsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map((app: any) => (
+                                    {filtered.map((app: any) => {
+                                        const paymentsList = Array.isArray(app.payments) && app.payments.length > 0 ? app.payments : [{ amountPaid: app.amountPaid }];
+                                        const totalAmount = paymentsList.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
+                                        return (
                                         <tr key={app.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
                                             <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
-                                            <td className="px-4 py-3 font-mono text-xs">
-                                                {app.utrNumber}
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {paymentsList.map((p: any, i: number) => (
+                                                        <span key={i} className="font-mono text-xs whitespace-nowrap">{p.utrNumber || "—"}</span>
+                                                    ))}
+                                                </div>
                                                 {app.duplicateUtr && (
                                                     <button onClick={() => setDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
                                                         ⚠️ DUPLICATE
                                                     </button>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3">₹{app.amountPaid || "0"}</td>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {paymentsList.map((p: any, i: number) => (
+                                                        <span key={i} className="text-sm font-medium text-slate-700 whitespace-nowrap">{p.amountPaid ? `₹${p.amountPaid}` : "—"}</span>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top">₹{totalAmount}</td>
                                             <td className="px-4 py-3 font-medium text-slate-600">
                                                 {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
                                             </td>
@@ -332,7 +377,8 @@ export default function AdminExamApplicationsPage() {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -597,8 +643,8 @@ export default function AdminExamApplicationsPage() {
             {/* Freeze Settings */}
             {tab === "settings" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <form onSubmit={handleCreateSetting} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm mb-6">
-                        <h2 className="text-lg font-bold text-slate-800 mb-4">Add / Update Application Window</h2>
+                    <form onSubmit={handleSaveSetting} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm mb-6">
+                        <h2 className="text-lg font-bold text-slate-800 mb-4">{editingSettingId ? "Edit Application Window" : "Add Application Window"}</h2>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
                             <div>
                                 <label className="block text-xs text-slate-500 mb-1">Cycle Name (Optional)</label>
@@ -637,10 +683,21 @@ export default function AdminExamApplicationsPage() {
                                 <label className="block text-xs text-slate-500 mb-1">Late Fee End (Optional)</label>
                                 <input type="datetime-local" value={settingForm.lateFeeEndDate} onChange={e => setSettingForm(p => ({ ...p, lateFeeEndDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
                             </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Regular Fee (₹) (Optional)</label>
+                                <input type="number" placeholder="e.g. 1500" value={(settingForm as any).regularFee || ""} onChange={e => setSettingForm(p => ({ ...p, regularFee: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                            </div>
                         </div>
-                        <button type="submit" className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                            <FaPlus /> Save Setting
-                        </button>
+                        <div className="flex gap-2">
+                            <button type="submit" className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
+                                {editingSettingId ? <FaEdit /> : <FaPlus />} {editingSettingId ? "Update Setting" : "Save Setting"}
+                            </button>
+                            {editingSettingId && (
+                                <button type="button" onClick={() => { setEditingSettingId(null); setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "" }); }} className="flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 transition-colors">
+                                    <FaTimes /> Cancel
+                                </button>
+                            )}
+                        </div>
                     </form>
 
                     {settings.length === 0 ? (
@@ -673,7 +730,10 @@ export default function AdminExamApplicationsPage() {
                                             <td className="px-4 py-3 whitespace-nowrap">{new Date(s.startDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">{new Date(s.endDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">{s.lateFeeEndDate ? new Date(s.lateFeeEndDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}</td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-4 py-3 flex gap-2">
+                                                <button onClick={() => handleEditSettingClick(s)} className="rounded-lg bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-200">
+                                                    <FaEdit />
+                                                </button>
                                                 <button onClick={() => handleDeleteSetting(s.id)} className="rounded-lg bg-red-100 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-200">
                                                     <FaTrash />
                                                 </button>

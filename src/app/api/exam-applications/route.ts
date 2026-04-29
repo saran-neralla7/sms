@@ -112,7 +112,16 @@ export async function POST(request: Request) {
         const applicationsToCreate = [];
 
         for (const app of applicationsData) {
-            const { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr, paymentDate, settingId, type } = app;
+            let { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr, paymentDate, settingId, type, payments } = app;
+
+            if (payments && Array.isArray(payments) && payments.length > 0) {
+                utrNumber = payments.map((p: any) => p.utrNumber).join(", ");
+                amountPaidStr = payments.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0).toString();
+                const dates = payments.map((p: any) => new Date(p.paymentDate).getTime()).filter(t => !isNaN(t));
+                if (dates.length > 0) {
+                    paymentDate = new Date(Math.max(...dates)).toISOString().split("T")[0];
+                }
+            }
 
             if (!year || !semester || !utrNumber || !paymentDate || !settingId || !type || !Array.isArray(subjectIds) || subjectIds.length === 0) {
                 return NextResponse.json({ error: `Missing required fields (including Payment Date) for 0${year}-0${semester} application.` }, { status: 400 });
@@ -144,11 +153,19 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: `You have already submitted an application for this exam cycle.` }, { status: 400 });
             }
 
-            // Check duplicate UTR across the whole system
-            const duplicateUtrRecord = await prisma.examApplication.findFirst({
-                where: { utrNumber },
-                select: { rollNumber: true }
-            });
+            // Check duplicate UTR across the whole system (for any of the UTRs)
+            const utrsToCheck = payments && Array.isArray(payments) ? payments.map((p: any) => p.utrNumber) : [utrNumber];
+            let duplicateUtrRecord = null;
+            for (const utr of utrsToCheck) {
+                const dup = await prisma.examApplication.findFirst({
+                    where: { utrNumber: { contains: utr } },
+                    select: { rollNumber: true }
+                });
+                if (dup) {
+                    duplicateUtrRecord = dup;
+                    break;
+                }
+            }
 
             applicationsToCreate.push({
                 studentId: student.id,
@@ -159,6 +176,7 @@ export async function POST(request: Request) {
                 utrNumber,
                 amountPaid,
                 paymentDate: new Date(paymentDate),
+                payments: payments && Array.isArray(payments) ? payments : [{ utrNumber, amountPaid, paymentDate }],
                 duplicateUtr: !!duplicateUtrRecord,
                 duplicateUtrRollNo: duplicateUtrRecord ? duplicateUtrRecord.rollNumber : null,
                 type,

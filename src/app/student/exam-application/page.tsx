@@ -7,18 +7,24 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaCheckCircle, FaTimesCircle, FaClock, FaDownload, FaExclamationTriangle, FaFileAlt, FaBan, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import jsPDF from "jspdf";
 
+interface PaymentEntry {
+    utrNumber: string;
+    amountPaid: string;
+    paymentDate: string;
+    isDuplicateUtr: boolean;
+    isExtracting?: boolean;
+}
+
 interface SemesterData {
     settingId: string;
     type: string;
     name?: string;
     year: string;
     semester: string;
+    regularFee?: string;
     subjects: any[];
     selectedSubjects: string[];
-    utrNumber: string;
-    amountPaid: string;
-    paymentDate: string;
-    isDuplicateUtr: boolean;
+    payments: PaymentEntry[];
     error?: string;
 }
 
@@ -56,7 +62,17 @@ export default function ExamApplicationPage() {
                 // Filter active settings that are for the current or past semesters, and within date range
                 const validSettings = (settings as any[]).filter(s => {
                     const settingSemNum = getSemNumber(s.year, s.semester);
-                    return s.isActive && settingSemNum <= currentSemNum && now >= new Date(s.startDate) && now <= new Date(s.endDate);
+                    const isDateValid = now >= new Date(s.startDate) && now <= new Date(s.endDate);
+                    
+                    if (!s.isActive || !isDateValid) return false;
+
+                    if (s.type === "REGULAR") {
+                        // Regular exams are ONLY for students currently in that exact year and semester
+                        return settingSemNum === currentSemNum;
+                    } else {
+                        // Supply exams are for any semester up to and including the current semester
+                        return settingSemNum <= currentSemNum;
+                    }
                 });
 
                 // For each valid setting, fetch its subjects and construct the form state
@@ -74,12 +90,10 @@ export default function ExamApplicationPage() {
                         name: s.name,
                         year: s.year,
                         semester: s.semester,
+                        regularFee: s.regularFee,
                         subjects: subs,
                         selectedSubjects: [],
-                        utrNumber: "",
-                        amountPaid: "",
-                        paymentDate: "",
-                        isDuplicateUtr: false,
+                        payments: [{ utrNumber: "", amountPaid: "", paymentDate: "", isDuplicateUtr: false }],
                     });
                 }
 
@@ -94,7 +108,7 @@ export default function ExamApplicationPage() {
         });
     }, [session]);
 
-    const checkUtr = async (idx: number, utr: string) => {
+    const checkUtr = async (semIdx: number, pIdx: number, utr: string) => {
         if (!utr) return;
         const res = await fetch("/api/exam-applications/check-utr", {
             method: "POST",
@@ -104,7 +118,25 @@ export default function ExamApplicationPage() {
         const data = await res.json();
         setActiveSemesters(prev => {
             const next = [...prev];
-            next[idx].isDuplicateUtr = data.duplicate;
+            next[semIdx].payments[pIdx].isDuplicateUtr = data.duplicate;
+            return next;
+        });
+    };
+
+    const addPaymentEntry = (semIdx: number) => {
+        setActiveSemesters(prev => {
+            const next = [...prev];
+            next[semIdx].payments.push({ utrNumber: "", amountPaid: "", paymentDate: "", isDuplicateUtr: false });
+            return next;
+        });
+    };
+
+    const removePaymentEntry = (semIdx: number, pIdx: number) => {
+        setActiveSemesters(prev => {
+            const next = [...prev];
+            if (next[semIdx].payments.length > 1) {
+                next[semIdx].payments.splice(pIdx, 1);
+            }
             return next;
         });
     };
@@ -122,13 +154,13 @@ export default function ExamApplicationPage() {
         });
     };
 
-    const updateSemesterField = (semIdx: number, field: "utrNumber" | "amountPaid" | "paymentDate", value: string) => {
+    const updateSemesterField = (semIdx: number, pIdx: number, field: "utrNumber" | "amountPaid" | "paymentDate", value: string) => {
         setActiveSemesters(prev => {
             const next = [...prev];
             if (field === "amountPaid") {
-                next[semIdx][field] = value.replace(/[^0-9]/g, ""); // Digits only
+                next[semIdx].payments[pIdx][field] = value.replace(/[^0-9]/g, ""); // Digits only
             } else {
-                next[semIdx][field] = value;
+                next[semIdx].payments[pIdx][field] = value;
             }
             return next;
         });
@@ -315,8 +347,9 @@ export default function ExamApplicationPage() {
         const newSemesters = [...activeSemesters];
         activeSubmissions.forEach(sub => {
             const idx = activeSemesters.findIndex(s => s.settingId === sub.settingId);
-            if (!sub.utrNumber.trim() || !sub.amountPaid.trim() || !sub.paymentDate.trim()) {
-                newSemesters[idx].error = "UTR Number, Amount Paid, and Payment Date are required for this semester.";
+            const hasInvalidPayment = sub.payments.some(p => !p.utrNumber.trim() || !p.amountPaid.trim() || !p.paymentDate.trim());
+            if (hasInvalidPayment) {
+                newSemesters[idx].error = "UTR Number, Amount Paid, and Payment Date are required for all payment entries.";
                 setExpandedSemester(sub.settingId);
                 isValid = false;
             } else {
@@ -335,9 +368,14 @@ export default function ExamApplicationPage() {
             year: sem.year,
             semester: sem.semester,
             subjectIds: sem.selectedSubjects,
-            utrNumber: sem.utrNumber.trim(),
-            amountPaid: sem.amountPaid.trim(),
-            paymentDate: sem.paymentDate,
+            utrNumber: sem.payments[0]?.utrNumber.trim() || "", // Backward compat
+            amountPaid: sem.payments.reduce((sum, p) => sum + (parseFloat(p.amountPaid) || 0), 0).toString(),
+            paymentDate: sem.payments[0]?.paymentDate || "",
+            payments: sem.payments.map(p => ({
+                utrNumber: p.utrNumber.trim(),
+                amountPaid: p.amountPaid.trim(),
+                paymentDate: p.paymentDate
+            })),
             settingId: sem.settingId,
             type: sem.type
         }));
@@ -532,46 +570,81 @@ export default function ExamApplicationPage() {
                                                         {/* Payment Details (Only show if at least 1 subject is selected) */}
                                                         {isSelected && (
                                                             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
-                                                                <h4 className="text-sm font-semibold text-slate-800">Payment Details for {sem.year}-{sem.semester}</h4>
-                                                                <div className="grid sm:grid-cols-2 gap-4">
-                                                                    <div>
-                                                                        <label className="text-xs font-medium text-slate-600 mb-1 block">UTR Number <span className="text-red-500">*</span></label>
-                                                                        <input
-                                                                            type="text"
-                                                                            value={sem.utrNumber}
-                                                                            onChange={e => updateSemesterField(idx, "utrNumber", e.target.value)}
-                                                                            onBlur={() => checkUtr(idx, sem.utrNumber)}
-                                                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                                                            placeholder="Transaction ID"
-                                                                        />
-                                                                        {sem.isDuplicateUtr && (
-                                                                            <p className="mt-1 text-[10px] text-yellow-600 font-semibold flex items-center gap-1">
-                                                                                <FaExclamationTriangle /> Warning: Duplicate UTR
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="text-xs font-medium text-slate-600 mb-1 block">Amount Paid (₹) <span className="text-red-500">*</span></label>
-                                                                        <input
-                                                                            type="text"
-                                                                            inputMode="numeric"
-                                                                            value={sem.amountPaid}
-                                                                            onChange={e => updateSemesterField(idx, "amountPaid", e.target.value)}
-                                                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                                                            placeholder="e.g. 1400"
-                                                                        />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="text-xs font-medium text-slate-600 mb-1 block">Payment Date <span className="text-red-500">*</span></label>
-                                                                        <input
-                                                                            type="date"
-                                                                            max={new Date().toISOString().split("T")[0]}
-                                                                            value={sem.paymentDate}
-                                                                            onChange={e => updateSemesterField(idx, "paymentDate", e.target.value)}
-                                                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                                                        />
-                                                                    </div>
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <h4 className="text-sm font-semibold text-slate-800">Payment Details</h4>
                                                                 </div>
+
+                                                                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800 mb-4">
+                                                                    <strong>Note:</strong> {sem.type === "REGULAR" ? (
+                                                                        `The Semester fees for this semester is: Rs. ${sem.regularFee || "N/A"}`
+                                                                    ) : (
+                                                                        "The Semester fee for this semester is: 1 Subject - Rs. 700, 2 subjects - Rs. 1400 and 3 or more subjects - Rs. 2000, Each Lab Rs 1000."
+                                                                    )}
+                                                                    <br/>
+                                                                    If there are more than one UTR numbers, please click the <strong>+ Add Another Payment</strong> button below to add them.
+                                                                </div>
+                                                                
+                                                                {sem.payments.map((payment, pIdx) => (
+                                                                    <div key={pIdx} className="bg-white p-4 rounded-lg border border-slate-200 relative shadow-sm">
+                                                                        {sem.payments.length > 1 && (
+                                                                            <button 
+                                                                                type="button" 
+                                                                                onClick={() => removePaymentEntry(idx, pIdx)}
+                                                                                className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full w-6 h-6 flex items-center justify-center border border-red-200 hover:bg-red-200 transition-colors"
+                                                                            >
+                                                                                &times;
+                                                                            </button>
+                                                                        )}
+
+                                                                        <div className="grid sm:grid-cols-3 gap-4">
+                                                                            <div>
+                                                                                <label className="text-xs font-medium text-slate-600 mb-1 block">UTR Number <span className="text-red-500">*</span></label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={payment.utrNumber}
+                                                                                    onChange={e => updateSemesterField(idx, pIdx, "utrNumber", e.target.value)}
+                                                                                    onBlur={() => checkUtr(idx, pIdx, payment.utrNumber)}
+                                                                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                                                                                    placeholder="Transaction ID"
+                                                                                />
+                                                                                {payment.isDuplicateUtr && (
+                                                                                    <p className="mt-1 text-[10px] text-yellow-600 font-semibold flex items-center gap-1">
+                                                                                        <FaExclamationTriangle /> Warning: Duplicate UTR
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-xs font-medium text-slate-600 mb-1 block">Amount Paid (₹) <span className="text-red-500">*</span></label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    inputMode="numeric"
+                                                                                    value={payment.amountPaid}
+                                                                                    onChange={e => updateSemesterField(idx, pIdx, "amountPaid", e.target.value)}
+                                                                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                                                                                    placeholder="e.g. 1400"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-xs font-medium text-slate-600 mb-1 block">Payment Date <span className="text-red-500">*</span></label>
+                                                                                <input
+                                                                                    type="date"
+                                                                                    max={new Date().toISOString().split("T")[0]}
+                                                                                    value={payment.paymentDate}
+                                                                                    onChange={e => updateSemesterField(idx, pIdx, "paymentDate", e.target.value)}
+                                                                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+
+                                                                <button 
+                                                                    type="button" 
+                                                                    onClick={() => addPaymentEntry(idx)}
+                                                                    className="mt-2 flex items-center gap-2 text-xs font-bold text-red-600 hover:text-red-800 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                                                                >
+                                                                    + Add Another Payment
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </div>

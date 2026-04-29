@@ -52,8 +52,17 @@ export async function GET(request: Request) {
             });
 
             if (!result || !result.grades) {
-                // No result uploaded yet, so no supply subjects available to show
-                return NextResponse.json([]);
+                // No result uploaded yet, so we return all subjects from this semester 
+                // so the student can select their backlogs manually
+                const allSubjects = await prisma.subject.findMany({
+                    where: {
+                        departmentId: student.departmentId,
+                        year: year,
+                        semester: semester
+                    },
+                    orderBy: { name: "asc" }
+                });
+                return NextResponse.json(allSubjects);
             }
 
             // grades is an ARRAY of { grade: string, subjectCode: string }
