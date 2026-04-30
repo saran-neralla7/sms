@@ -49,14 +49,6 @@ export default async function RootLayout({
     <html lang="en">
       <body className={`${inter.className} relative min-h-screen flex flex-col`} suppressHydrationWarning>
         <Providers>
-          {/* Watermark */}
-          <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none opacity-5">
-            <img
-              src="https://gvpcdpgc.edu.in/gvplogo.jpg"
-              alt="Watermark"
-              className="w-1/2 max-w-lg object-contain"
-            />
-          </div>
 
           <div className="relative z-10 flex flex-col flex-grow pt-16">
             <Navbar years={years} currentYearId={currentYearId} />

@@ -17,3 +17,11 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Fix for Firefox select dropdowns not opening / losing arrows in Tailwind v4 */
+select {
+  -moz-appearance: auto !important;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+  cursor: pointer;
+}

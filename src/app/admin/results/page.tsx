@@ -421,15 +421,27 @@ export default function ResultsPage() {
 
                         // Summary Cards by Section
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => {
-                                const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
+                            {Array.from(new Set(results.map(r => {
+                                const batch = r.student?.batch?.name || r.student?.batchString || "Unknown Batch";
+                                const dept = r.student?.department?.code || r.student?.department?.name || "Unknown Dept";
+                                const sec = r.student?.section?.name || "Unknown";
+                                const yr = r.year || year || "?";
+                                const sem = r.semester || semester || "?";
+                                return `${batch}|${dept}|${yr}|${sem}|${sec}`;
+                            }))).sort().map(groupKey => {
+                                const [batchStr, deptStr, yrStr, semStr, sectionName] = groupKey.split('|');
+                                const sectionResults = results.filter(r => {
+                                    const rBatch = r.student?.batch?.name || r.student?.batchString || "Unknown Batch";
+                                    const rDept = r.student?.department?.code || r.student?.department?.name || "Unknown Dept";
+                                    const rSec = r.student?.section?.name || "Unknown";
+                                    const rYr = r.year || year || "?";
+                                    const rSem = r.semester || semester || "?";
+                                    return rBatch === batchStr && rDept === deptStr && rYr === yrStr && rSem === semStr && rSec === sectionName;
+                                });
                                 const avgSGPA = (sectionResults.reduce((acc, r) => acc + (Number(r.sgpa) || 0), 0) / sectionResults.length).toFixed(2);
-
-                                // get batch and department from first student in this section
-                                const rawBatch = sectionResults[0]?.student;
-                                const batchString = rawBatch?.batch?.name || rawBatch?.batchString || "Unknown Batch";
-                                const deptName = sectionResults[0]?.student?.department?.name || "Unknown Dept";
-                                const deptCode = sectionResults[0]?.student?.department?.code || deptName;
+                                
+                                const batchString = batchStr;
+                                const deptCode = deptStr;
 
                                 // Get Exam Context from result data (fallback if filters are empty)
                                 const resultYear = sectionResults[0]?.year || year || "?";
@@ -438,7 +450,7 @@ export default function ResultsPage() {
                                 const formattedSem = resultSem === "1" ? "1st" : resultSem === "2" ? "2nd" : resultSem + "th";
 
                                 return (
-                                    <div key={sectionName} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all relative">
+                                    <div key={groupKey} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all relative">
                                         <div className="absolute top-4 right-4">
                                             <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200">
                                                 {deptCode}
@@ -454,7 +466,7 @@ export default function ResultsPage() {
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => document.getElementById(`results-table-${sectionName}`)?.classList.toggle("hidden")}
+                                            onClick={() => document.getElementById(`results-table-${groupKey.replace(/[^a-zA-Z0-9]/g, '-')}`)?.classList.toggle("hidden")}
                                             className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
                                         >
                                             View / Hide Results
@@ -466,15 +478,33 @@ export default function ResultsPage() {
                     )}
 
                     {/* Collapsible Tables per Section */}
-                    {Array.from(new Set(results.map(r => r.student?.section?.name || "Unknown"))).sort().map(sectionName => {
-                        const sectionResults = results.filter(r => (r.student?.section?.name || "Unknown") === sectionName);
+                    {Array.from(new Set(results.map(r => {
+                        const batch = r.student?.batch?.name || r.student?.batchString || "Unknown Batch";
+                        const dept = r.student?.department?.code || r.student?.department?.name || "Unknown Dept";
+                        const sec = r.student?.section?.name || "Unknown";
+                        const yr = r.year || year || "?";
+                        const sem = r.semester || semester || "?";
+                        return `${batch}|${dept}|${yr}|${sem}|${sec}`;
+                    }))).sort().map(groupKey => {
+                        const [batchStr, deptStr, yrStr, semStr, sectionName] = groupKey.split('|');
+                        const sectionResults = results.filter(r => {
+                            const rBatch = r.student?.batch?.name || r.student?.batchString || "Unknown Batch";
+                            const rDept = r.student?.department?.code || r.student?.department?.name || "Unknown Dept";
+                            const rSec = r.student?.section?.name || "Unknown";
+                            const rYr = r.year || year || "?";
+                            const rSem = r.semester || semester || "?";
+                            return rBatch === batchStr && rDept === deptStr && rYr === yrStr && rSem === semStr && rSec === sectionName;
+                        });
                         // Extract all unique subject codes for this section to build matrix headers
                         const allSubjects = Array.from(new Set(sectionResults.flatMap(r => ((r.grades || []) as any[]).map(g => g.subjectCode)))).sort();
 
+                        const formattedYear = yrStr === "1" ? "1st" : yrStr === "2" ? "2nd" : yrStr === "3" ? "3rd" : yrStr + "th";
+                        const formattedSem = semStr === "1" ? "1st" : semStr === "2" ? "2nd" : semStr + "th";
+
                         return (
-                            <div id={`results-table-${sectionName}`} key={sectionName} className="hidden overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm animate-in fade-in slide-in-from-top-4">
+                            <div id={`results-table-${groupKey.replace(/[^a-zA-Z0-9]/g, '-')}`} key={groupKey} className="hidden overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm animate-in fade-in slide-in-from-top-4">
                                 <div className="border-b border-slate-200 bg-slate-100 px-6 py-3 flex justify-between items-center">
-                                    <h4 className="font-bold text-slate-800">Section {sectionName} Matrix Results</h4>
+                                    <h4 className="font-bold text-slate-800">{batchStr} • {deptStr} • {formattedYear} Yr {formattedSem} Sem • Section {sectionName} Matrix Results</h4>
                                     <span className="text-xs text-slate-500 italic">Showing {allSubjects.length} Unique Subjects</span>
                                 </div>
                                 <div className="overflow-x-auto max-h-[600px]">
