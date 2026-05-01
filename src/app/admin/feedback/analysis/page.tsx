@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { FaPrint, FaSpinner } from "react-icons/fa";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export default function FeedbackAnalysisPage() {
     const [forms, setForms] = useState<any[]>([]);
@@ -13,6 +14,7 @@ export default function FeedbackAnalysisPage() {
 
     // New States for Tabs and Overall Faculty
     const [activeTab, setActiveTab] = useState<"WINDOW" | "OVERALL">("WINDOW");
+    const [reportViewMode, setReportViewMode] = useState<"CHARTS" | "MATRIX">("CHARTS");
     const [academicYears, setAcademicYears] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [selectedYearId, setSelectedYearId] = useState("");
@@ -147,6 +149,21 @@ export default function FeedbackAnalysisPage() {
                             ))}
                         </select>
 
+                        <div className="flex bg-slate-100 p-1 rounded-lg ml-auto">
+                            <button
+                                onClick={() => setReportViewMode("MATRIX")}
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${reportViewMode === "MATRIX" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                            >
+                                Responses Matrix
+                            </button>
+                            <button
+                                onClick={() => setReportViewMode("CHARTS")}
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${reportViewMode === "CHARTS" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                            >
+                                Graphical Charts
+                            </button>
+                        </div>
+
                         <button
                             onClick={handlePrint}
                             disabled={!reportData || loadingReport}
@@ -278,6 +295,19 @@ export default function FeedbackAnalysisPage() {
 
                     {/* SUMMARY REPORT PAGE */}
                     <div className={`report-page relative mb-16 bg-white p-0 md:p-8 rounded-xl shadow-sm md:border border-slate-200 md:mb-8 ${printSubjectIndex !== null ? 'no-print hidden' : ''}`}>
+                         {/* COLLEGE HEADER for Summary Page in Print */}
+                         <div className="print-college-header">
+                             <div className="pch-inner">
+                                 <img src="/logo.png" alt="GVP Logo" className="pch-logo" />
+                                 <div>
+                                     <div className="pch-title">GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)</div>
+                                     <div className="pch-sub">ENGINEERING AND TECHNOLOGY PROGRAM</div>
+                                     <div className="pch-sub">RUSHIKONDA, VISAKHAPATNAM</div>
+                                 </div>
+                             </div>
+                             <div className="pch-line" />
+                         </div>
+
                          {/* Header */}
                          <div className="text-center font-bold mb-4" style={{ fontFamily: 'Times New Roman, serif' }}>
                              <div className="text-[17px]">Feedback Analysis of {reportData.metadata.year ? `${reportData.metadata.year}/IV` : ""} B.Tech {reportData.metadata.semester} Sem</div>
@@ -392,42 +422,117 @@ export default function FeedbackAnalysisPage() {
                                 </tbody>
                             </table>
 
-                            {/* DATA TABLE */}
-                            <table className="rpt-data-tbl">
-                                <colgroup>
-                                    {reportData.ratingQuestions.map((_: any, i: number) => (
-                                        <col key={i} style={{width: `${65 / reportData.ratingQuestions.length}%`}} />
-                                    ))}
-                                    <col style={{width: '35%'}} />
-                                </colgroup>
-                                <thead>
-                                    <tr>
-                                        <th colSpan={reportData.ratingQuestions.length + 1} className="rpt-qs-header">QUESTIONS</th>
-                                    </tr>
-                                    <tr>
-                                        {reportData.ratingQuestions.map((q: string, qIdx: number) => (
-                                            <th key={qIdx} className="rpt-q-text">{q}</th>
+                            {/* CONDITIONAL CONTENT: MATRIX OR CHARTS */}
+                            {reportViewMode === "MATRIX" ? (
+                                <table className="rpt-data-tbl">
+                                    <colgroup>
+                                        {reportData.ratingQuestions.map((_: any, i: number) => (
+                                            <col key={i} style={{width: `${65 / reportData.ratingQuestions.length}%`}} />
                                         ))}
-                                        <th className="rpt-q-text red">Remarks / Comments</th>
-                                    </tr>
-                                    <tr className="rpt-ans-row">
-                                        {reportData.ratingQuestions.map((_: any, qIdx: number) => (
-                                            <th key={`a${qIdx}`} className="rpt-ans-lbl">Ans-{qIdx + 1}</th>
-                                        ))}
-                                        <th className="rpt-ans-lbl"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {report.rows.map((row: any, rIdx: number) => (
-                                        <tr key={rIdx}>
-                                            {row.answers.map((ans: any, aIdx: number) => (
-                                                <td key={aIdx} className="rpt-ans-val">{ans}</td>
-                                            ))}
-                                            <td className="rpt-remark">{row.remarks}</td>
+                                        <col style={{width: '35%'}} />
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th colSpan={reportData.ratingQuestions.length + 1} className="rpt-qs-header">QUESTIONS</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                        <tr>
+                                            {reportData.ratingQuestions.map((q: string, qIdx: number) => (
+                                                <th key={qIdx} className="rpt-q-text">{q}</th>
+                                            ))}
+                                            <th className="rpt-q-text red">Remarks / Comments</th>
+                                        </tr>
+                                        <tr className="rpt-ans-row">
+                                            {reportData.ratingQuestions.map((_: any, qIdx: number) => (
+                                                <th key={`a${qIdx}`} className="rpt-ans-lbl">Ans-{qIdx + 1}</th>
+                                            ))}
+                                            <th className="rpt-ans-lbl"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {report.rows.map((row: any, rIdx: number) => (
+                                            <tr key={rIdx}>
+                                                {row.answers.map((ans: any, aIdx: number) => (
+                                                    <td key={aIdx} className="rpt-ans-val">{ans}</td>
+                                                ))}
+                                                <td className="rpt-remark">{row.remarks}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="charts-wrapper mt-8 flex flex-col print-charts-layout gap-8 no-break">
+                                    <div className="flex-1 chart-box" style={{ minHeight: '300px' }}>
+                                        <h5 className="font-bold text-center mb-4 text-sm text-slate-700 uppercase tracking-wider">Question-wise Rating Distribution</h5>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart 
+                                                data={reportData.ratingQuestions.map((q: string, qIndex: number) => {
+                                                    const counts: any = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+                                                    report.rows.forEach((row: any) => {
+                                                        const val = row.answers[qIndex];
+                                                        if (counts[val] !== undefined) counts[val]++;
+                                                    });
+                                                    return {
+                                                        question: `Q${qIndex + 1}`,
+                                                        fullQuestion: q,
+                                                        "1": counts["1"],
+                                                        "2": counts["2"],
+                                                        "3": counts["3"],
+                                                        "4": counts["4"],
+                                                        "5": counts["5"]
+                                                    };
+                                                })} 
+                                                margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
+                                            >
+                                                <XAxis dataKey="question" tick={{ fontSize: 12, fontWeight: 'bold' }} />
+                                                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                                                <Tooltip labelFormatter={(label, payload: any) => payload?.[0]?.payload?.fullQuestion || label} />
+                                                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '12px' }} />
+                                                <Bar dataKey="1" name="1 (Poor)" fill="#4285F4" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="2" name="2 (Fair)" fill="#DB4437" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="3" name="3 (Good)" fill="#F4B400" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="4" name="4 (Very Good)" fill="#0F9D58" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="5" name="5 (Excellent)" fill="#AB47BC" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="w-full chart-box" style={{ minHeight: '300px' }}>
+                                        <h5 className="font-bold text-center mb-4 text-sm text-slate-700 uppercase tracking-wider">Overall Distribution</h5>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={[
+                                                        { name: 'Excellent', value: report.excellents || 0, color: '#AB47BC' },
+                                                        { name: 'Very Good', value: report.veryGood || 0, color: '#0F9D58' },
+                                                        { name: 'Good', value: report.good || 0, color: '#F4B400' },
+                                                        { name: 'Fair', value: report.fair || 0, color: '#DB4437' },
+                                                        { name: 'Poor', value: report.poor || 0, color: '#4285F4' },
+                                                    ].filter(d => d.value > 0)}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    labelLine={true}
+                                                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                                                    outerRadius={110}
+                                                    dataKey="value"
+                                                    style={{ fontSize: '11px', fontWeight: 'bold' }}
+                                                >
+                                                    {
+                                                        [
+                                                            { name: 'Excellent', value: report.excellents || 0, color: '#AB47BC' },
+                                                            { name: 'Very Good', value: report.veryGood || 0, color: '#0F9D58' },
+                                                            { name: 'Good', value: report.good || 0, color: '#F4B400' },
+                                                            { name: 'Fair', value: report.fair || 0, color: '#DB4437' },
+                                                            { name: 'Poor', value: report.poor || 0, color: '#4285F4' },
+                                                        ].filter(d => d.value > 0).map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        ))
+                                                    }
+                                                </Pie>
+                                                <Tooltip />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -528,9 +633,23 @@ export default function FeedbackAnalysisPage() {
                     .rpt-ans-val { font-size: 8px !important; padding: 2px 1px !important; }
                     .rpt-remark { font-size: 7.5px !important; padding: 2px 3px !important; word-wrap: break-word !important; white-space: normal !important; overflow-wrap: break-word !important; }
 
+                    /* Charts Print Fix */
+                    .print-charts-layout {
+                        display: block !important;
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                    }
+                    .chart-box {
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                        margin-bottom: 20px !important;
+                        width: 100% !important;
+                    }
+
                     table { page-break-inside: auto !important; }
                     tr { page-break-inside: avoid !important; }
                     thead { display: table-header-group !important; }
+                    .no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
                 }
             `}} />
         </div>
