@@ -26,6 +26,7 @@ interface SemesterData {
     selectedSubjects: string[];
     payments: PaymentEntry[];
     error?: string;
+    circularFileUrl?: string;
 }
 
 export default function ExamApplicationPage() {
@@ -70,8 +71,9 @@ export default function ExamApplicationPage() {
                         // Regular exams are ONLY for students currently in that exact year and semester
                         return settingSemNum === currentSemNum;
                     } else {
-                        // Supply exams are for any semester up to and including the current semester
-                        return settingSemNum <= currentSemNum;
+                        // Supply exams are ONLY for semesters BEFORE the student's current semester
+                        // (students cannot apply for supplementary of the semester they are currently in)
+                        return settingSemNum < currentSemNum;
                     }
                 });
 
@@ -94,6 +96,7 @@ export default function ExamApplicationPage() {
                         subjects: subs,
                         selectedSubjects: [],
                         payments: [{ utrNumber: "", amountPaid: "", paymentDate: "", isDuplicateUtr: false }],
+                        circularFileUrl: s.circularFileUrl,
                     });
                 }
 
@@ -417,6 +420,13 @@ export default function ExamApplicationPage() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                 <h1 className="mb-6 text-2xl font-extrabold text-slate-900">Exam Application</h1>
 
+                <div className="mb-8 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-md">
+                    <p className="text-sm text-yellow-800 font-bold">
+                        <FaExclamationTriangle className="inline mr-2" />
+                        Information contained here is as recieved from the Examination section in case of any discrepancy contact Respective Department HOD
+                    </p>
+                </div>
+
                 {/* Submitted Applications History */}
                 {existingApps.length > 0 && (
                     <div className="mb-8">
@@ -492,6 +502,10 @@ export default function ExamApplicationPage() {
                             <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-800">
                                 <p className="font-semibold">Applications submitted successfully!</p>
                                 <p className="text-sm">Your consolidated receipt has been downloaded.</p>
+                                <div className="mt-4 p-4 bg-red-100 border-2 border-red-300 rounded-lg text-red-800 font-extrabold text-lg">
+                                    <FaExclamationTriangle className="inline mr-2 text-2xl mb-1" />
+                                    Hard copy as recieved from the office should be filled and submitted to the office for completion of the process of applying for the examinations
+                                </div>
                             </div>
                         )}
 
@@ -539,6 +553,15 @@ export default function ExamApplicationPage() {
                                                         {sem.error && (
                                                             <div className="rounded-lg bg-red-50 p-3 text-xs font-semibold text-red-600 border border-red-100">
                                                                 {sem.error}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Official Circular */}
+                                                        {sem.circularFileUrl && (
+                                                            <div className="mb-4">
+                                                                <a href={sem.circularFileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
+                                                                    📄 View Official Circular
+                                                                </a>
                                                             </div>
                                                         )}
 
@@ -658,6 +681,10 @@ export default function ExamApplicationPage() {
                             <div className="pt-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
                                 <div className="text-sm text-slate-600 bg-amber-50 border border-amber-200 p-3 rounded-xl flex-1 w-full">
                                     <strong className="text-amber-800">Note:</strong> Please submit a printed copy of the transaction screenshot for each semester in the office.
+                                    <div className="mt-3 p-3 bg-red-100 border-2 border-red-300 rounded-lg text-red-800 font-extrabold text-lg leading-tight shadow-sm">
+                                        <FaExclamationTriangle className="inline mr-2 mb-1" />
+                                        Hard copy as recieved from the office should be filled and submitted to the office for completion of the process of applying for the examinations
+                                    </div>
                                 </div>
                                 <button
                                     type="submit"

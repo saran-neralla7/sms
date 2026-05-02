@@ -418,6 +418,7 @@ model ExamApplicationSetting {
   isActive       Boolean           @default(true)
   academicYearId String?           // links to academic year
   regularFee     String?           // Fee for regular semesters
+  circularFileUrl String?          // Uploaded circular PDF or Image
 
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt

@@ -22,7 +22,7 @@ export default function AdminExamApplicationsPage() {
     // Settings state
     const [settings, setSettings] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
-    const [settingForm, setSettingForm] = useState({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "" });
+    const [settingForm, setSettingForm] = useState({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "", circularFileUrl: "" });
     const [editingSettingId, setEditingSettingId] = useState<string | null>(null);
     const [settingsLoading, setSettingsLoading] = useState(true);
 
@@ -46,6 +46,14 @@ export default function AdminExamApplicationsPage() {
     const [overviewDept, setOverviewDept] = useState("ALL");
     const [overviewYear, setOverviewYear] = useState("ALL");
     const [overviewSem, setOverviewSem] = useState("ALL");
+    const [sortField, setSortField] = useState<"rollNumber" | "submittedAt" | null>(null);
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+    const handleSort = (field: "rollNumber" | "submittedAt") => {
+        if (sortField === field) { setSortDir(d => d === "asc" ? "desc" : "asc"); }
+        else { setSortField(field); setSortDir("asc"); }
+    };
+    const sortIcon = (field: "rollNumber" | "submittedAt") => sortField !== field ? " ↕" : sortDir === "asc" ? " ↑" : " ↓";
 
     const refreshStats = () => {
         fetch("/api/exam-applications/stats").then(r => r.ok ? r.json() : []).then(st => setStats(st));
@@ -71,6 +79,34 @@ export default function AdminExamApplicationsPage() {
         return () => window.removeEventListener("popstate", handlePopState);
     }, []);
 
+    const [uploadingFile, setUploadingFile] = useState(false);
+    const [fileInputKey, setFileInputKey] = useState(0);
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingFile(true);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await fetch("/api/upload-circular", {
+                method: "POST",
+                body: formData
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setSettingForm(p => ({ ...p, circularFileUrl: data.url }));
+            } else {
+                alert("Failed to upload circular.");
+            }
+        } catch (err) {
+            alert("Error uploading file.");
+        }
+        setUploadingFile(false);
+    };
+
     const handleSaveSetting = async (e: React.FormEvent) => {
         e.preventDefault();
         const url = "/api/exam-applications/settings";
@@ -90,7 +126,8 @@ export default function AdminExamApplicationsPage() {
             } else {
                 setSettings(prev => [...prev, s]);
             }
-            setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "" });
+            setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "", circularFileUrl: "" });
+            setFileInputKey(k => k + 1);
         }
     };
 
@@ -109,7 +146,8 @@ export default function AdminExamApplicationsPage() {
             startDate: formatDateTime(s.startDate),
             endDate: formatDateTime(s.endDate),
             lateFeeEndDate: formatDateTime(s.lateFeeEndDate),
-            regularFee: s.regularFee || ""
+            regularFee: s.regularFee || "",
+            circularFileUrl: s.circularFileUrl || ""
         });
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
@@ -275,6 +313,12 @@ export default function AdminExamApplicationsPage() {
                             a.rollNumber.toLowerCase().includes(searchLower) || 
                             (a.student?.name || "").toLowerCase().includes(searchLower)
                         );
+                        const sortedFiltered = [...filtered].sort((a: any, b: any) => {
+                            if (!sortField) return 0;
+                            if (sortField === "rollNumber") return sortDir === "asc" ? a.rollNumber.localeCompare(b.rollNumber) : b.rollNumber.localeCompare(a.rollNumber);
+                            if (sortField === "submittedAt") { const da = a.submittedAt ? new Date(a.submittedAt).getTime() : 0; const db = b.submittedAt ? new Date(b.submittedAt).getTime() : 0; return sortDir === "asc" ? da - db : db - da; }
+                            return 0;
+                        });
                         return (
                             <>
 
@@ -286,27 +330,27 @@ export default function AdminExamApplicationsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-                            <table className="w-full text-sm">
+                            <table className="w-full text-sm min-w-[900px]">
                                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                                     <tr>
-                                        <th className="px-4 py-3 whitespace-nowrap">Roll No</th>
-                                        <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Student Name</th>
+                                        <th className="px-4 py-3 whitespace-nowrap cursor-pointer hover:bg-slate-100 select-none" onClick={() => handleSort("rollNumber")}>Roll No{sortIcon("rollNumber")}</th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[180px]">Student Name</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Amount Paid</th>
-                                        <th className="px-4 py-3 whitespace-nowrap font-bold text-slate-800">Total Amount</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Submitted At</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Paid</th>
+                                        <th className="px-4 py-3 whitespace-nowrap font-bold text-slate-800">Total</th>
+                                        <th className="px-4 py-3 whitespace-nowrap cursor-pointer hover:bg-slate-100 select-none" onClick={() => handleSort("submittedAt")}>Submitted At{sortIcon("submittedAt")}</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Payment Date</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Status</th>
-                                        <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[120px]">Status</th>
+                                        <th className="px-4 py-3 whitespace-nowrap bg-white min-w-[180px] sticky right-0 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map((app: any) => {
+                                    {sortedFiltered.map((app: any) => {
                                         const paymentsList = Array.isArray(app.payments) && app.payments.length > 0 ? app.payments : [{ amountPaid: app.amountPaid }];
                                         const totalAmount = paymentsList.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
                                         return (
-                                        <tr key={app.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
+                                        <tr key={app.id} className={`hover:bg-slate-50 transition-colors ${app.status === "PENDING" ? "bg-yellow-50/30" : ""}`}>
+                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer whitespace-nowrap" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
                                             <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
                                             <td className="px-4 py-3 align-top">
                                                 <div className="flex flex-col gap-1.5">
@@ -327,15 +371,15 @@ export default function AdminExamApplicationsPage() {
                                                     ))}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top">₹{totalAmount}</td>
-                                            <td className="px-4 py-3 font-medium text-slate-600">
+                                            <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top whitespace-nowrap">₹{totalAmount}</td>
+                                            <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
                                                 {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
                                             </td>
-                                            <td className="px-4 py-3 font-medium text-slate-600">
+                                            <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
                                                 {app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <div className="flex flex-col gap-2 min-w-[140px]">
+                                                <div className="flex flex-col gap-1.5">
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold w-fit ${
                                                         app.status === "APPROVED" ? "bg-green-100 text-green-700" :
                                                         app.status === "REJECTED" ? "bg-red-100 text-red-700" :
@@ -344,36 +388,37 @@ export default function AdminExamApplicationsPage() {
                                                         {app.status}
                                                     </span>
                                                     {app.editRequested && (
-                                                        <div className="flex flex-col gap-1 w-full max-w-[200px]">
-                                                            <span className="inline-flex rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800 border border-orange-200 w-fit">
-                                                                EDIT REQUESTED
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-500 line-clamp-2" title={app.editRequestReason}>
-                                                                {app.editRequestReason}
-                                                            </span>
-                                                        </div>
+                                                        <span className="inline-flex rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800 border border-orange-200 w-fit whitespace-nowrap">
+                                                            ✏️ EDIT REQ
+                                                        </span>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex gap-2 flex-wrap min-w-[150px]">
-                                                {app.editRequested && (
-                                                    <button
-                                                        onClick={() => setConfirmModal({ id: app.id, type: "APPROVE_EDIT", open: true })}
-                                                        disabled={actionLoading === app.id}
-                                                        className="flex items-center gap-1 rounded-lg bg-orange-100 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-200 disabled:opacity-50 whitespace-nowrap outline-none"
-                                                        title="Delete application & allow resubmit"
-                                                    >
-                                                        Approve Edit
-                                                    </button>
-                                                )}
-                                                <button
-                                                    onClick={() => setConfirmModal({ id: app.id, type: "DELETE", open: true })}
-                                                    disabled={actionLoading === app.id}
-                                                    className="flex items-center gap-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-200 disabled:opacity-50"
-                                                >
-                                                    <FaTrash /> Delete
-                                                </button>
+                                            <td className="px-4 py-3 bg-white sticky right-0 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                                                <div className="flex flex-col gap-1.5 min-w-[160px]">
+                                                    {app.editRequested && (
+                                                        <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1 line-clamp-2" title={app.editRequestReason}>
+                                                            {app.editRequestReason}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {app.editRequested && (
+                                                            <button
+                                                                onClick={() => setConfirmModal({ id: app.id, type: "APPROVE_EDIT", open: true })}
+                                                                disabled={actionLoading === app.id}
+                                                                className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50 whitespace-nowrap outline-none"
+                                                            >
+                                                                ✓ Approve Edit
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => setConfirmModal({ id: app.id, type: "DELETE", open: true })}
+                                                            disabled={actionLoading === app.id}
+                                                            className="flex items-center gap-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-200 disabled:opacity-50 whitespace-nowrap"
+                                                        >
+                                                            <FaTrash /> Delete
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -687,13 +732,22 @@ export default function AdminExamApplicationsPage() {
                                 <label className="block text-xs text-slate-500 mb-1">Regular Fee (₹) (Optional)</label>
                                 <input type="number" placeholder="e.g. 1500" value={(settingForm as any).regularFee || ""} onChange={e => setSettingForm(p => ({ ...p, regularFee: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
                             </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Official Circular (Optional, PDF/Image)</label>
+                                <input key={fileInputKey} type="file" accept=".pdf,image/*" onChange={handleFileUpload} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                                {(settingForm as any).circularFileUrl && (
+                                    <div className="mt-2 text-xs">
+                                        <a href={(settingForm as any).circularFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-bold">View Current Circular</a>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex gap-2">
-                            <button type="submit" className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
+                            <button type="submit" disabled={uploadingFile} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
                                 {editingSettingId ? <FaEdit /> : <FaPlus />} {editingSettingId ? "Update Setting" : "Save Setting"}
                             </button>
                             {editingSettingId && (
-                                <button type="button" onClick={() => { setEditingSettingId(null); setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "" }); }} className="flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 transition-colors">
+                                <button type="button" onClick={() => { setEditingSettingId(null); setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "", circularFileUrl: "" }); setFileInputKey(k => k + 1); }} className="flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 transition-colors">
                                     <FaTimes /> Cancel
                                 </button>
                             )}

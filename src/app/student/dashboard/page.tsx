@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Student } from "@/types";
 import { motion } from "framer-motion";
-import { FaCalendarAlt, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaLayerGroup, FaAward, FaEnvelope } from "react-icons/fa";
+import { FaCalendarAlt, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaLayerGroup, FaAward, FaEnvelope, FaExclamationTriangle } from "react-icons/fa";
 import Image from "next/image";
 import AttendanceGraph from "@/components/AttendanceGraph";
 import { formatISTDate } from "@/lib/dateUtils";
@@ -299,6 +299,12 @@ export default function StudentDashboardPage() {
                             </div>
                         ) : results.length > 0 ? (
                             <div className="space-y-6">
+                                <div className="p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-md">
+                                    <p className="text-sm text-yellow-800 font-bold">
+                                        <FaExclamationTriangle className="inline mr-2" />
+                                        Information contained here is as recieved from the Examination section in case of any discrepancy contact Respective Department HOD
+                                    </p>
+                                </div>
                                 {(() => {
                                     const sortedResults = [...results].sort((a, b) => {
                                         if (a.year !== b.year) return Number(b.year) - Number(a.year);
@@ -405,6 +411,12 @@ export default function StudentDashboardPage() {
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                         {student.internalMarks && student.internalMarks.length > 0 ? (
                             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="mb-6 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-md">
+                                    <p className="text-sm text-yellow-800 font-bold">
+                                        <FaExclamationTriangle className="inline mr-2" />
+                                        Information contained here is as recieved from the Examination section in case of any discrepancy contact Respective Department HOD
+                                    </p>
+                                </div>
                                 <h3 className="mb-4 text-lg font-bold text-slate-900">Recorded Internal Marks</h3>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left text-sm">

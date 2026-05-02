@@ -47,6 +47,22 @@ export default function OfficeExamApplicationsPage() {
     const [viewModal, setViewModal] = useState<any | null>(null);
     const [editReqApplications, setEditReqApplications] = useState<any[]>([]);
     const [loadingEditReqs, setLoadingEditReqs] = useState(false);
+    const [sortField, setSortField] = useState<"rollNumber" | "submittedAt" | null>(null);
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+    const handleSort = (field: "rollNumber" | "submittedAt") => {
+        if (sortField === field) {
+            setSortDir(d => d === "asc" ? "desc" : "asc");
+        } else {
+            setSortField(field);
+            setSortDir("asc");
+        }
+    };
+
+    const sortIcon = (field: "rollNumber" | "submittedAt") => {
+        if (sortField !== field) return " ↕";
+        return sortDir === "asc" ? " ↑" : " ↓";
+    };
 
     useEffect(() => {
         if (mainTab === "edit-requests" && editReqApplications.length === 0) {
@@ -142,6 +158,21 @@ export default function OfficeExamApplicationsPage() {
         (a.student?.name || "").toLowerCase().includes(searchLower)
     );
 
+    const sortedFiltered = [...filtered].sort((a, b) => {
+        if (!sortField) return 0;
+        if (sortField === "rollNumber") {
+            return sortDir === "asc"
+                ? a.rollNumber.localeCompare(b.rollNumber)
+                : b.rollNumber.localeCompare(a.rollNumber);
+        }
+        if (sortField === "submittedAt") {
+            const da = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+            const db = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+            return sortDir === "asc" ? da - db : db - da;
+        }
+        return 0;
+    });
+
     if (loading && !selectedCard) {
         return <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>;
     }
@@ -197,27 +228,31 @@ export default function OfficeExamApplicationsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                            <table className="w-full text-sm min-w-[900px]">
+                                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 sticky top-0">
                                     <tr>
-                                        <th className="px-4 py-3 whitespace-nowrap">Roll No</th>
+                                        <th className="px-4 py-3 whitespace-nowrap cursor-pointer hover:bg-slate-100 select-none" onClick={() => handleSort("rollNumber")}>
+                                            Roll No{sortIcon("rollNumber")}
+                                        </th>
                                         <th className="px-4 py-3 whitespace-nowrap min-w-[150px]">Student Name</th>
                                         <th className="px-4 py-3 whitespace-nowrap">Subjects</th>
                                         <th className="px-4 py-3 whitespace-nowrap">UTR</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Amount Paid</th>
-                                        <th className="px-4 py-3 whitespace-nowrap font-bold text-slate-800">Total Amount</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Submitted At</th>
-                                        <th className="px-4 py-3 whitespace-nowrap">Status</th>
-                                        <th className="px-4 py-3 whitespace-nowrap min-w-[200px]">Actions</th>
+                                        <th className="px-4 py-3 whitespace-nowrap">Paid</th>
+                                        <th className="px-4 py-3 whitespace-nowrap font-bold text-slate-800">Total</th>
+                                        <th className="px-4 py-3 whitespace-nowrap cursor-pointer hover:bg-slate-100 select-none" onClick={() => handleSort("submittedAt")}>
+                                            Submitted At{sortIcon("submittedAt")}
+                                        </th>
+                                        <th className="px-4 py-3 whitespace-nowrap min-w-[130px]">Status</th>
+                                        <th className="px-4 py-3 whitespace-nowrap bg-white min-w-[200px] sticky right-0 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map((app: any) => {
+                                    {sortedFiltered.map((app: any) => {
                                         const paymentsList = Array.isArray(app.payments) && app.payments.length > 0 ? app.payments : [{ amountPaid: app.amountPaid }];
                                         const totalAmount = paymentsList.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
                                         return (
-                                        <tr key={app.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
+                                        <tr key={app.id} className={`hover:bg-slate-50 transition-colors ${app.status === "PENDING" ? "bg-yellow-50/30" : ""}`}>
+                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer whitespace-nowrap" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
                                             <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-wrap gap-1">
@@ -245,12 +280,12 @@ export default function OfficeExamApplicationsPage() {
                                                     ))}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top">₹{totalAmount}</td>
-                                            <td className="px-4 py-3 text-xs text-slate-600">
+                                            <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top whitespace-nowrap">₹{totalAmount}</td>
+                                            <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
                                                 {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <div className="flex flex-col gap-2 min-w-[140px]">
+                                                <div className="flex flex-col gap-1.5">
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold w-fit ${
                                                         app.status === "APPROVED" ? "bg-green-100 text-green-700" :
                                                         app.status === "REJECTED" ? "bg-red-100 text-red-700" :
@@ -262,49 +297,52 @@ export default function OfficeExamApplicationsPage() {
                                                         {app.status}
                                                     </span>
                                                     {app.editRequested && (
-                                                        <div className="flex flex-col gap-1 w-full max-w-[200px]">
-                                                            <span className="inline-flex rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800 border border-orange-200 w-fit">
-                                                                EDIT REQUESTED
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-500 line-clamp-2" title={app.editRequestReason}>
-                                                                {app.editRequestReason}
-                                                            </span>
-                                                        </div>
+                                                        <span className="inline-flex rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800 border border-orange-200 w-fit whitespace-nowrap">
+                                                            ✏️ EDIT REQ
+                                                        </span>
+                                                    )}
+                                                    {app.approvedBy && app.status !== "PENDING" && (
+                                                        <span className="text-[10px] text-slate-400">by {app.approvedBy}</span>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex gap-2 flex-wrap min-w-[150px]">
-                                                {app.editRequested && (
-                                                    <button
-                                                        onClick={() => setConfirmModal({ id: app.id, open: true })}
-                                                        disabled={actionLoading === app.id}
-                                                        className="rounded-lg bg-orange-100 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-200 disabled:opacity-50 whitespace-nowrap outline-none"
-                                                        title="Delete application & allow resubmit"
-                                                    >
-                                                        Approve Edit
-                                                    </button>
-                                                )}
-                                                {app.status === "PENDING" ? (
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => handleApprove(app.id)}
-                                                            disabled={actionLoading === app.id}
-                                                            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-                                                        >
-                                                            Approve
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setRejectModal({ id: app.id, open: true })}
-                                                            disabled={actionLoading === app.id}
-                                                            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                                                        >
-                                                            Reject
-                                                        </button>
+                                            <td className="px-4 py-3 bg-white sticky right-0 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                                                <div className="flex flex-col gap-1.5 min-w-[180px]">
+                                                    {app.editRequested && (
+                                                        <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1 mb-0.5 line-clamp-2" title={app.editRequestReason}>
+                                                            {app.editRequestReason}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {app.editRequested && (
+                                                            <button
+                                                                onClick={() => setConfirmModal({ id: app.id, open: true })}
+                                                                disabled={actionLoading === app.id}
+                                                                className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50 whitespace-nowrap outline-none"
+                                                                title="Delete application & allow resubmit"
+                                                            >
+                                                                ✓ Approve Edit
+                                                            </button>
+                                                        )}
+                                                        {app.status === "PENDING" && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleApprove(app.id)}
+                                                                    disabled={actionLoading === app.id}
+                                                                    className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
+                                                                >
+                                                                    ✓ Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setRejectModal({ id: app.id, open: true })}
+                                                                    disabled={actionLoading === app.id}
+                                                                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                                                                >
+                                                                    ✗ Reject
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </div>
-                                                ) : (
-                                                    <span className="text-xs text-slate-400">{app.approvedBy ? `by ${app.approvedBy}` : "—"}</span>
-                                                )}
                                                 </div>
                                             </td>
                                         </tr>

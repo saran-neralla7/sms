@@ -12,7 +12,7 @@ export default withAuth(
         const isGlobalAdmin = allowedRoles.includes(role as string);
 
         // Allow access to public/student/faculty photos and the new dynamic stream route
-        if (path.startsWith("/student-photos") || path.startsWith("/api/student-photos") || path.startsWith("/api/faculty-photos")) {
+        if (path.startsWith("/student-photos") || path.startsWith("/api/student-photos") || path.startsWith("/api/faculty-photos") || path.startsWith("/uploads/")) {
             return;
         }
 
@@ -69,6 +69,6 @@ export default withAuth(
 
 export const config = {
     matcher: [
-        "/((?!login|api/auth|api/upload-photos|api/student-photos|api/faculty-photos|_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
+        "/((?!login|api/auth|api/upload-photos|api/student-photos|api/faculty-photos|uploads|_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
     ],
 };

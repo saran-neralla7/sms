@@ -48,7 +48,8 @@ export async function POST(request: Request) {
                 lateFeeEndDate: lateFeeEndDate ? new Date(lateFeeEndDate) : null,
                 isActive: true,
                 academicYearId: academicYearId || null,
-                regularFee: body.regularFee || null
+                regularFee: body.regularFee || null,
+                circularFileUrl: body.circularFileUrl || null
             }
         });
 
@@ -88,7 +89,8 @@ export async function PUT(request: Request) {
                 endDate: new Date(endDate),
                 lateFeeEndDate: lateFeeEndDate ? new Date(lateFeeEndDate) : null,
                 academicYearId: academicYearId || null,
-                regularFee: body.regularFee || null
+                regularFee: body.regularFee || null,
+                circularFileUrl: body.circularFileUrl || null
             }
         });
 
