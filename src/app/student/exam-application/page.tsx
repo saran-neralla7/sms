@@ -157,6 +157,18 @@ export default function ExamApplicationPage() {
         });
     };
 
+    const handleSelectAll = (semIdx: number) => {
+        setActiveSemesters(prev => {
+            const next = [...prev];
+            const sem = next[semIdx];
+            const allIds = sem.subjects.map(s => s.id);
+            // If all are already selected, deselect all. Otherwise select all.
+            const allSelected = allIds.length > 0 && allIds.every(id => sem.selectedSubjects.includes(id));
+            sem.selectedSubjects = allSelected ? [] : allIds;
+            return next;
+        });
+    };
+
     const updateSemesterField = (semIdx: number, pIdx: number, field: "utrNumber" | "amountPaid" | "paymentDate", value: string) => {
         setActiveSemesters(prev => {
             const next = [...prev];
@@ -567,7 +579,18 @@ export default function ExamApplicationPage() {
 
                                                         {/* Subject Selection */}
                                                         <div>
-                                                            <h4 className="text-sm font-semibold text-slate-800 mb-3">Select Subjects</h4>
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <h4 className="text-sm font-semibold text-slate-800">Select Subjects</h4>
+                                                                {sem.subjects.length > 0 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleSelectAll(idx)}
+                                                                        className="text-xs font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 px-2 py-1 rounded border border-red-100"
+                                                                    >
+                                                                        {sem.subjects.every(s => sem.selectedSubjects.includes(s.id)) ? "Deselect All" : "Select All"}
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                             {sem.subjects.length === 0 ? (
                                                                 <p className="text-xs text-slate-500 italic">No subjects configured for this semester.</p>
                                                             ) : (
