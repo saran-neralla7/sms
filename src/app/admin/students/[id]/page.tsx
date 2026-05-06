@@ -42,6 +42,11 @@ export default function StudentProfilePage() {
     const [selectedMarkForDelete, setSelectedMarkForDelete] = useState<any>(null);
     const [deleteMarkLoading, setDeleteMarkLoading] = useState(false);
 
+    // Result Edit State
+    const [editResultRecord, setEditResultRecord] = useState<any | null>(null);
+    const [editResultForm, setEditResultForm] = useState<{ sgpa: string, cgpa: string, grades: any[] }>({ sgpa: "", cgpa: "", grades: [] });
+    const [isSavingResult, setIsSavingResult] = useState(false);
+
     useEffect(() => {
         const tab = searchParams?.get("tab");
         if (tab === "attendance" || tab === "results" || tab === "overview") {
@@ -198,6 +203,49 @@ export default function StudentProfilePage() {
             alert("Delete Error");
         } finally {
             setDeleteMarkLoading(false);
+        }
+    };
+
+    const handleEditResultClick = (semResult: any) => {
+        setEditResultRecord(semResult);
+        setEditResultForm({
+            sgpa: semResult.sgpa || "",
+            cgpa: semResult.cgpa || "",
+            grades: Array.isArray(semResult.grades) ? JSON.parse(JSON.stringify(semResult.grades)) : []
+        });
+    };
+
+    const handleResultGradeChange = (subjectCode: string, newGrade: string) => {
+        setEditResultForm(prev => {
+            const newGrades = [...prev.grades];
+            const idx = newGrades.findIndex(g => g.subjectCode === subjectCode);
+            if (idx >= 0) newGrades[idx].grade = newGrade;
+            else newGrades.push({ subjectCode, grade: newGrade });
+            return { ...prev, grades: newGrades };
+        });
+    };
+
+    const handleResultEditSave = async () => {
+        if (!editResultRecord) return;
+        setIsSavingResult(true);
+        try {
+            const res = await fetch(`/api/results/${editResultRecord.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editResultForm),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setResults(prev => prev.map(r => r.id === updated.result.id ? { ...r, ...updated.result } : r));
+                setEditResultRecord(null);
+            } else {
+                alert("Failed to update result");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error updating result");
+        } finally {
+            setIsSavingResult(false);
         }
     };
 
@@ -591,10 +639,11 @@ export default function StudentProfilePage() {
                                     <div className="grid grid-cols-1 gap-4">
                                         {results.map((semResult: any) => (
                                             <div key={semResult.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm transition-all">
-                                                {/* Accordion Header */}
+                                                {/* Accordion Toggle + Edit button row */}
+                                                <div className="flex w-full">
                                                 <button
                                                     onClick={() => document.getElementById(`sem-result-${semResult.id}`)?.classList.toggle("hidden")}
-                                                    className="w-full flex items-center justify-between bg-slate-50 px-6 py-4 hover:bg-slate-100 transition-colors text-left"
+                                                    className="flex-1 flex items-center justify-between bg-slate-50 px-6 py-4 hover:bg-slate-100 transition-colors text-left"
                                                 >
                                                     <div className="flex items-center gap-4">
                                                         <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
@@ -624,6 +673,16 @@ export default function StudentProfilePage() {
                                                         <div className="text-slate-400">▼</div>
                                                     </div>
                                                 </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleEditResultClick(semResult); }}
+                                                    className="px-4 bg-slate-50 border-l border-slate-200 text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors text-xs font-semibold flex items-center gap-1"
+                                                    title="Edit this result"
+                                                >
+                                                    ✏️ Edit
+                                                </button>
+
+                                                </div>
+                                                {/* end header row */}
 
                                                 {/* Accordion Content (Hidden by default) */}
                                                 <div id={`sem-result-${semResult.id}`} className="hidden border-t border-slate-100">
@@ -745,7 +804,7 @@ export default function StudentProfilePage() {
             </div >
 
             {/* Edit Modal */}
-            < EditStudentModal
+            <EditStudentModal
                 isOpen={isEditModalOpen}
                 onClose={() => setIsEditModalOpen(false)}
                 student={student}
@@ -754,6 +813,77 @@ export default function StudentProfilePage() {
                     setIsEditModalOpen(false);
                 }}
             />
+
+            {/* Result Edit Modal */}
+            {editResultRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm overflow-y-auto">
+                    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl my-8">
+                        <div className="flex items-center justify-between mb-6 border-b pb-4">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900">Edit Result</h3>
+                                <p className="text-sm text-slate-500">
+                                    Year {editResultRecord.year} — Semester {editResultRecord.semester}
+                                </p>
+                            </div>
+                            <button onClick={() => setEditResultRecord(null)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">✕</button>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">SGPA</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        value={editResultForm.sgpa}
+                                        onChange={e => setEditResultForm(prev => ({ ...prev, sgpa: e.target.value }))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">CGPA</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        value={editResultForm.cgpa}
+                                        onChange={e => setEditResultForm(prev => ({ ...prev, cgpa: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 className="font-semibold text-slate-800 mb-3 border-b pb-1">Subject Grades</h4>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {editResultForm.grades.map((gradeInfo: any, idx: number) => (
+                                        <div key={idx} className="bg-slate-50 border border-slate-200 p-2 rounded">
+                                            <label className="block text-xs font-bold text-slate-600 mb-1 truncate" title={gradeInfo.subjectCode}>
+                                                {gradeInfo.subjectCode}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="w-full rounded border border-slate-300 px-2 py-1 text-sm text-center uppercase font-bold outline-none focus:border-blue-500"
+                                                value={gradeInfo.grade}
+                                                onChange={e => handleResultGradeChange(gradeInfo.subjectCode, e.target.value)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                {editResultForm.grades.length === 0 && <p className="text-sm text-slate-400">No grades on record.</p>}
+                            </div>
+                        </div>
+
+                        <div className="pt-6 mt-6 border-t flex justify-end gap-3">
+                            <button onClick={() => setEditResultRecord(null)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+                            <button
+                                onClick={handleResultEditSave}
+                                disabled={isSavingResult}
+                                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                {isSavingResult ? "Saving..." : "Save Changes"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Photo Modal */}
             <Modal
