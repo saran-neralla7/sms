@@ -36,6 +36,7 @@ model Section {
   departments           Department[]            @relation("DepartmentToSection")
   FacultySubjectMapping FacultySubjectMapping[]
   feedbackForms         FeedbackForm[]          @relation("FeedbackFormSections")
+  midExamPapers         MidExamPaper[]
 }
 
 model User {
@@ -141,6 +142,8 @@ model Student {
   internalMarks         InternalMark[]
   FeedbackSubmission    FeedbackSubmission[]
   certificates          Certificate[]
+  midExamEntries        MidExamMarksEntry[]
+  assignmentMarks       AssignmentMark[]
 }
 
 model SemesterResult {
@@ -190,6 +193,8 @@ model Subject {
   internalMarks         InternalMark[]
   FacultySubjectMapping FacultySubjectMapping[]
   FeedbackResponse      FeedbackResponse[]
+  midExamPapers         MidExamPaper[]
+  assignmentMarks       AssignmentMark[]
 }
 
 model Period {
@@ -274,6 +279,8 @@ model AcademicYear {
   FeedbackForm            FeedbackForm[]
   alumni                  Alumni[]
   examSettings            ExamApplicationSetting[]
+  midExamPapers           MidExamPaper[]
+  assignmentMarks         AssignmentMark[]
 }
 
 model Batch {
@@ -561,4 +568,165 @@ model Certificate {
   issuedBy        User     @relation(fields: [issuedById], references: [id])
 
   @@unique([certificateType, certificateNo], name: "unique_certificate_number")
+}
+
+// ============================================================
+// MID EXAM + INTERNAL ASSESSMENT MODULE (Additive — Safe)
+// ============================================================
+
+// Configurable evaluation scheme (theory vs lab, scaling rules)
+model EvaluationScheme {
+  id             String   @id @default(uuid())
+  name           String   // e.g. "Theory", "Lab", "Open Elective"
+  subjectType    String   // THEORY | LAB | OPEN_ELECTIVE | PE_LAB
+  mid1MaxMarks   Float    @default(30)
+  mid2MaxMarks   Float    @default(30)
+  mid1ScaledTo   Float    @default(20)
+  mid2ScaledTo   Float    @default(20)
+  assignmentMax  Float    @default(10)
+  internalMax    Float    @default(30)  // final internal total
+  isDefault      Boolean  @default(false)
+  departmentId   String?  // null = global
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  papers         MidExamPaper[]
+}
+
+// Question paper per subject/section/examType
+model MidExamPaper {
+  id               String   @id @default(uuid())
+  academicYearId   String
+  departmentId     String
+  year             String
+  semester         String
+  sectionId        String
+  subjectId        String
+  examType         String   // MID_I | MID_II
+  schemeId         String?
+  totalMarks       Float    @default(30)
+  isFrozen         Boolean  @default(false)
+  frozenAt         DateTime?
+  frozenById       String?
+  createdById      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  academicYear     AcademicYear         @relation(fields: [academicYearId], references: [id])
+  subject          Subject              @relation(fields: [subjectId], references: [id])
+  section          Section              @relation(fields: [sectionId], references: [id])
+  scheme           EvaluationScheme?    @relation(fields: [schemeId], references: [id])
+  questions        MidExamQuestion[]
+  marksEntries     MidExamMarksEntry[]
+  publishRecord    MidExamPublish?
+
+  @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, examType])
+  @@index([academicYearId, departmentId, year, semester, sectionId])
+}
+
+// Top-level questions (Q1, Q2, Q3...)
+model MidExamQuestion {
+  id          String   @id @default(uuid())
+  paperId     String
+  questionNo  Int      // 1, 2, 3...
+  isCompulsory Boolean @default(true)
+  choiceGroupId String? // groups questions for OR logic
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  paper        MidExamPaper       @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  choiceGroup  MidExamChoiceGroup? @relation(fields: [choiceGroupId], references: [id])
+  subQuestions MidExamSubQuestion[]
+
+  @@unique([paperId, questionNo])
+}
+
+// Choice groups for OR logic (Q2 OR Q3 = one group)
+model MidExamChoiceGroup {
+  id        String   @id @default(uuid())
+  paperId   String
+  groupNo   Int      // 1, 2... (group 1 = Q2 OR Q3, group 2 = Q4 OR Q5)
+  createdAt DateTime @default(now())
+
+  questions MidExamQuestion[]
+}
+
+// Subquestions (a, b, c) with CO mapping
+model MidExamSubQuestion {
+  id           String   @id @default(uuid())
+  questionId   String
+  subLabel     String   // "a", "b", "c"
+  questionText String
+  maxMarks     Float
+  coMapping    String   @default("CO1") // CO1–CO10
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  question     MidExamQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  marksEntries MidExamMarksEntry[]
+
+  @@unique([questionId, subLabel])
+}
+
+// Per-student marks entry (one row per student per paper)
+model MidExamMarksEntry {
+  id            String   @id @default(uuid())
+  paperId       String
+  studentId     String
+  subQuestionId String
+  marksObtained Float?   // null = not entered yet
+  isAbsent      Boolean  @default(false)
+  isDraft       Boolean  @default(true)
+  enteredById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  paper       MidExamPaper       @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subQuestion MidExamSubQuestion @relation(fields: [subQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, studentId, subQuestionId])
+  @@index([paperId, studentId])
+}
+
+// Individual assignment marks per student per subject per academic class
+model AssignmentMark {
+  id             String   @id @default(uuid())
+  academicYearId String
+  departmentId   String
+  year           String
+  semester       String
+  sectionId      String
+  subjectId      String
+  studentId      String
+  marksObtained  Float
+  maxMarks       Float    @default(10)
+  enteredById    String
+  isDraft        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject     Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, studentId])
+  @@index([academicYearId, departmentId, year, semester, sectionId])
+}
+
+// Lock/publish state per paper — controls when data writes to InternalMark
+model MidExamPublish {
+  id             String    @id @default(uuid())
+  paperId        String    @unique
+  isLocked       Boolean   @default(false)
+  lockedAt       DateTime?
+  lockedById     String?
+  isPublished    Boolean   @default(false)
+  publishedAt    DateTime?
+  publishedById  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  paper          MidExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 }

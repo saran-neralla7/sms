@@ -141,7 +141,7 @@ export default function StudentDashboardPage() {
                             <TabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")} label="Overview" />
                             <TabButton active={activeTab === "attendance"} onClick={() => setActiveTab("attendance")} label="Attendance" />
                             <TabButton active={activeTab === "results"} onClick={() => setActiveTab("results")} label="Results" />
-                            <TabButton active={activeTab === "internal-marks"} onClick={() => setActiveTab("internal-marks")} label="Internal Marks" />
+                            <TabButton active={activeTab === "internal-marks"} onClick={() => router.push("/student/mid-marks")} label="Internal Marks" />
                             <button
                                 onClick={() => router.push("/student/feedback")}
                                 className="px-6 py-2 rounded-xl text-sm font-bold transition-all duration-200 bg-violet-600 text-white shadow-lg shadow-violet-200 hover:bg-violet-700"
@@ -191,6 +191,22 @@ export default function StudentDashboardPage() {
                                 <InfoItem label="Lab Batch" value={(student.labBatch as any)?.name} icon={<FaLayerGroup />} />
                                 {student.isDetained && <InfoItem label="Status" value="Detained" />}
                                 {student.isLateralEntry && <InfoItem label="Admission" value="Lateral Entry" />}
+                            </div>
+
+                            <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-6 shadow-sm ring-1 ring-blue-100/50">
+                                <h3 className="mb-2 text-lg font-black text-blue-900 tracking-tight flex items-center gap-2">
+                                    <span className="flex h-2 w-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                    CIE & OBE Tracker
+                                </h3>
+                                <p className="text-xs text-blue-700 leading-relaxed mb-4">
+                                    Track continuous internal evaluation (CIE), scaled mid-term grades, and Course Outcome (CO) attainment metrics in real-time.
+                                </p>
+                                <button
+                                    onClick={() => router.push("/student/mid-marks")}
+                                    className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-200/50 transition-all duration-200 hover:scale-[1.02]"
+                                >
+                                    View My Mid Marks & Analytics
+                                </button>
                             </div>
                         </div>
                         

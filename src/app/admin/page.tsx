@@ -212,6 +212,13 @@ export default function AdminDashboardPage() {
             color: "bg-red-50 text-red-600"
         },
         {
+            title: "MID Exam Engine",
+            icon: <FaBook className="h-6 w-6" />,
+            description: "OBE-ready Mid examinations & marks evaluation control panel.",
+            href: "/admin/mid-exam",
+            color: "bg-blue-50 text-blue-600"
+        },
+        {
             title: "Certificates",
             icon: <FaFileAlt className="h-6 w-6" />,
             description: "Generate and manage Transfer Certificates.",

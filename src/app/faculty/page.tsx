@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory } from "react-icons/fa";
+import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
 
@@ -14,7 +14,7 @@ export default function FacultyIndexPage() {
     }
 
     return (
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
             <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
                 <h1 className="text-3xl font-extrabold text-slate-900">Faculty Gateway</h1>
                 <p className="mt-2 text-lg text-slate-600">
@@ -22,7 +22,7 @@ export default function FacultyIndexPage() {
                 </p>
             </motion.div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                     <DashboardCard
                         title="My Dashboard"
@@ -60,6 +60,16 @@ export default function FacultyIndexPage() {
                         description="Generate cumulative attendance reports."
                         href="/reports"
                         colorClass="bg-blue-50 text-blue-600"
+                    />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                    <DashboardCard
+                        title="Mid Exams & OBE"
+                        icon={<FaClipboardList className="h-6 w-6" />}
+                        description="Build question paper blueprints, enter sub-question marks, and submit assignment scores."
+                        href="/faculty/mid-exam"
+                        colorClass="bg-rose-50 text-rose-600"
                     />
                 </motion.div>
             </div>

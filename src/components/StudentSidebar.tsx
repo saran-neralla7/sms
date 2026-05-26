@@ -14,6 +14,7 @@ export default function StudentSidebar() {
 
     const navLinks = [
         { href: "/student/dashboard", label: "My Profile", icon: <FaUserGraduate /> },
+        { href: "/student/mid-marks", label: "My Mid Marks", icon: <FaBookOpen /> },
         { href: "/student/exam-application", label: "Exam Application", icon: <FaFileAlt /> },
         { href: "/student/settings", label: "Settings", icon: <FaCog /> },
     ];
