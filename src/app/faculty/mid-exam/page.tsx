@@ -26,6 +26,7 @@ interface Paper {
   totalMarks: number;
   subjectId: string;
   sectionId: string;
+  section?: { id: string; name: string };
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
   _count?: { marksEntries: number };
 }
@@ -43,10 +44,16 @@ export default function FacultyMidExamPage() {
 
   // Create paper modal
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<{
+    mappingId: string;
+    examType: string;
+    totalMarks: number;
+    sourcePaperId?: string;
+  }>({
     mappingId: "",
     examType: "MID_I",
     totalMarks: 30,
+    sourcePaperId: "",
   });
   const [createError, setCreateError] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -106,6 +113,7 @@ export default function FacultyMidExamPage() {
           subjectId: mapping.subject.id,
           examType: createForm.examType,
           totalMarks: createForm.totalMarks,
+          sourcePaperId: createForm.sourcePaperId || undefined,
         })
       });
       const data = await res.json();
@@ -159,7 +167,7 @@ export default function FacultyMidExamPage() {
               ))}
             </select>
             <button
-              onClick={() => { setCreateForm({ mappingId: mappings[0]?.id || "", examType: "MID_I", totalMarks: 30 }); setShowCreateModal(true); }}
+              onClick={() => { setCreateForm({ mappingId: mappings.filter(m => m.subject.type?.toUpperCase() !== "LAB")[0]?.id || "", examType: "MID_I", totalMarks: 30, sourcePaperId: "" }); setShowCreateModal(true); }}
               className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
             >
               <FaPlus size={12} /> New Paper
@@ -235,92 +243,115 @@ export default function FacultyMidExamPage() {
                       </span>
                     </div>
                   </div>
-
                   {/* MID I and MID II Cards */}
-                  <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
-                    {(["MID_I", "MID_II"] as const).map(examType => {
-                      const paper = examType === "MID_I" ? mid1Paper : mid2Paper;
-                      const label = examType === "MID_I" ? "MID - I" : "MID - II";
-
-                      return (
-                        <div
-                          key={examType}
-                          className={`rounded-xl border-2 p-4 transition-all ${
-                            paper
-                              ? paper.publishRecord?.isPublished
-                                ? "border-emerald-200 bg-emerald-50"
-                                : paper.isFrozen
-                                ? "border-amber-200 bg-amber-50"
-                                : "border-blue-200 bg-blue-50"
-                              : "border-dashed border-slate-200 bg-slate-50"
-                          }`}
+                  {mapping.subject.type?.toUpperCase() === "LAB" ? (
+                    <div className="p-6">
+                      <div className="rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/30 p-4 transition-all hover:bg-purple-50/50">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="font-semibold text-slate-800">Lab Internal Marks (Direct Entry)</span>
+                          <span className="flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                            Max: 50 Marks
+                          </span>
+                        </div>
+                        <p className="mb-4 text-xs text-slate-500">
+                          Enter direct internal evaluation marks out of 50 for the laboratory sessions.
+                        </p>
+                        <button
+                          onClick={() => router.push(`/faculty/mid-exam/lab?subjectId=${mapping.subject.id}&sectionId=${mapping.section.id}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&ayId=${selectedAY}`)}
+                          className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-purple-700 transition-colors"
                         >
-                          <div className="mb-3 flex items-center justify-between">
-                            <span className="font-semibold text-slate-800">{label}</span>
-                            {paper && (
-                              <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                                paper.publishRecord?.isPublished
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : paper.isFrozen
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-blue-100 text-blue-700"
-                              }`}>
-                                {paper.publishRecord?.isPublished ? <><FaCheckCircle /> Published</> :
-                                 paper.isFrozen ? <><FaLock size={10} /> Frozen</> :
-                                 <><FaPen size={10} /> Draft</>}
-                              </span>
-                            )}
-                          </div>
+                          <FaClipboardList size={10} /> Enter Internal Marks
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+                        {(["MID_I", "MID_II"] as const).map(examType => {
+                          const paper = examType === "MID_I" ? mid1Paper : mid2Paper;
+                          const label = examType === "MID_I" ? "MID - I" : "MID - II";
 
-                          {paper ? (
-                            <div className="space-y-2">
-                              <p className="text-xs text-slate-600">Max Marks: <strong>{paper.totalMarks}</strong></p>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => router.push(`/faculty/mid-exam/paper/${paper.id}`)}
-                                  className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition-colors"
-                                >
-                                  <FaPen size={10} /> {paper.isFrozen ? "View Paper" : "Edit Paper"}
-                                </button>
-                                {paper.isFrozen && (
-                                  <button
-                                    onClick={() => router.push(`/faculty/mid-exam/marks/${paper.id}`)}
-                                    className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
-                                  >
-                                    <FaClipboardList size={10} /> Enter Marks
-                                  </button>
+                          return (
+                            <div
+                              key={examType}
+                              className={`rounded-xl border-2 p-4 transition-all ${
+                                paper
+                                  ? paper.publishRecord?.isPublished
+                                    ? "border-emerald-200 bg-emerald-50"
+                                    : paper.isFrozen
+                                    ? "border-amber-200 bg-amber-50"
+                                    : "border-blue-200 bg-blue-50"
+                                  : "border-dashed border-slate-200 bg-slate-50"
+                              }`}
+                            >
+                              <div className="mb-3 flex items-center justify-between">
+                                <span className="font-semibold text-slate-800">{label}</span>
+                                {paper && (
+                                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    paper.publishRecord?.isPublished
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : paper.isFrozen
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-blue-100 text-blue-700"
+                                  }`}>
+                                    {paper.publishRecord?.isPublished ? <><FaCheckCircle /> Published</> :
+                                     paper.isFrozen ? <><FaLock size={10} /> Frozen</> :
+                                     <><FaPen size={10} /> Draft</>}
+                                  </span>
                                 )}
                               </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center py-3">
-                              <p className="mb-2 text-xs text-slate-500">No paper created yet</p>
-                              <button
-                                onClick={() => {
-                                  setCreateForm({ mappingId: mapping.id, examType, totalMarks: 30 });
-                                  setShowCreateModal(true);
-                                }}
-                                className="flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition-colors"
-                              >
-                                <FaPlus size={10} /> Create Paper
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
 
-                  {/* Assignment marks link */}
-                  <div className="border-t border-slate-100 px-6 py-3">
-                    <button
-                      onClick={() => router.push(`/faculty/mid-exam/assignment?subjectId=${mapping.subject.id}&sectionId=${mapping.section.id}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&ayId=${selectedAY}`)}
-                      className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
-                    >
-                      <FaClipboardList size={12} /> Assignment Marks
-                      <FaChevronRight size={10} />
-                    </button>
-                  </div>
+                              {paper ? (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-slate-600">Max Marks: <strong>{paper.totalMarks}</strong></p>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => router.push(`/faculty/mid-exam/paper/${paper.id}`)}
+                                      className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition-colors"
+                                    >
+                                      <FaPen size={10} /> {paper.isFrozen ? "View Paper" : "Edit Paper"}
+                                    </button>
+                                    {paper.isFrozen && (
+                                      <button
+                                        onClick={() => router.push(`/faculty/mid-exam/marks/${paper.id}`)}
+                                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
+                                      >
+                                        <FaClipboardList size={10} /> Enter Marks
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center py-3">
+                                  <p className="mb-2 text-xs text-slate-500">No paper created yet</p>
+                                  <button
+                                    onClick={() => {
+                                      setCreateForm({ mappingId: mapping.id, examType, totalMarks: 30, sourcePaperId: "" });
+                                      setShowCreateModal(true);
+                                    }}
+                                    className="flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition-colors"
+                                  >
+                                    <FaPlus size={10} /> Create Paper
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Assignment marks link */}
+                      <div className="border-t border-slate-100 px-6 py-3">
+                        <button
+                          onClick={() => router.push(`/faculty/mid-exam/assignment?subjectId=${mapping.subject.id}&sectionId=${mapping.section.id}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&ayId=${selectedAY}`)}
+                          className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <FaClipboardList size={12} /> Assignment Marks
+                          <FaChevronRight size={10} />
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </motion.div>
               );
             })}
@@ -347,11 +378,11 @@ export default function FacultyMidExamPage() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Subject & Section</label>
             <select
               value={createForm.mappingId}
-              onChange={e => setCreateForm(f => ({ ...f, mappingId: e.target.value }))}
+              onChange={e => setCreateForm(f => ({ ...f, mappingId: e.target.value, sourcePaperId: "" }))}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select subject...</option>
-              {mappings.map(m => (
+              {mappings.filter(m => m.subject.type?.toUpperCase() !== "LAB").map(m => (
                 <option key={m.id} value={m.id}>
                   {m.subject.code} - {m.subject.name} (Section {m.section.name})
                 </option>
@@ -365,7 +396,7 @@ export default function FacultyMidExamPage() {
               {["MID_I", "MID_II"].map(et => (
                 <button
                   key={et}
-                  onClick={() => setCreateForm(f => ({ ...f, examType: et }))}
+                  onClick={() => setCreateForm(f => ({ ...f, examType: et, sourcePaperId: "" }))}
                   className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
                     createForm.examType === et
                       ? "bg-blue-600 text-white"
@@ -377,6 +408,34 @@ export default function FacultyMidExamPage() {
               ))}
             </div>
           </div>
+
+          {(() => {
+            const selectedMapping = mappings.find(m => m.id === createForm.mappingId);
+            const eligibleClonePapers = selectedMapping
+              ? papers.filter(p => p.subjectId === selectedMapping.subject.id && p.examType === createForm.examType && p.sectionId !== selectedMapping.section.id)
+              : [];
+
+            if (eligibleClonePapers.length === 0) return null;
+
+            return (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Copy Paper layout from Another Section? (Optional)</label>
+                <select
+                  value={createForm.sourcePaperId || ""}
+                  onChange={e => setCreateForm(f => ({ ...f, sourcePaperId: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Create Blank Question Paper</option>
+                  {eligibleClonePapers.map(p => (
+                    <option key={p.id} value={p.id}>
+                      Copy from Section {p.section?.name} (Max: {p.totalMarks}m)
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">Clones all questions, subquestions, and CO mappings instantly from that section.</p>
+              </div>
+            );
+          })()}
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Total Marks</label>

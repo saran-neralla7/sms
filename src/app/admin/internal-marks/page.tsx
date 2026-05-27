@@ -91,6 +91,11 @@ export default function InternalMarksUploadPage() {
             matrixData.flatMap(r => Object.keys(r.marks))
         )).sort();
 
+        const isLabSubject = (subCode: string) => {
+            const studentWithSub = matrixData.find(r => r.marks[subCode]);
+            return !!studentWithSub?.marks[subCode]?.isLab;
+        };
+
         const rows = matrixData.map(r => {
             const row: any = {
                 "Roll Number": r.rollNumber,
@@ -98,8 +103,13 @@ export default function InternalMarksUploadPage() {
                 "Section": r.sectionName,
             };
             subjects.forEach(sub => {
-                row[`${sub} MID-I`] = r.marks[sub]?.MID_I ?? "-";
-                row[`${sub} MID-II`] = r.marks[sub]?.MID_II ?? "-";
+                const isLab = isLabSubject(sub);
+                if (isLab) {
+                    row[`${sub} LAB`] = r.marks[sub]?.LAB ?? "-";
+                } else {
+                    row[`${sub} MID-I`] = r.marks[sub]?.MID_I ?? "-";
+                    row[`${sub} MID-II`] = r.marks[sub]?.MID_II ?? "-";
+                }
             });
             return row;
         });
@@ -491,43 +501,69 @@ export default function InternalMarksUploadPage() {
                             <div className="py-12 text-center text-slate-500">No students found for this selection.</div>
                         ) : (
                             <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
-                                    <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-700">
-                                        <tr>
-                                            <th className="p-3 border-b border-r border-slate-200 sticky left-0 bg-slate-50 z-10" rowSpan={2}>Roll No</th>
-                                            <th className="p-3 border-b border-r border-slate-200 sticky left-[100px] bg-slate-50 z-10" rowSpan={2}>Name</th>
-                                            {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(sub => (
-                                                <th key={sub} className="p-3 border-b border-r border-slate-200 text-center bg-slate-100" colSpan={2}>{sub}</th>
-                                            ))}
-                                        </tr>
-                                        <tr>
-                                            {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(sub => (
-                                                <React.Fragment key={`${sub}-sub`}>
-                                                    <th className="p-2 border-b border-r border-slate-200 text-center bg-blue-50 text-[10px] text-blue-700">MID-I</th>
-                                                    <th className="p-2 border-b border-r border-slate-200 text-center bg-purple-50 text-[10px] text-purple-700">MID-II</th>
-                                                </React.Fragment>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200">
-                                        {matrixData.map((res, idx) => (
-                                            <tr key={res.id} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="p-3 border-r border-slate-200 font-mono font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{res.rollNumber}</td>
-                                                <td className="p-3 border-r border-slate-200 text-slate-700 sticky left-[100px] bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] truncate max-w-[200px]" title={res.name}>{res.name}</td>
-                                                {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(subCode => {
-                                                    const mid1 = res.marks[subCode]?.MID_I ?? "-";
-                                                    const mid2 = res.marks[subCode]?.MID_II ?? "-";
-                                                    return (
-                                                        <React.Fragment key={`${res.id}-${subCode}`}>
-                                                            <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-700">{mid1}</td>
-                                                            <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-700">{mid2}</td>
-                                                        </React.Fragment>
-                                                    );
-                                                })}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                {(() => {
+                                    const isLabSubject = (subCode: string) => {
+                                        const studentWithSub = matrixData.find(r => r.marks[subCode]);
+                                        return !!studentWithSub?.marks[subCode]?.isLab;
+                                    };
+                                    return (
+                                        <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                                            <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-700">
+                                                <tr>
+                                                    <th className="p-3 border-b border-r border-slate-200 sticky left-0 bg-slate-50 z-10" rowSpan={2}>Roll No</th>
+                                                    <th className="p-3 border-b border-r border-slate-200 sticky left-[100px] bg-slate-50 z-10" rowSpan={2}>Name</th>
+                                                    {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(sub => {
+                                                        const isLab = isLabSubject(sub);
+                                                        return (
+                                                            <th key={sub} className={`p-3 border-b border-r border-slate-200 text-center ${isLab ? 'bg-purple-100/50 text-purple-900' : 'bg-slate-100'}`} colSpan={isLab ? 1 : 2}>{sub}</th>
+                                                        );
+                                                    })}
+                                                </tr>
+                                                <tr>
+                                                    {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(sub => {
+                                                        const isLab = isLabSubject(sub);
+                                                        if (isLab) {
+                                                            return (
+                                                                <th key={`${sub}-sub`} className="p-2 border-b border-r border-slate-200 text-center bg-purple-50 text-[10px] text-purple-700 font-bold">LAB</th>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <React.Fragment key={`${sub}-sub`}>
+                                                                <th className="p-2 border-b border-r border-slate-200 text-center bg-blue-50 text-[10px] text-blue-700">MID-I</th>
+                                                                <th className="p-2 border-b border-r border-slate-200 text-center bg-purple-50 text-[10px] text-purple-700">MID-II</th>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200">
+                                                {matrixData.map((res, idx) => (
+                                                    <tr key={res.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="p-3 border-r border-slate-200 font-mono font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{res.rollNumber}</td>
+                                                        <td className="p-3 border-r border-slate-200 text-slate-700 sticky left-[100px] bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] truncate max-w-[200px]" title={res.name}>{res.name}</td>
+                                                        {Array.from(new Set(matrixData.flatMap(r => Object.keys(r.marks)))).sort().map(subCode => {
+                                                            const isLab = isLabSubject(subCode);
+                                                            if (isLab) {
+                                                                const labMark = res.marks[subCode]?.LAB ?? "-";
+                                                                return (
+                                                                    <td key={`${res.id}-${subCode}`} className="p-2 border-r border-slate-200 text-center font-bold text-purple-700 bg-purple-50/20">{labMark}</td>
+                                                                );
+                                                            }
+                                                            const mid1 = res.marks[subCode]?.MID_I ?? "-";
+                                                            const mid2 = res.marks[subCode]?.MID_II ?? "-";
+                                                            return (
+                                                                <React.Fragment key={`${res.id}-${subCode}`}>
+                                                                    <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-700">{mid1}</td>
+                                                                    <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-700">{mid2}</td>
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>

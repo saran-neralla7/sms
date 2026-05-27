@@ -15,7 +15,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     const paper = await prisma.midExamPaper.findUnique({
       where: { id },
       include: {
-        subject: { select: { id: true, name: true, code: true, type: true } },
+        subject: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            type: true,
+            department: { select: { id: true, name: true, code: true } }
+          }
+        },
         section: { select: { id: true, name: true } },
         academicYear: { select: { id: true, name: true } },
         scheme: true,
@@ -94,6 +102,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               questionId: question.id,
               subLabel: sq.subLabel,
               questionText: sq.questionText || "",
+              imageUrl: sq.imageUrl || null,
               maxMarks: sq.maxMarks,
               coMapping: sq.coMapping || "CO1",
               order: idx,

@@ -68,8 +68,11 @@ export async function GET(request: NextRequest) {
             const subjectsObj: any = {};
             
             studentMarks.forEach(mark => {
+                const isLab = mark.subject.type?.toUpperCase() === "LAB";
                 if (!subjectsObj[mark.subject.code]) {
-                    subjectsObj[mark.subject.code] = { MID_I: "-", MID_II: "-", subjectName: mark.subject.name };
+                    subjectsObj[mark.subject.code] = isLab
+                        ? { LAB: "-", subjectName: mark.subject.name, isLab: true }
+                        : { MID_I: "-", MID_II: "-", subjectName: mark.subject.name, isLab: false };
                 }
                 subjectsObj[mark.subject.code][mark.examType] = mark.marksObtained;
             });

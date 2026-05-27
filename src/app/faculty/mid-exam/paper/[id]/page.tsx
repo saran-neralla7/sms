@@ -7,15 +7,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaPlus, FaTrash, FaLock, FaUnlock, FaSpinner, FaSave,
   FaChevronDown, FaChevronUp, FaInfoCircle, FaCheck, FaExclamationTriangle,
-  FaArrowLeft, FaPen, FaClipboardList, FaPrint
+  FaArrowLeft, FaPen, FaClipboardList, FaPrint, FaImage, FaTimes
 } from "react-icons/fa";
 import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
+import MathRenderer from "@/components/MathRenderer";
+import MathToolbar from "@/components/MathToolbar";
 
 interface SubQuestion {
   id?: string;
   subLabel: string;
   questionText: string;
+  imageUrl?: string | null;
   maxMarks: number;
   coMapping: string;
   order?: number;
@@ -40,7 +43,7 @@ interface Paper {
   sectionId: string;
   subjectId: string;
   academicYearId: string;
-  subject: { name: string; code: string; type: string };
+  subject: { name: string; code: string; type: string; department?: { id: string; name: string; code: string } };
   section: { name: string };
   academicYear: { name: string };
   scheme: any;
@@ -92,6 +95,7 @@ export default function QuestionPaperBuilderPage() {
           id: sq.id,
           subLabel: sq.subLabel,
           questionText: sq.questionText,
+          imageUrl: sq.imageUrl || null,
           maxMarks: sq.maxMarks,
           coMapping: sq.coMapping,
         }))
@@ -108,7 +112,7 @@ export default function QuestionPaperBuilderPage() {
     questionNo,
     isCompulsory: true,
     choiceGroupNo: null,
-    subQuestions: [{ subLabel: "a", questionText: "", maxMarks: 5, coMapping: "CO1" }]
+    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1" }]
   });
 
   const addQuestion = () => {
@@ -132,7 +136,7 @@ export default function QuestionPaperBuilderPage() {
     const q = questions[qIdx];
     const labels = ["a", "b", "c", "d", "e", "f"];
     const nextLabel = labels[q.subQuestions.length] || String.fromCharCode(97 + q.subQuestions.length);
-    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", maxMarks: 5, coMapping: "CO1" };
+    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1" };
     setQuestions(prev => prev.map((q, i) => i === qIdx ? { ...q, subQuestions: [...q.subQuestions, newSq] } : q));
   };
 
@@ -485,40 +489,137 @@ export default function QuestionPaperBuilderPage() {
                                 )}
                               </div>
 
-                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-                                <div className="sm:col-span-6">
-                                  <label className="mb-1 block text-xs font-medium text-slate-600">Question Text *</label>
-                                  <textarea
-                                    value={sq.questionText}
-                                    onChange={e => updateSubQuestion(qIdx, sqIdx, "questionText", e.target.value)}
-                                    disabled={!canEdit}
-                                    rows={2}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                                    placeholder="Enter question text..."
-                                  />
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
+                                <div className="sm:col-span-8 space-y-3">
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Question Text *</label>
+                                    {canEdit && (
+                                      <MathToolbar
+                                        onInsert={(latex) => {
+                                          const textarea = document.getElementById(`textarea-${qIdx}-${sqIdx}`) as HTMLTextAreaElement;
+                                          if (textarea) {
+                                            const start = textarea.selectionStart;
+                                            const end = textarea.selectionEnd;
+                                            const text = sq.questionText;
+                                            const before = text.substring(0, start);
+                                            const after = text.substring(end, text.length);
+                                            const newText = before + latex + after;
+                                            updateSubQuestion(qIdx, sqIdx, "questionText", newText);
+                                            setTimeout(() => {
+                                              textarea.focus();
+                                              textarea.setSelectionRange(start + latex.length, start + latex.length);
+                                            }, 50);
+                                          } else {
+                                            updateSubQuestion(qIdx, sqIdx, "questionText", sq.questionText + latex);
+                                          }
+                                        }}
+                                      />
+                                    )}
+                                    <textarea
+                                      id={`textarea-${qIdx}-${sqIdx}`}
+                                      value={sq.questionText}
+                                      onChange={e => updateSubQuestion(qIdx, sqIdx, "questionText", e.target.value)}
+                                      disabled={!canEdit}
+                                      rows={3}
+                                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 font-sans"
+                                      placeholder="Enter question text... (Use $...$ for inline math and $$...$$ for block equations)"
+                                    />
+                                  </div>
+
+                                  {/* Live Preview Box */}
+                                  {sq.questionText.trim() && (
+                                    <div className="rounded-lg border border-blue-100 bg-blue-50/20 p-3 text-xs text-slate-800">
+                                      <p className="text-[10px] font-bold text-blue-500 mb-1.5 uppercase tracking-wider">Live Equation Preview:</p>
+                                      <MathRenderer text={sq.questionText} />
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="sm:col-span-3">
-                                  <label className="mb-1 block text-xs font-medium text-slate-600">Max Marks *</label>
-                                  <input
-                                    type="number"
-                                    value={sq.maxMarks}
-                                    onChange={e => updateSubQuestion(qIdx, sqIdx, "maxMarks", parseFloat(e.target.value) || 0)}
-                                    disabled={!canEdit}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
-                                    min={0.5}
-                                    step={0.5}
-                                  />
-                                </div>
-                                <div className="sm:col-span-3">
-                                  <label className="mb-1 block text-xs font-medium text-slate-600">CO Mapping</label>
-                                  <select
-                                    value={sq.coMapping}
-                                    onChange={e => updateSubQuestion(qIdx, sqIdx, "coMapping", e.target.value)}
-                                    disabled={!canEdit}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
-                                  >
-                                    {CO_OPTIONS.map(co => <option key={co} value={co}>{co}</option>)}
-                                  </select>
+
+                                <div className="sm:col-span-4 space-y-4">
+                                  {/* Diagram Image Selector */}
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Drawing / Circuit Figure (Optional)</label>
+                                    {sq.imageUrl ? (
+                                      <div className="relative rounded-lg border border-slate-200 bg-white p-2 flex flex-col items-center shadow-sm">
+                                        <img
+                                          src={sq.imageUrl}
+                                          alt={`Q${q.questionNo}(${sq.subLabel}) Figure`}
+                                          className="max-h-24 object-contain rounded-md"
+                                        />
+                                        {canEdit && (
+                                          <button
+                                            type="button"
+                                            onClick={() => updateSubQuestion(qIdx, sqIdx, "imageUrl", null)}
+                                            className="absolute top-1 right-1 rounded-full bg-red-100 p-1 text-red-600 hover:bg-red-200 transition-all shadow-sm"
+                                            title="Remove Figure"
+                                          >
+                                            <FaTimes size={10} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      canEdit ? (
+                                        <div className="flex items-center justify-center w-full">
+                                          <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 hover:border-blue-400 transition-all">
+                                            <div className="flex flex-col items-center justify-center pt-2 pb-2">
+                                              <FaImage className="w-5 h-5 text-slate-400 mb-1" />
+                                              <p className="text-[10px] text-slate-500 font-semibold">Click to upload figure</p>
+                                              <p className="text-[9px] text-slate-400">PNG, JPG, SVG</p>
+                                            </div>
+                                            <input
+                                              type="file"
+                                              className="hidden"
+                                              accept="image/*"
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                  if (file.size > 2 * 1024 * 1024) {
+                                                    showToast("File size too large. Keep under 2MB.", "error");
+                                                    return;
+                                                  }
+                                                  const reader = new FileReader();
+                                                  reader.onloadend = () => {
+                                                    updateSubQuestion(qIdx, sqIdx, "imageUrl", reader.result as string);
+                                                  };
+                                                  reader.readAsDataURL(file);
+                                                }
+                                              }}
+                                            />
+                                          </label>
+                                        </div>
+                                      ) : (
+                                        <div className="flex h-24 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-[11px] text-slate-400 italic">
+                                          No figure attached
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="mb-1 block text-xs font-medium text-slate-600">Marks *</label>
+                                      <input
+                                        type="number"
+                                        value={sq.maxMarks}
+                                        onChange={e => updateSubQuestion(qIdx, sqIdx, "maxMarks", parseFloat(e.target.value) || 0)}
+                                        disabled={!canEdit}
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                                        min={0.5}
+                                        step={0.5}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="mb-1 block text-xs font-medium text-slate-600">CO Mapping</label>
+                                      <select
+                                        value={sq.coMapping}
+                                        onChange={e => updateSubQuestion(qIdx, sqIdx, "coMapping", e.target.value)}
+                                        disabled={!canEdit}
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                                      >
+                                        {CO_OPTIONS.map(co => <option key={co} value={co}>{co}</option>)}
+                                      </select>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -614,86 +715,320 @@ export default function QuestionPaperBuilderPage() {
       </div>
 
       {/* Printable Area - Only visible when printing (Times New Roman layout) */}
-      <div className="hidden print:block font-serif text-black p-10 bg-white leading-relaxed" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-        {/* Style tag to ensure crisp printing styles */}
+      <div className="hidden print:block font-serif text-black p-0 bg-white leading-tight printable-paper-area" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+        {/* Style tag to ensure landscape printing and hide all website navigation */}
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
-            @page {
-              size: A4;
-              margin: 20mm;
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              height: 100%;
             }
             body {
+              visibility: hidden !important;
+            }
+            .printable-paper-area, .printable-paper-area * {
+              visibility: visible !important;
+            }
+            .printable-paper-area {
+              visibility: visible !important;
+              display: block !important;
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
               background: white !important;
-              color: black !important;
+            }
+            nav, header, footer, button, .no-print, [role="navigation"], .print\\:hidden {
+              display: none !important;
+              height: 0 !important;
+              overflow: hidden !important;
+            }
+            @page {
+              size: A4 landscape;
+              margin: 6mm !important;
             }
           }
         `}} />
 
-        {/* Institution Header */}
-        <div className="text-center border-b-2 border-black pb-4 mb-6">
-          <h2 className="text-lg font-bold uppercase tracking-wide">GAYATRI VIDYA PARISHAD COLLEGE OF ENGINEERING (Autonomous)</h2>
-          <p className="text-xs font-semibold text-gray-800">Madhurawada, Visakhapatnam - 530048</p>
-          <h3 className="text-base font-bold mt-3 uppercase border border-black inline-block px-6 py-1.5">
-            {paper.examType === "MID_I" ? "MID-TERM I" : "MID-TERM II"} EXAMINATIONS
-          </h3>
-          
-          <div className="grid grid-cols-2 gap-y-1.5 text-left mt-6 text-xs font-semibold">
-            <div>Class & Semester: B.Tech {paper.year} Yr - Sem {paper.semester}</div>
-            <div className="text-right">Academic Year: {paper.academicYear.name}</div>
-            <div>Subject: {paper.subject.name} ({paper.subject.code})</div>
-            <div className="text-right">Max. Marks: {paper.totalMarks} Marks</div>
-          </div>
-        </div>
+        {/* Dynamic Double Column side-by-side Landscape booklet layout */}
+        {(() => {
+          // Reusable Paper Content Renderer for perfect side-by-side alignment
+          const renderPaperCopy = () => {
+            // Flatten all subquestions to construct the columns
+            const cols: { qNo: number; subLabel: string; co: string }[] = [];
+            questions.forEach((q) => {
+              q.subQuestions.forEach((sq) => {
+                const cleanCo = sq.coMapping.replace(/[^0-9]/g, "") || sq.coMapping;
+                cols.push({
+                  qNo: q.questionNo,
+                  subLabel: sq.subLabel,
+                  co: cleanCo,
+                });
+              });
+            });
 
-        {/* Instructions */}
-        <div className="mb-6 text-xs font-semibold italic border-b border-gray-300 pb-2">
-          <span>Instructions: Answer all compulsory questions. For choice questions, answer either one of the choices.</span>
-        </div>
-
-        {/* Printable Questions List */}
-        <div className="space-y-6">
-          {(() => {
-            const elements: React.ReactNode[] = [];
-            let lastChoiceGroup: number | null | undefined = undefined;
-
-            questions.forEach((q, idx) => {
-              if (!q.isCompulsory && q.choiceGroupNo && lastChoiceGroup === q.choiceGroupNo) {
-                elements.push(
-                  <div key={`or-${idx}`} className="text-center font-bold my-4 text-xs italic tracking-widest uppercase">
-                    (OR)
-                  </div>
-                );
+            // Calculate colspans per top-level question
+            const qSpans: { qNo: number; span: number }[] = [];
+            questions.forEach((q) => {
+              const qCols = cols.filter(c => c.qNo === q.questionNo);
+              if (qCols.length > 0) {
+                qSpans.push({ qNo: q.questionNo, span: qCols.length });
               }
+            });
 
-              lastChoiceGroup = q.choiceGroupNo;
-
-              elements.push(
-                <div key={`print-q-${idx}`} className="space-y-2">
-                  <div className="flex font-bold text-xs uppercase">
-                    <span className="w-8">Q{q.questionNo}.</span>
-                    <span className="flex-1">
-                      {q.isCompulsory ? "" : `[Choice Group ${q.choiceGroupNo}]`}
-                    </span>
-                  </div>
-
-                  <div className="pl-8 space-y-3">
-                    {q.subQuestions.map((sq, sqIdx) => (
-                      <div key={sqIdx} className="flex items-start text-xs">
-                        <span className="w-6 font-bold">({sq.subLabel})</span>
-                        <p className="flex-1 pr-6 leading-relaxed text-justify">{sq.questionText}</p>
-                        <span className="whitespace-nowrap font-bold text-right">
-                          [{sq.maxMarks}M · {sq.coMapping}]
-                        </span>
-                      </div>
+            return (
+              <div className="flex flex-col text-[10px] font-serif text-black leading-tight">
+                {/* Registration Number boxes */}
+                <div className="flex justify-end items-center gap-1.5 mb-1">
+                  <span className="text-[9.5px] font-bold">Regd No:</span>
+                  <div className="flex" style={{ border: "1.5px solid black" }}>
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <div key={i} className="bg-white" style={{
+                        width: "15px",
+                        height: "15px",
+                        borderRight: i < 9 ? "1.5px solid black" : "none"
+                      }}></div>
                     ))}
                   </div>
                 </div>
-              );
-            });
 
-            return elements;
-          })()}
-        </div>
+                {/* Institution Title Header */}
+                <div className="text-center mb-1">
+                  <h2 className="text-[11px] font-bold leading-normal">Gayatri Vidya Parishad College for Degree and P G Courses (A)</h2>
+                  <h3 className="text-[10.5px] font-bold leading-normal">Engineering and Technology Program</h3>
+                  <p className="text-[9px] font-semibold tracking-wide text-gray-700">Rushikonda, Visakhapatnam-530 045</p>
+                  
+                  <div className="flex justify-between items-center text-[10px] font-bold px-2 mt-1">
+                    <span>{paper.year === "I" ? "I" : paper.year === "II" ? "II" : paper.year === "III" ? "III" : paper.year === "IV" ? "IV" : paper.year} B. Tech</span>
+                    <span>Branch: {paper.subject.department?.code || "CSE"}</span>
+                    <span>Semester - {paper.semester}</span>
+                  </div>
+                </div>
+
+                {/* Course Details Grid Table */}
+                <table className="w-full border-collapse text-left text-[9.5px] font-bold mb-1" style={{ border: "1.5px solid black" }}>
+                  <tbody>
+                    <tr>
+                      {/* Course Title */}
+                      <td className="p-0.5 pl-1" style={{ width: "16%", borderRight: "1px solid black", borderBottom: "1px solid black" }}>Course Title</td>
+                      <td className="p-0.5 pl-1 uppercase font-bold truncate max-w-[120px]" style={{ width: "22%", borderRight: "1.2px solid black", borderBottom: "1px solid black" }}>
+                        {paper.subject.name}
+                      </td>
+                      {/* MID Label */}
+                      <td className="p-0.5 text-center font-bold text-xs" rowSpan={3} style={{ width: "24%", borderRight: "1.2px solid black", verticalAlign: "middle" }}>
+                        {paper.examType === "MID_I" ? "MID-I" : "MID-II"}
+                      </td>
+                      {/* Course Code */}
+                      <td className="p-0.5 pl-1" style={{ width: "16%", borderRight: "1px solid black", borderBottom: "1px solid black" }}>Course Code</td>
+                      <td className="p-0.5 pl-1 uppercase font-bold truncate max-w-[120px]" style={{ width: "22%", borderBottom: "1px solid black" }}>
+                        {paper.subject.code}
+                      </td>
+                    </tr>
+                    <tr>
+                      {/* Date */}
+                      <td className="p-0.5 pl-1" style={{ borderRight: "1px solid black", borderBottom: "1px solid black" }}>Date</td>
+                      <td className="p-0.5 pl-1" style={{ borderRight: "1.2px solid black", borderBottom: "1px solid black" }}>____________________</td>
+                      {/* Academic Year */}
+                      <td className="p-0.5 pl-1" style={{ borderRight: "1px solid black", borderBottom: "1px solid black" }}>Academic Year</td>
+                      <td className="p-0.5 pl-1" style={{ borderBottom: "1px solid black" }}>{paper.academicYear.name}</td>
+                    </tr>
+                    <tr>
+                      {/* Time */}
+                      <td className="p-0.5 pl-1" style={{ borderRight: "1px solid black" }}>Time</td>
+                      <td className="p-0.5 pl-1" style={{ borderRight: "1.2px solid black" }}>90 min</td>
+                      {/* Max Marks */}
+                      <td className="p-0.5 pl-1" style={{ borderRight: "1px solid black" }}>Max. Marks</td>
+                      <td className="p-0.5 pl-1">{paper.totalMarks}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Signature of Invigilator line */}
+                <div className="relative text-right text-[9.5px] font-bold mb-1.5 px-1">
+                  <div className="absolute left-1/2 -translate-x-1/2 top-0 font-bold">|</div>
+                  Signature of Invigilator: ___________________________
+                </div>
+
+                {/* Dynamic Marks Grid Table */}
+                {cols.length > 0 && (
+                  <table className="w-full border-collapse text-center text-[9px] font-bold mb-1" style={{ border: "1.2px solid black" }}>
+                    <tbody>
+                      {/* Row 1: Top-level Question numbers */}
+                      <tr style={{ borderBottom: "1.2px solid black" }}>
+                        <td className="p-0.5" rowSpan={2} style={{ width: "60px", borderRight: "1.2px solid black" }}></td>
+                        {qSpans.map((qs, i) => (
+                          <td key={i} colSpan={qs.span} style={{ borderRight: "1.2px solid black" }} className="p-0.5">
+                            {qs.qNo}
+                          </td>
+                        ))}
+                        <td className="p-0.5 text-[8.5px]" rowSpan={2} style={{ width: "60px" }}>Total Marks</td>
+                      </tr>
+
+                      {/* Row 2: Sub-question letters */}
+                      <tr style={{ borderBottom: "1.2px solid black" }}>
+                        {cols.map((col, i) => (
+                          <td key={i} style={{ borderRight: "1.2px solid black" }} className="p-0.5 text-[8.5px]">
+                            {col.subLabel}
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* Row 3: Course Outcomes (CO) */}
+                      <tr style={{ borderBottom: "1.2px solid black" }}>
+                        <td style={{ borderRight: "1.2px solid black" }} className="p-0.5">CO</td>
+                        {cols.map((col, i) => (
+                          <td key={i} style={{ borderRight: "1.2px solid black" }} className="p-0.5 text-[8.5px]">
+                            {col.co}
+                          </td>
+                        ))}
+                        <td className="p-0.5"></td>
+                      </tr>
+
+                      {/* Row 4: Marks blank fields */}
+                      <tr>
+                        <td style={{ borderRight: "1.2px solid black" }} className="p-0.5">Marks</td>
+                        {cols.map((_, i) => (
+                          <td key={i} style={{ borderRight: "1.2px solid black" }} className="p-0.5 h-4.5"></td>
+                        ))}
+                        <td className="p-0.5"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Student & Faculty Signatures */}
+                <div className="flex justify-between items-center text-[9.5px] font-bold mb-1.5 px-1" style={{ marginTop: "24px" }}>
+                  <span>Signature of the student</span>
+                  <span>Signature of the faculty</span>
+                </div>
+
+                {/* Main Instruction Heading with dynamic marks formula */}
+                <div className="text-center font-bold text-[10.5px] my-1 border-b border-black pb-1 relative">
+                  <u>Answer All Questions</u>
+                  <span className="absolute right-0 bottom-1 text-[9.5px] font-bold">
+                    {(() => {
+                      const q1 = questions.find(q => q.questionNo === 1);
+                      if (q1) {
+                        const count = q1.subQuestions.length;
+                        const each = q1.subQuestions[0]?.maxMarks || 2;
+                        return `${count}x${each}=${count * each}M`;
+                      }
+                      return "3x2=6M";
+                    })()}
+                  </span>
+                </div>
+
+                {/* Printable Questions List */}
+                <div className="space-y-0.5">
+                  {(() => {
+                    const elements: React.ReactNode[] = [];
+                    let lastChoiceGroup: number | null | undefined = undefined;
+
+                    questions.forEach((q, idx) => {
+                      // Standard italic divider
+                      if (!q.isCompulsory && q.choiceGroupNo && lastChoiceGroup === q.choiceGroupNo) {
+                        elements.push(
+                          <div key={`or-${idx}`} className="text-center font-bold my-0.5 text-[10px] italic">
+                            (or)
+                          </div>
+                        );
+                      }
+
+                      lastChoiceGroup = q.choiceGroupNo;
+
+                      // Long-answers header
+                      if (q.questionNo === 2) {
+                        elements.push(
+                          <div key="long-answers-header" className="flex justify-end text-[9.5px] font-bold my-0.5">
+                            {(() => {
+                              const choiceQuestions = questions.filter(curr => !curr.isCompulsory);
+                              const uniqueGroups = new Set(choiceQuestions.map(curr => curr.choiceGroupNo).filter(Boolean));
+                              const groupCount = uniqueGroups.size || 2;
+                              const representativeQ = choiceQuestions.find(curr => curr.choiceGroupNo === Array.from(uniqueGroups)[0]);
+                              const maxMarks = representativeQ ? representativeQ.subQuestions.reduce((s, sq) => s + sq.maxMarks, 0) : 12;
+                              return `${groupCount}x${maxMarks}=${groupCount * maxMarks}M`;
+                            })()}
+                          </div>
+                        );
+                      }
+
+                      elements.push(
+                        <div key={`print-q-${idx}`} className="space-y-0.5">
+                          <div className="space-y-0.5">
+                            {q.subQuestions.map((sq, sqIdx) => {
+                              const isFirst = sqIdx === 0;
+                              return (
+                                <div key={sqIdx} className="space-y-0.5 py-0.25">
+                                  <div className="flex items-start text-[10px]">
+                                    {/* Merged question number and subquestion letter for compact layout */}
+                                    <span className="flex shrink-0 font-bold" style={{ width: "36px" }}>
+                                      {isFirst ? (
+                                        <>
+                                          <span style={{ width: "18px" }}>{q.questionNo}.</span>
+                                          <span style={{ width: "18px" }}>{sq.subLabel})</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span style={{ width: "18px" }}></span>
+                                          <span style={{ width: "18px" }}>{sq.subLabel})</span>
+                                        </>
+                                      )}
+                                    </span>
+                                    <div className="flex-1 pr-4 text-justify">
+                                      <MathRenderer text={sq.questionText} className="inline font-serif text-black text-[10px] leading-tight" />
+                                      <span className="font-bold ml-1">[{sq.maxMarks}M]</span>
+                                    </div>
+                                  </div>
+                                  {sq.imageUrl && (
+                                    <div className="pl-9 pb-0.5 text-center">
+                                      <img
+                                        src={sq.imageUrl}
+                                        alt={`Figure Q${q.questionNo}(${sq.subLabel})`}
+                                        className="max-h-[80px] mx-auto object-contain border border-black/10 p-0.5 bg-white print:border-none"
+                                      />
+                                      <p className="text-[7.5px] font-bold uppercase tracking-wider mt-0.5 text-gray-700">
+                                        Figure Q{q.questionNo}({sq.subLabel})
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+
+                    return elements;
+                  })()}
+                </div>
+
+                {/* Center aligned All the Best Footer */}
+                <div className="text-center font-bold text-[9.5px] mt-2 italic tracking-widest">
+                  ******All the Best*****
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div className="grid grid-cols-2 gap-8 w-full h-full p-2 bg-white" style={{ minHeight: "100%" }}>
+              {/* Left Column (Copy 1 / Page 1) */}
+              <div className="pr-4" style={{ borderRight: "1px dashed #777" }}>
+                {renderPaperCopy()}
+              </div>
+              
+              {/* Right Column (Copy 2 / Page 2) */}
+              <div className="pl-4">
+                {renderPaperCopy()}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </>
   );

@@ -32,10 +32,11 @@ interface Paper {
   examType: string;
   totalMarks: number;
   isFrozen: boolean;
-  subject: { name: string; code: string; type: string };
+  subject: { name: string; code: string; type: string; department?: { code: string } };
   section: { name: string };
   academicYear: { name: string };
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
+  facultyName?: string;
 }
 
 export default function AdminMidExamDashboard() {
@@ -57,6 +58,7 @@ export default function AdminMidExamDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [pendingPapers, setPendingPapers] = useState<any[]>([]);
   const [schemes, setSchemes] = useState<Scheme[]>([]);
 
   // Scheme Modal Form
@@ -89,12 +91,10 @@ export default function AdminMidExamDashboard() {
     Promise.all([
       fetch("/api/academic-years").then(r => r.json()),
       fetch("/api/departments").then(r => r.json()),
-      fetch("/api/sections").then(r => r.json()),
       fetch("/api/mid-exam/scheme").then(r => r.json())
-    ]).then(([ay, dept, sec, sch]) => {
+    ]).then(([ay, dept, sch]) => {
       setAcademicYears(ay);
       setDepartments(dept);
-      setSections(sec);
       setSchemes(sch);
 
       const currentAY = ay.find((y: any) => y.isCurrent)?.id || ay[0]?.id || "";
@@ -103,25 +103,44 @@ export default function AdminMidExamDashboard() {
       const defaultDept = dept[0]?.id || "";
       setSelectedDept(defaultDept);
 
-      const defaultSec = sec[0]?.id || "";
-      setSelectedSection(defaultSec);
-
       setLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (selectedDept) {
+      fetch(`/api/sections?departmentId=${selectedDept}`)
+        .then(res => res.json())
+        .then(data => {
+          setSections(data);
+          setSelectedSection(data[0]?.id || "");
+        })
+        .catch(err => console.error(err));
+    } else {
+      setSections([]);
+      setSelectedSection("");
+    }
+  }, [selectedDept]);
 
   const loadPapers = useCallback(async () => {
     if (!selectedAY) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/mid-exam/papers?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}`);
-      if (res.ok) {
-        setPapers(await res.json());
+      const sectionQuery = selectedSection ? `&sectionId=${selectedSection}` : "";
+      const [papersRes, pendingRes] = await Promise.all([
+        fetch(`/api/mid-exam/papers?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}${sectionQuery}`),
+        fetch(`/api/mid-exam/papers/pending?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}${sectionQuery}`)
+      ]);
+      if (papersRes.ok) {
+        setPapers(await papersRes.json());
+      }
+      if (pendingRes.ok) {
+        setPendingPapers(await pendingRes.json());
       }
     } finally {
       setLoading(false);
     }
-  }, [selectedAY, selectedDept, selectedYear, selectedSem]);
+  }, [selectedAY, selectedDept, selectedYear, selectedSem, selectedSection]);
 
   useEffect(() => {
     loadPapers();
@@ -142,6 +161,71 @@ export default function AdminMidExamDashboard() {
       } else {
         const data = await res.json();
         showToast(data.error || "Action failed", "error");
+      }
+    } catch (e) {
+      showToast("Network error", "error");
+    } finally {
+      setActionLoading(prev => ({ ...prev, [paperId]: false }));
+    }
+  };
+
+  const handleUnfreezePaper = async (paperId: string) => {
+    setActionLoading(prev => ({ ...prev, [paperId]: true }));
+    try {
+      const res = await fetch(`/api/mid-exam/papers/${paperId}/freeze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unfreeze" })
+      });
+      if (res.ok) {
+        showToast("Paper successfully unfrozen!", "success");
+        await loadPapers();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to unfreeze", "error");
+      }
+    } catch (e) {
+      showToast("Network error", "error");
+    } finally {
+      setActionLoading(prev => ({ ...prev, [paperId]: false }));
+    }
+  };
+
+  const handleFreezePaper = async (paperId: string) => {
+    setActionLoading(prev => ({ ...prev, [paperId]: true }));
+    try {
+      const res = await fetch(`/api/mid-exam/papers/${paperId}/freeze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "freeze" })
+      });
+      if (res.ok) {
+        showToast("Paper successfully frozen!", "success");
+        await loadPapers();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to freeze", "error");
+      }
+    } catch (e) {
+      showToast("Network error", "error");
+    } finally {
+      setActionLoading(prev => ({ ...prev, [paperId]: false }));
+    }
+  };
+
+  const handleDeletePaper = async (paperId: string) => {
+    if (!confirm("Are you sure you want to delete this question paper? This will permanently delete the paper and all associated student marks entered for it. This cannot be undone.")) return;
+    setActionLoading(prev => ({ ...prev, [paperId]: true }));
+    try {
+      const res = await fetch(`/api/mid-exam/papers/${paperId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        showToast("Question paper successfully deleted!", "success");
+        await loadPapers();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to delete paper", "error");
       }
     } catch (e) {
       showToast("Network error", "error");
@@ -372,6 +456,14 @@ export default function AdminMidExamDashboard() {
                 {["1", "2"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Section</span>
+              <select value={selectedSection} onChange={e => setSelectedSection(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">All Sections</option>
+                {sections.map(s => <option key={s.id} value={s.id}>Sec {s.name}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -427,12 +519,24 @@ export default function AdminMidExamDashboard() {
                           <th className="pb-3">Exam</th>
                           <th className="pb-3 text-center">Freeze Status</th>
                           <th className="pb-3 text-center">ERP Publish Status</th>
+                          <th className="pb-3 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50 text-sm">
                         {papers.map(p => (
                           <tr key={p.id} className="hover:bg-slate-50/50">
-                            <td className="py-3 font-semibold text-slate-800">{p.subject.name} <span className="font-mono text-xs font-normal text-slate-400">({p.subject.code})</span></td>
+                            <td className="py-3 font-semibold text-slate-800">
+                              <div>
+                                {p.subject.name}{" "}
+                                <span className="font-mono text-xs font-normal text-slate-400">({p.subject.code})</span>
+                                {p.subject.department?.code && (
+                                  <span className="ml-2 inline-flex items-center rounded-md bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                                    {p.subject.department.code}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs font-normal text-slate-500 mt-0.5">Faculty: <span className="font-semibold text-blue-600">{p.facultyName || "Not Assigned"}</span></div>
+                            </td>
                             <td className="py-3 text-slate-600">Sec {p.section.name}</td>
                             <td className="py-3 text-slate-600 font-medium">{p.examType.replace("_", " ")}</td>
                             <td className="py-3 text-center">
@@ -447,6 +551,92 @@ export default function AdminMidExamDashboard() {
                                 p.publishRecord?.isPublished ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                               }`}>
                                 {p.publishRecord?.isPublished ? "Published" : "Pending"}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right">
+                              <div className="flex justify-end gap-2">
+                                {p.isFrozen ? (
+                                  <button
+                                    onClick={() => handleUnfreezePaper(p.id)}
+                                    disabled={actionLoading[p.id]}
+                                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                    title="Unfreeze paper to allow faculty to edit paper questions and format"
+                                  >
+                                    <FaUnlock size={10} /> Unfreeze
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleFreezePaper(p.id)}
+                                    disabled={actionLoading[p.id]}
+                                    className="flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                                    title="Freeze paper questions and format"
+                                  >
+                                    <FaLock size={10} /> Freeze
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeletePaper(p.id)}
+                                  disabled={actionLoading[p.id]}
+                                  className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                  title="Permanently delete paper and all entered student marks"
+                                >
+                                  <FaTrash size={10} /> Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Pending Question Papers */}
+              <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Pending Question Papers</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Faculty subject mappings with no Mid-Exam paper created yet.</p>
+                  </div>
+                  <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">
+                    {pendingPapers.length} Pending
+                  </span>
+                </div>
+                {pendingPapers.length === 0 ? (
+                  <p className="text-slate-400 text-sm">All assigned papers have been created for the selected filters! 🎉</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-xs font-bold uppercase text-slate-400">
+                          <th className="pb-3">Subject</th>
+                          <th className="pb-3">Section</th>
+                          <th className="pb-3">Exam Type</th>
+                          <th className="pb-3">Assigned Faculty</th>
+                          <th className="pb-3 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-sm">
+                        {pendingPapers.map((pp, idx) => (
+                          <tr key={pp.id || idx} className="hover:bg-slate-50/50">
+                            <td className="py-3 font-semibold text-slate-800">
+                              <div>
+                                {pp.subject.name}{" "}
+                                <span className="font-mono text-xs font-normal text-slate-400">({pp.subject.code})</span>
+                                {pp.subject.department?.code && (
+                                  <span className="ml-2 inline-flex items-center rounded-md bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                                    {pp.subject.department.code}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 text-slate-600">Sec {pp.section.name}</td>
+                            <td className="py-3 text-slate-600 font-semibold text-indigo-600">{pp.examType.replace("_", " ")}</td>
+                            <td className="py-3 text-slate-700 font-medium">{pp.facultyName}</td>
+                            <td className="py-3 text-right">
+                              <span className="inline-flex rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">
+                                Not Created
                               </span>
                             </td>
                           </tr>
@@ -636,20 +826,18 @@ export default function AdminMidExamDashboard() {
 
               <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 max-w-xl space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Target Section *</label>
-                  <select
-                    value={selectedSection}
-                    onChange={e => setSelectedSection(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select section...</option>
-                    {sections.map(s => <option key={s.id} value={s.id}>Section {s.name}</option>)}
-                  </select>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Target Section</label>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 font-medium">
+                    {sections.find(s => s.id === selectedSection)?.name 
+                      ? `Section ${sections.find(s => s.id === selectedSection).name}`
+                      : "No Section Selected (Select a section in the top filters bar to generate report)"}
+                  </div>
                 </div>
 
                 <button
                   onClick={generateMemoPDF}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100"
+                  disabled={!selectedSection}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <FaFilePdf /> Download Marks Memo PDF
                 </button>
