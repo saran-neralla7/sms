@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSlidersH, FaFilePdf, FaCheckCircle, FaLock, FaUnlock, FaSpinner,
-  FaPlus, FaTrash, FaPen, FaClipboardList, FaDownload, FaEye, FaLayerGroup, FaCalendarAlt
+  FaPlus, FaTrash, FaPen, FaClipboardList, FaDownload, FaEye, FaLayerGroup, FaCalendarAlt, FaFileAlt
 } from "react-icons/fa";
 import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -611,6 +611,15 @@ export default function AdminMidExamDashboard() {
                                 >
                                   <FaEye size={10} /> View Marks
                                 </a>
+                                {p.isFrozen && (
+                                  <a
+                                    href={`/faculty/mid-exam/paper/${p.id}`}
+                                    className="flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                                    title="View and print question paper"
+                                  >
+                                    <FaFileAlt size={10} /> View Paper
+                                  </a>
+                                )}
                                 {p.isFrozen ? (
                                   <button
                                     onClick={() => handleUnfreezePaper(p.id)}
@@ -841,6 +850,15 @@ export default function AdminMidExamDashboard() {
                                 >
                                   <FaEye size={10} /> View Marks
                                 </a>
+                                {p.isFrozen && (
+                                  <a
+                                    href={`/faculty/mid-exam/paper/${p.id}`}
+                                    className="flex items-center gap-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                                    title="View and print question paper"
+                                  >
+                                    <FaFileAlt size={10} /> View Paper
+                                  </a>
+                                )}
                                 {isLocked ? (
                                   <button
                                     onClick={() => handlePaperAction(p.id, "unlock")}
