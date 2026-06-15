@@ -58,6 +58,42 @@ export default function MarksGridPage() {
   // Keep ref of cells for keyboard navigation
   const gridRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  // Refs for double scrollbar synchronization
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const topScrollbarRef = useRef<HTMLDivElement | null>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+  const updateScrollWidth = useCallback(() => {
+    if (tableContainerRef.current) {
+      setTableScrollWidth(tableContainerRef.current.scrollWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(updateScrollWidth, 100);
+    window.addEventListener("resize", updateScrollWidth);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updateScrollWidth);
+    };
+  }, [updateScrollWidth, rows, subQuestions]);
+
+  const handleTopScroll = () => {
+    if (topScrollbarRef.current && tableContainerRef.current) {
+      if (tableContainerRef.current.scrollLeft !== topScrollbarRef.current.scrollLeft) {
+        tableContainerRef.current.scrollLeft = topScrollbarRef.current.scrollLeft;
+      }
+    }
+  };
+
+  const handleTableScroll = () => {
+    if (topScrollbarRef.current && tableContainerRef.current) {
+      if (topScrollbarRef.current.scrollLeft !== tableContainerRef.current.scrollLeft) {
+        topScrollbarRef.current.scrollLeft = tableContainerRef.current.scrollLeft;
+      }
+    }
+  };
+
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -377,7 +413,21 @@ export default function MarksGridPage() {
 
         {/* Student Marks Table */}
         <div className="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-slate-100">
-          <div className="overflow-x-auto">
+          {/* Top Scrollbar synchronized with the table */}
+          <div 
+            ref={topScrollbarRef}
+            onScroll={handleTopScroll}
+            className="overflow-x-auto overflow-y-hidden border-b border-slate-100 bg-slate-50/20"
+            style={{ height: "12px" }}
+          >
+            <div style={{ width: `${tableScrollWidth}px`, height: "1px" }} />
+          </div>
+
+          <div 
+            ref={tableContainerRef}
+            onScroll={handleTableScroll}
+            className="overflow-x-auto"
+          >
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
