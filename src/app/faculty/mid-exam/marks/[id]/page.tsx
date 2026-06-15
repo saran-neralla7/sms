@@ -394,7 +394,7 @@ export default function MarksGridPage() {
                       )}
                     </th>
                   ))}
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-800 text-center w-28 border-l border-slate-200 bg-blue-50/50">Total</th>
+                  <th className="sticky right-0 bg-blue-50 z-10 px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-800 text-center w-28 border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -461,7 +461,7 @@ export default function MarksGridPage() {
                     })}
 
                     {/* Calculated Student Total */}
-                    <td className="px-6 py-3.5 text-center font-bold text-sm border-l border-slate-200 bg-blue-50/30">
+                    <td className="sticky right-0 bg-blue-50 z-10 px-6 py-3.5 text-center font-bold text-sm border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                       <span className={row.isAbsent ? "text-red-500 font-mono" : "text-blue-800"}>
                         {row.isAbsent ? "AB" : `${row.calculatedTotal} / ${paper.totalMarks}`}
                       </span>
