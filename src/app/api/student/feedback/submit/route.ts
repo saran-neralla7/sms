@@ -59,6 +59,7 @@ export async function POST(req: Request) {
                     formId,
                     facultyId: res.facultyId || null,
                     subjectId: res.subjectId || null,
+                    sectionId: student.sectionId || null,
                     ratings: res.ratings || {},
                     comments: res.comments || null,
                     overallRating

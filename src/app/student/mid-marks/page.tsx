@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  FaBookOpen, FaAward, FaCalendarAlt, FaChartLine, FaCheckCircle,
-  FaFileInvoice, FaArrowLeft, FaInfoCircle, FaPrint
-} from "react-icons/fa";
+
 import LogoSpinner from "@/components/LogoSpinner";
 
 interface StudentInfo {
@@ -60,15 +57,8 @@ export default function StudentMidMarksPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-slate-900">My Continuous Internal Evaluation (CIE)</h1>
-          <p className="mt-1 text-sm text-slate-500">View real-time MID examinations, assignment scores, and CO-wise academic progress</p>
+          <p className="mt-1 text-sm text-slate-500">View real-time MID examinations and assignment scores</p>
         </div>
-
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm print:hidden"
-        >
-          <FaPrint /> Print CIE Memo
-        </button>
       </div>
 
       {/* Grid Summary */}
@@ -150,30 +140,6 @@ export default function StudentMidMarksPage() {
                   </div>
                 </div>
 
-                {/* CO-wise Analytics progress bars */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                    <FaChartLine /> Outcome-Based Education (OBE) Metrics
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(currentSubject.coPerformance).map(([co, data]: [string, any]) => (
-                      <div key={co} className="rounded-xl border border-slate-100 p-4 space-y-2">
-                        <div className="flex justify-between items-center text-xs font-bold">
-                          <span className="text-slate-700">{co} Attainment</span>
-                          <span className="text-blue-600">{data.percentage}%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                          <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${data.percentage}%` }} />
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-medium">Scored {data.obtained} out of {data.max} mapped question marks.</p>
-                      </div>
-                    ))}
-                    {Object.keys(currentSubject.coPerformance).length === 0 && (
-                      <p className="text-slate-400 text-xs italic col-span-full">No granular outcome mappings available for this subject.</p>
-                    )}
-                  </div>
-                </div>
               </motion.div>
             ) : (
               <div className="text-center py-12 text-slate-400">Select a subject from the left panel.</div>

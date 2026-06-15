@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { FaUserTie, FaBuilding, FaIdCard, FaEnvelope, FaPhone, FaCalendarAlt, FaStar, FaBookOpen, FaClock, FaChalkboard } from "react-icons/fa";
@@ -14,6 +15,16 @@ export default function FacultyDashboard() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<"overview" | "personal-timetable" | "section-timetable">("overview");
+    const [expandedMappings, setExpandedMappings] = useState<Record<string, boolean>>({});
+    const [studentSearch, setStudentSearch] = useState<Record<string, string>>({});
+
+    const toggleMapping = (id: string) => {
+        setExpandedMappings(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const handleSearchChange = (id: string, val: string) => {
+        setStudentSearch(prev => ({ ...prev, [id]: val }));
+    };
 
     useEffect(() => {
         if (status === "unauthenticated") {
@@ -225,6 +236,48 @@ export default function FacultyDashboard() {
                                                         Section {mapping.section?.name}
                                                     </span>
                                                 </div>
+
+                                                <button 
+                                                    onClick={() => toggleMapping(mapping.id)}
+                                                    className="mt-4 flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                                                >
+                                                    <span>{mapping.students?.length || 0} Students Assigned</span>
+                                                    <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                                                        {expandedMappings[mapping.id] ? "Hide ▲" : "View ▼"}
+                                                    </span>
+                                                </button>
+
+                                                {expandedMappings[mapping.id] && (
+                                                    <div className="mt-3 p-3 bg-white border border-slate-100 rounded-lg space-y-3">
+                                                        <input 
+                                                            type="text"
+                                                            placeholder="Search students..."
+                                                            value={studentSearch[mapping.id] || ""}
+                                                            onChange={(e) => handleSearchChange(mapping.id, e.target.value)}
+                                                            className="w-full p-2 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none text-slate-700"
+                                                        />
+                                                        <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
+                                                            {(() => {
+                                                                const query = (studentSearch[mapping.id] || "").toLowerCase();
+                                                                const filtered = (mapping.students || []).filter((s: any) => 
+                                                                    s.name.toLowerCase().includes(query) || 
+                                                                    s.rollNumber.toLowerCase().includes(query)
+                                                                );
+                                                                if (filtered.length === 0) {
+                                                                    return <p className="text-slate-400 text-center py-4 italic text-[11px]">No matching students</p>;
+                                                                }
+                                                                return filtered.map((student: any) => (
+                                                                    <div key={student.id} className="flex justify-between items-center py-2 hover:bg-slate-50 px-1 rounded transition-colors">
+                                                                        <span className="font-semibold text-slate-700">{student.name}</span>
+                                                                        <span className="font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                                                                            {student.rollNumber}
+                                                                        </span>
+                                                                    </div>
+                                                                ));
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -245,7 +298,9 @@ export default function FacultyDashboard() {
                                 </div>
 
                                 <div className="text-center mb-8 border-b border-slate-100 pb-8">
-                                    <span className="text-5xl font-black text-slate-800">{feedback.overallAverage}</span>
+                                    <span className="text-5xl font-black text-slate-800">
+                                        {Number(feedback.overallAverage).toFixed(2)}
+                                    </span>
                                     <div className="flex items-center justify-center text-yellow-500 mt-2 mb-1">
                                         {[1, 2, 3, 4, 5].map(s => (
                                             <FaStar key={s} className={s <= Math.round(Number(feedback.overallAverage)) ? "text-yellow-500" : "text-slate-200"} size={20} />
@@ -261,13 +316,26 @@ export default function FacultyDashboard() {
                                     {feedback.subjectWise.length > 0 ? (
                                         <div className="space-y-4">
                                             {feedback.subjectWise.map((sf: any, idx: number) => (
-                                                <div key={idx} className="flex items-center justify-between">
+                                                <div key={idx} className="flex items-center justify-between border-b border-slate-50 pb-3 last:border-0 last:pb-0">
                                                     <div className="flex-1 pr-4">
-                                                        <p className="text-sm font-bold text-slate-800 truncate">{sf.name}</p>
-                                                        <p className="text-[10px] text-slate-500">{sf.count} responses</p>
+                                                        {sf.subjectId ? (
+                                                            <Link href={`/faculty/feedback/analysis?subjectId=${sf.subjectId}${sf.sectionId ? `&sectionId=${sf.sectionId}` : ''}`} className="hover:text-fuchsia-600 hover:underline">
+                                                                <p className="text-sm font-bold text-slate-800 truncate">{sf.name}</p>
+                                                            </Link>
+                                                        ) : (
+                                                            <p className="text-sm font-bold text-slate-800 truncate">{sf.name}</p>
+                                                        )}
+                                                        <div className="mt-0.5 space-y-0.5">
+                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded inline-block">
+                                                                {sf.departmentCode || "DEPT"}{sf.batchName ? ` (${sf.batchName})` : ''} - Year {sf.year || "N/A"} Sem {sf.semester || "N/A"} - Section {sf.sectionName || "N/A"}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-500">{sf.count} responses</p>
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                                                        <span className="font-bold text-slate-700">{sf.average}</span>
+                                                        <span className="font-bold text-slate-700">
+                                                            {Number(sf.average).toFixed(2)}
+                                                        </span>
                                                         <FaStar className="text-yellow-500" size={14} />
                                                     </div>
                                                 </div>

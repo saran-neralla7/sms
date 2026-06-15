@@ -37,6 +37,7 @@ model Section {
   FacultySubjectMapping FacultySubjectMapping[]
   feedbackForms         FeedbackForm[]          @relation("FeedbackFormSections")
   midExamPapers         MidExamPaper[]
+  FeedbackResponse      FeedbackResponse[]
 }
 
 model User {
@@ -537,6 +538,7 @@ model FeedbackResponse {
   formId        String
   facultyId     String?
   subjectId     String?
+  sectionId     String?
   ratings       Json
   comments      String?
   overallRating Float
@@ -545,6 +547,7 @@ model FeedbackResponse {
   form    FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
   faculty Faculty?     @relation(fields: [facultyId], references: [id], onDelete: Cascade)
   subject Subject?     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  section Section?     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 }
 
 model CertificateCounter {
@@ -660,6 +663,7 @@ model MidExamSubQuestion {
   imageUrl     String?  @db.Text
   maxMarks     Float
   coMapping    String   @default("CO1") // CO1–CO10
+  btLevel      String   @default("L1")  // L1–L6 Bloom's Taxonomy
   order        Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

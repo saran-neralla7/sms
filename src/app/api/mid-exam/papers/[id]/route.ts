@@ -105,6 +105,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               imageUrl: sq.imageUrl || null,
               maxMarks: sq.maxMarks,
               coMapping: sq.coMapping || "CO1",
+              btLevel: sq.btLevel || "L1",
               order: idx,
             }))
           });

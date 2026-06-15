@@ -180,6 +180,7 @@ export async function POST(req: NextRequest) {
               questionText: sq.questionText,
               maxMarks: sq.maxMarks,
               coMapping: sq.coMapping,
+              btLevel: sq.btLevel || "L1",
               order: sq.order
             }
           });

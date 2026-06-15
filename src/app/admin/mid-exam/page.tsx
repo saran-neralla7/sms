@@ -61,6 +61,34 @@ export default function AdminMidExamDashboard() {
   const [pendingPapers, setPendingPapers] = useState<any[]>([]);
   const [schemes, setSchemes] = useState<Scheme[]>([]);
 
+  // Client-side filtering states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedExamType, setSelectedExamType] = useState("ALL");
+
+  const filteredPapers = papers.filter(p => {
+    if (selectedExamType !== "ALL" && p.examType !== selectedExamType) return false;
+    if (searchQuery.trim() !== "") {
+      const q = searchQuery.toLowerCase();
+      const subjectName = p.subject.name.toLowerCase();
+      const subjectCode = p.subject.code.toLowerCase();
+      const facultyName = (p.facultyName || "").toLowerCase();
+      if (!subjectName.includes(q) && !subjectCode.includes(q) && !facultyName.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const filteredPendingPapers = pendingPapers.filter(pp => {
+    if (selectedExamType !== "ALL" && pp.examType !== selectedExamType) return false;
+    if (searchQuery.trim() !== "") {
+      const q = searchQuery.toLowerCase();
+      const subjectName = pp.subject.name.toLowerCase();
+      const subjectCode = pp.subject.code.toLowerCase();
+      const facultyName = (pp.facultyName || "").toLowerCase();
+      if (!subjectName.includes(q) && !subjectCode.includes(q) && !facultyName.includes(q)) return false;
+    }
+    return true;
+  });
+
   // Scheme Modal Form
   const [showSchemeModal, setShowSchemeModal] = useState(false);
   const [schemeForm, setSchemeForm] = useState({
@@ -380,31 +408,30 @@ export default function AdminMidExamDashboard() {
           1: { cellWidth: 25, halign: "center", fontStyle: "bold" },
           2: { cellWidth: 38, halign: "left" }
         },
-        theme: "grid",
-        didDrawPage: (data) => {
-          // Signature lines at the bottom of the final page
-          const finalY = (doc as any).lastAutoTable.finalY || 160;
-          const pageHeight = doc.internal.pageSize.height;
-
-          // Check if signatures fit on current page, if not add page
-          let sigY = finalY + 16;
-          if (sigY > pageHeight - 20) {
-            doc.addPage();
-            sigY = 30;
-          }
-
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(9.5);
-          doc.line(margin, sigY, margin + 45, sigY);
-          doc.text("Signature of Faculty", margin + 22, sigY + 5, { align: "center" });
-
-          doc.line(148 - 22, sigY, 148 + 22, sigY);
-          doc.text("HOD / Director", 148, sigY + 5, { align: "center" });
-
-          doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
-          doc.text("Principal / Controller", 297 - margin - 22, sigY + 5, { align: "center" });
-        }
+        theme: "grid"
       });
+
+      // Signature lines at the bottom of the final page
+      const finalY = (doc as any).lastAutoTable.finalY || 160;
+      const pageHeight = doc.internal.pageSize.height;
+
+      // Check if signatures fit on current page, if not add page
+      let sigY = finalY + 16;
+      if (sigY > pageHeight - 20) {
+        doc.addPage();
+        sigY = 30;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.line(margin, sigY, margin + 45, sigY);
+      doc.text("Signature of Faculty", margin + 22, sigY + 5, { align: "center" });
+
+      doc.line(148 - 22, sigY, 148 + 22, sigY);
+      doc.text("HOD / Director", 148, sigY + 5, { align: "center" });
+
+      doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
+      doc.text("Principal / Controller", 297 - margin - 22, sigY + 5, { align: "center" });
 
       doc.save(`Internal_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`);
       showToast("PDF Memo generated successfully!", "success");
@@ -464,6 +491,26 @@ export default function AdminMidExamDashboard() {
                 {sections.map(s => <option key={s.id} value={s.id}>Sec {s.name}</option>)}
               </select>
             </div>
+
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Exam Type</span>
+              <select value={selectedExamType} onChange={e => setSelectedExamType(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="ALL">All MIDs</option>
+                <option value="MID_I">MID I</option>
+                <option value="MID_II">MID II</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Search</span>
+              <input
+                type="text"
+                placeholder="Subject / Faculty..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+              />
+            </div>
           </div>
         </div>
 
@@ -507,8 +554,10 @@ export default function AdminMidExamDashboard() {
               {/* Recent activity grid */}
               <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Class Question Paper Status</h3>
-                {papers.length === 0 ? (
-                  <p className="text-slate-400 text-sm">No question papers created in the selected semester.</p>
+                {filteredPapers.length === 0 ? (
+                  <p className="text-slate-400 text-sm">
+                    {papers.length === 0 ? "No question papers created in the selected semester." : "No question papers matching search criteria."}
+                  </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -523,7 +572,7 @@ export default function AdminMidExamDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50 text-sm">
-                        {papers.map(p => (
+                        {filteredPapers.map(p => (
                           <tr key={p.id} className="hover:bg-slate-50/50">
                             <td className="py-3 font-semibold text-slate-800">
                               <div>
@@ -555,6 +604,13 @@ export default function AdminMidExamDashboard() {
                             </td>
                             <td className="py-3 text-right">
                               <div className="flex justify-end gap-2">
+                                <a
+                                  href={`/faculty/mid-exam/marks/${p.id}`}
+                                  className="flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                  title="View and edit entered student marks"
+                                >
+                                  <FaEye size={10} /> View Marks
+                                </a>
                                 {p.isFrozen ? (
                                   <button
                                     onClick={() => handleUnfreezePaper(p.id)}
@@ -600,11 +656,13 @@ export default function AdminMidExamDashboard() {
                     <p className="text-xs text-slate-500 mt-0.5">Faculty subject mappings with no Mid-Exam paper created yet.</p>
                   </div>
                   <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">
-                    {pendingPapers.length} Pending
+                    {filteredPendingPapers.length} Pending
                   </span>
                 </div>
-                {pendingPapers.length === 0 ? (
-                  <p className="text-slate-400 text-sm">All assigned papers have been created for the selected filters! 🎉</p>
+                {filteredPendingPapers.length === 0 ? (
+                  <p className="text-slate-400 text-sm">
+                    {pendingPapers.length === 0 ? "All assigned papers have been created for the selected filters! 🎉" : "No pending papers matching search criteria."}
+                  </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -618,7 +676,7 @@ export default function AdminMidExamDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50 text-sm">
-                        {pendingPapers.map((pp, idx) => (
+                        {filteredPendingPapers.map((pp, idx) => (
                           <tr key={pp.id || idx} className="hover:bg-slate-50/50">
                             <td className="py-3 font-semibold text-slate-800">
                               <div>
@@ -753,7 +811,7 @@ export default function AdminMidExamDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 text-sm">
-                      {papers.map(p => {
+                      {filteredPapers.map(p => {
                         const isLocked = p.publishRecord?.isLocked ?? false;
                         const isPublished = p.publishRecord?.isPublished ?? false;
                         const loading = actionLoading[p.id] || false;
@@ -776,6 +834,13 @@ export default function AdminMidExamDashboard() {
                             </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex justify-end gap-2">
+                                <a
+                                  href={`/faculty/mid-exam/marks/${p.id}`}
+                                  className="flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                                  title="View and edit entered student marks"
+                                >
+                                  <FaEye size={10} /> View Marks
+                                </a>
                                 {isLocked ? (
                                   <button
                                     onClick={() => handlePaperAction(p.id, "unlock")}

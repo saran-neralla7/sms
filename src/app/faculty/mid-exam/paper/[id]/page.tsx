@@ -13,6 +13,9 @@ import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
 import MathRenderer from "@/components/MathRenderer";
 import MathToolbar from "@/components/MathToolbar";
+import dynamic from "next/dynamic";
+
+const MathFieldEditor = dynamic(() => import("@/components/MathFieldEditor"), { ssr: false });
 
 interface SubQuestion {
   id?: string;
@@ -21,6 +24,7 @@ interface SubQuestion {
   imageUrl?: string | null;
   maxMarks: number;
   coMapping: string;
+  btLevel: string;
   order?: number;
 }
 
@@ -52,6 +56,14 @@ interface Paper {
 }
 
 const CO_OPTIONS = ["CO1", "CO2", "CO3", "CO4", "CO5", "CO6", "CO7", "CO8", "CO9", "CO10"];
+const BT_LEVEL_OPTIONS = [
+  { value: "L1", label: "L1 - Remember" },
+  { value: "L2", label: "L2 - Understand" },
+  { value: "L3", label: "L3 - Apply" },
+  { value: "L4", label: "L4 - Analyze" },
+  { value: "L5", label: "L5 - Evaluate" },
+  { value: "L6", label: "L6 - Create" },
+];
 
 export default function QuestionPaperBuilderPage() {
   const params = useParams();
@@ -68,6 +80,8 @@ export default function QuestionPaperBuilderPage() {
   const [showFreezeModal, setShowFreezeModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [expandedQ, setExpandedQ] = useState<Set<number>>(new Set([0]));
+  // Track which sub-question fields are in "math mode" (visual equation editor) vs "text mode" (textarea)
+  const [mathModeFields, setMathModeFields] = useState<Set<string>>(new Set());
 
   const role = (session?.user as any)?.role;
   const isAdmin = ["ADMIN", "HOD", "DIRECTOR", "PRINCIPAL"].includes(role);
@@ -98,6 +112,7 @@ export default function QuestionPaperBuilderPage() {
           imageUrl: sq.imageUrl || null,
           maxMarks: sq.maxMarks,
           coMapping: sq.coMapping,
+          btLevel: sq.btLevel || "L1",
         }))
       }));
       setQuestions(qs.length > 0 ? qs : [createDefaultQuestion(1)]);
@@ -112,7 +127,7 @@ export default function QuestionPaperBuilderPage() {
     questionNo,
     isCompulsory: true,
     choiceGroupNo: null,
-    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1" }]
+    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1", btLevel: "L1" }]
   });
 
   const addQuestion = () => {
@@ -136,7 +151,7 @@ export default function QuestionPaperBuilderPage() {
     const q = questions[qIdx];
     const labels = ["a", "b", "c", "d", "e", "f"];
     const nextLabel = labels[q.subQuestions.length] || String.fromCharCode(97 + q.subQuestions.length);
-    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1" };
+    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1", btLevel: "L1" };
     setQuestions(prev => prev.map((q, i) => i === qIdx ? { ...q, subQuestions: [...q.subQuestions, newSq] } : q));
   };
 
@@ -492,38 +507,94 @@ export default function QuestionPaperBuilderPage() {
                               <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
                                 <div className="sm:col-span-8 space-y-3">
                                   <div>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">Question Text *</label>
-                                    {canEdit && (
-                                      <MathToolbar
-                                        onInsert={(latex) => {
-                                          const textarea = document.getElementById(`textarea-${qIdx}-${sqIdx}`) as HTMLTextAreaElement;
-                                          if (textarea) {
-                                            const start = textarea.selectionStart;
-                                            const end = textarea.selectionEnd;
-                                            const text = sq.questionText;
-                                            const before = text.substring(0, start);
-                                            const after = text.substring(end, text.length);
-                                            const newText = before + latex + after;
-                                            updateSubQuestion(qIdx, sqIdx, "questionText", newText);
-                                            setTimeout(() => {
-                                              textarea.focus();
-                                              textarea.setSelectionRange(start + latex.length, start + latex.length);
-                                            }, 50);
-                                          } else {
-                                            updateSubQuestion(qIdx, sqIdx, "questionText", sq.questionText + latex);
-                                          }
-                                        }}
-                                      />
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <label className="block text-xs font-medium text-slate-600">Question Text *</label>
+                                      {canEdit && (
+                                        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const key = `${qIdx}-${sqIdx}`;
+                                              const next = new Set(mathModeFields);
+                                              next.delete(key);
+                                              setMathModeFields(next);
+                                            }}
+                                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                                              !mathModeFields.has(`${qIdx}-${sqIdx}`)
+                                                ? "bg-white text-slate-800 shadow-sm"
+                                                : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                          >
+                                            <span className="flex items-center gap-1"><FaPen className="text-[9px]" /> Text Mode</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const key = `${qIdx}-${sqIdx}`;
+                                              const next = new Set(mathModeFields);
+                                              next.add(key);
+                                              setMathModeFields(next);
+                                            }}
+                                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                                              mathModeFields.has(`${qIdx}-${sqIdx}`)
+                                                ? "bg-blue-600 text-white shadow-sm"
+                                                : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                          >
+                                            <span className="flex items-center gap-1">∑ Math Mode</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {mathModeFields.has(`${qIdx}-${sqIdx}`) ? (
+                                      /* Visual WYSIWYG Math Equation Editor */
+                                      <div className="space-y-2">
+                                        <MathFieldEditor
+                                          id={`mathfield-${qIdx}-${sqIdx}`}
+                                          value={sq.questionText}
+                                          onChange={(latex) => updateSubQuestion(qIdx, sqIdx, "questionText", latex)}
+                                          disabled={!canEdit}
+                                          placeholder="Click here and type a math equation visually..."
+                                        />
+                                        <p className="text-[10px] text-slate-400 italic">Type fractions, integrals, greek letters and more visually. Use the virtual keyboard or type LaTeX directly.</p>
+                                      </div>
+                                    ) : (
+                                      /* Traditional Text Mode with LaTeX helper toolbar */
+                                      <>
+                                        {canEdit && (
+                                          <MathToolbar
+                                            onInsert={(latex) => {
+                                              const textarea = document.getElementById(`textarea-${qIdx}-${sqIdx}`) as HTMLTextAreaElement;
+                                              if (textarea) {
+                                                const start = textarea.selectionStart;
+                                                const end = textarea.selectionEnd;
+                                                const text = sq.questionText;
+                                                const before = text.substring(0, start);
+                                                const after = text.substring(end, text.length);
+                                                const newText = before + latex + after;
+                                                updateSubQuestion(qIdx, sqIdx, "questionText", newText);
+                                                setTimeout(() => {
+                                                  textarea.focus();
+                                                  textarea.setSelectionRange(start + latex.length, start + latex.length);
+                                                }, 50);
+                                              } else {
+                                                updateSubQuestion(qIdx, sqIdx, "questionText", sq.questionText + latex);
+                                              }
+                                            }}
+                                          />
+                                        )}
+                                        <textarea
+                                          id={`textarea-${qIdx}-${sqIdx}`}
+                                          value={sq.questionText}
+                                          onChange={e => updateSubQuestion(qIdx, sqIdx, "questionText", e.target.value)}
+                                          disabled={!canEdit}
+                                          rows={3}
+                                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 font-sans"
+                                          placeholder="Enter question text... (Use $...$ for inline math and $$...$$ for block equations)"
+                                        />
+                                      </>
                                     )}
-                                    <textarea
-                                      id={`textarea-${qIdx}-${sqIdx}`}
-                                      value={sq.questionText}
-                                      onChange={e => updateSubQuestion(qIdx, sqIdx, "questionText", e.target.value)}
-                                      disabled={!canEdit}
-                                      rows={3}
-                                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 font-sans"
-                                      placeholder="Enter question text... (Use $...$ for inline math and $$...$$ for block equations)"
-                                    />
                                   </div>
 
                                   {/* Live Preview Box */}
@@ -595,7 +666,7 @@ export default function QuestionPaperBuilderPage() {
                                     )}
                                   </div>
 
-                                  <div className="grid grid-cols-2 gap-2">
+                                  <div className="grid grid-cols-3 gap-2">
                                     <div>
                                       <label className="mb-1 block text-xs font-medium text-slate-600">Marks *</label>
                                       <input
@@ -617,6 +688,17 @@ export default function QuestionPaperBuilderPage() {
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                                       >
                                         {CO_OPTIONS.map(co => <option key={co} value={co}>{co}</option>)}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="mb-1 block text-xs font-medium text-slate-600">BT Level</label>
+                                      <select
+                                        value={sq.btLevel}
+                                        onChange={e => updateSubQuestion(qIdx, sqIdx, "btLevel", e.target.value)}
+                                        disabled={!canEdit}
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-slate-100"
+                                      >
+                                        {BT_LEVEL_OPTIONS.map(bt => <option key={bt.value} value={bt.value}>{bt.label}</option>)}
                                       </select>
                                     </div>
                                   </div>
