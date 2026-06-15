@@ -384,7 +384,7 @@ export default function MarksGridPage() {
                   <th className="sticky left-0 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 z-10 w-48 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Student Detail</th>
                   <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center w-24">Status</th>
                   {subQuestions.map(sq => (
-                    <th key={sq.id} className="px-4 py-4 text-center w-28 border-l border-slate-100">
+                    <th key={sq.id} className="px-2 py-4 text-center min-w-[80px] w-28 border-l border-slate-100">
                       <p className="text-xs font-bold text-slate-800">{sq.label}</p>
                       <p className="text-[10px] text-slate-500">Max: {sq.maxMarks}m · {sq.coMapping}</p>
                       {sq.choiceGroupNo && (
@@ -434,7 +434,7 @@ export default function MarksGridPage() {
                       const hasError = exceedsMax || isNegative;
 
                       return (
-                        <td key={sq.id} className="px-3 py-3 border-l border-slate-100 align-middle">
+                        <td key={sq.id} className="px-1 py-2 border-l border-slate-100 align-middle">
                           <input
                             ref={el => {
                               gridRefs.current[`${row.studentId}_${sq.id}`] = el;
@@ -444,7 +444,7 @@ export default function MarksGridPage() {
                             onChange={e => handleMarksChange(row.studentId, sq.id, e.target.value)}
                             onKeyDown={e => handleKeyDown(e, rowIndex, sqIndex)}
                             disabled={row.isAbsent || !canEdit}
-                            className={`w-full rounded-xl border px-3 py-1.5 text-center text-sm font-medium focus:outline-none focus:ring-2 transition-all ${
+                            className={`w-full rounded-xl border px-1 py-1.5 text-center text-sm font-medium focus:outline-none focus:ring-2 transition-all ${
                               row.isAbsent
                                 ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
                                 : hasError
