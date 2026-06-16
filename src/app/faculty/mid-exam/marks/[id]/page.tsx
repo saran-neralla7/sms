@@ -107,7 +107,6 @@ export default function MarksGridPage() {
       const record: Record<string, any> = {
         "Roll Number": row.rollNumber,
         "Name": row.name,
-        "Status": row.isAbsent ? "Absent" : "Present",
       };
 
       subQuestions.forEach(sq => {
@@ -115,7 +114,7 @@ export default function MarksGridPage() {
         record[sq.label] = mark;
       });
 
-      record["Total"] = row.isAbsent ? "AB" : `${row.calculatedTotal ?? 0} / ${paper.totalMarks}`;
+      record["Total"] = row.isAbsent ? "AB" : (row.calculatedTotal ?? 0);
       return record;
     });
 
