@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -45,6 +45,61 @@ export default function AdminMidExamDashboard() {
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports">("dashboard");
 
+  // Sync scrollbar refs & state
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [tableWidth, setTableWidth] = useState(0);
+
+  const handleTopScroll = () => {
+    if (topScrollRef.current && tableScrollRef.current) {
+      if (tableScrollRef.current.scrollLeft !== topScrollRef.current.scrollLeft) {
+        tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+      }
+    }
+  };
+
+  const handleTableScroll = () => {
+    if (topScrollRef.current && tableScrollRef.current) {
+      if (topScrollRef.current.scrollLeft !== tableScrollRef.current.scrollLeft) {
+        topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+      }
+    }
+  };
+
+  // Report preview states
+  const [previewData, setPreviewData] = useState<any | null>(null);
+  const [previewType, setPreviewType] = useState<"MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL" | "SUBJECT" | null>(null);
+  const [previewSubjectId, setPreviewSubjectId] = useState<string>("");
+  const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
+  const [fetchingReport, setFetchingReport] = useState<boolean>(false);
+
+  // Keep top scroll width in sync with data table container
+  useEffect(() => {
+    const updateWidth = () => {
+      if (tableScrollRef.current) {
+        setTableWidth(tableScrollRef.current.scrollWidth);
+      }
+    };
+
+    updateWidth();
+
+    // Small delay to ensure table layout is stable
+    const timer = setTimeout(updateWidth, 150);
+
+    let observer: ResizeObserver | null = null;
+    if (tableScrollRef.current) {
+      observer = new ResizeObserver(updateWidth);
+      observer.observe(tableScrollRef.current);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [previewData, previewType]);
+
   // Filters
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -55,6 +110,11 @@ export default function AdminMidExamDashboard() {
   const [selectedYear, setSelectedYear] = useState("1");
   const [selectedSem, setSelectedSem] = useState("1");
   const [selectedSection, setSelectedSection] = useState("");
+
+  useEffect(() => {
+    setPreviewData(null);
+    setPreviewType(null);
+  }, [selectedAY, selectedDept, selectedYear, selectedSem, selectedSection]);
 
   const [loading, setLoading] = useState(true);
   const [papers, setPapers] = useState<Paper[]>([]);
@@ -104,6 +164,25 @@ export default function AdminMidExamDashboard() {
     isDefault: false
   });
   const [savingScheme, setSavingScheme] = useState(false);
+
+  const [selectedReportSubjectId, setSelectedReportSubjectId] = useState("");
+  const [reportSubjects, setReportSubjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (selectedDept && selectedYear && selectedSem) {
+      fetch(`/api/subjects?departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}`)
+        .then(r => r.json())
+        .then(data => {
+          setReportSubjects(data || []);
+          if (data && data.length > 0) {
+            setSelectedReportSubjectId(data[0].id);
+          } else {
+            setSelectedReportSubjectId("");
+          }
+        })
+        .catch(err => console.error("Error fetching subjects for reports:", err));
+    }
+  }, [selectedDept, selectedYear, selectedSem]);
 
   // Lock/Publish Actions Loader
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
@@ -304,8 +383,67 @@ export default function AdminMidExamDashboard() {
     }
   };
 
-  // Generate strict, high-alignment landscape PDF report
-  const generateMemoPDF = async () => {
+  const handleViewClassReport = async (reportType: "MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL") => {
+    if (!selectedSection) {
+      showToast("Select a Section to view reports", "error");
+      return;
+    }
+    setFetchingReport(true);
+    try {
+      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
+      if (!res.ok) {
+        showToast("Failed to fetch report data", "error");
+        return;
+      }
+      const data = await res.json();
+      setPreviewData(data);
+      setPreviewType(reportType);
+      // Scroll to preview element smoothly
+      setTimeout(() => {
+        document.getElementById("report-preview-pane")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to load report", "error");
+    } finally {
+      setFetchingReport(false);
+    }
+  };
+
+  const handleViewSubjectReport = async () => {
+    if (!selectedSection) {
+      showToast("Select a Section to view reports", "error");
+      return;
+    }
+    if (!selectedReportSubjectId) {
+      showToast("Select a Subject to view detailed report", "error");
+      return;
+    }
+    setFetchingReport(true);
+    try {
+      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
+      if (!res.ok) {
+        showToast("Failed to fetch report data", "error");
+        return;
+      }
+      const data = await res.json();
+      setPreviewData(data);
+      setPreviewType("SUBJECT");
+      setPreviewSubjectId(selectedReportSubjectId);
+      // Scroll to preview element smoothly
+      setTimeout(() => {
+        document.getElementById("report-preview-pane")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to load report", "error");
+    } finally {
+      setFetchingReport(false);
+    }
+  };
+
+  // Generate strict, high-alignment landscape PDF reports
+  const generateClassReportPDF = async (reportType: "MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL", cachedData?: any) => {
     if (!selectedSection) {
       showToast("Select a Section to generate reports", "error");
       return;
@@ -313,12 +451,28 @@ export default function AdminMidExamDashboard() {
 
     try {
       showToast("Generating PDF report...", "success");
-      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
-      if (!res.ok) {
-        showToast("Failed to fetch report data", "error");
-        return;
+      let data = cachedData;
+      if (!data) {
+        const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
+        if (!res.ok) {
+          showToast("Failed to fetch report data", "error");
+          return;
+        }
+        data = await res.json();
       }
-      const data = await res.json();
+
+      let logoBase64: string | null = null;
+      try {
+        const logoRes = await fetch("/logo.png");
+        const blob = await logoRes.blob();
+        logoBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        console.error("Could not load logo", e);
+      }
 
       const doc = new jsPDF({
         orientation: "landscape",
@@ -331,31 +485,72 @@ export default function AdminMidExamDashboard() {
       const rows = data.rows || [];
 
       // A4 Landscape is 297mm x 210mm
-      // Margins
       const margin = 12;
 
-      // Header Banner
+      // Header Banner & Logo
+      if (logoBase64) {
+        const getImageType = (base64: string) => {
+          if (base64.startsWith("data:image/png")) return "PNG";
+          if (base64.startsWith("data:image/webp")) return "WEBP";
+          return "JPEG";
+        };
+        try {
+          doc.addImage(logoBase64, getImageType(logoBase64), 15, 10, 20, 20);
+        } catch (e) {
+          console.warn("Failed to add logo to PDF");
+        }
+      }
+
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text("GAYATRI VIDYA PARISHAD COLLEGE OF ENGINEERING (AUTONOMOUS)", 148, 18, { align: "center" });
+      doc.setFontSize(13);
+      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", 40, 15, { align: "left" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text("Rushikonda, Visakhapatnam - 530045.", 40, 20, { align: "left" });
+
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
-      doc.text("Madhurawada, Visakhapatnam - 530048", 148, 23, { align: "center" });
-      doc.setFontSize(12);
-      doc.text("DEPARTMENT OF " + (meta.department || "").toUpperCase(), 148, 29, { align: "center" });
+      const deptText = "DEPARTMENT OF " + (meta.department || "").toUpperCase();
+      const deptLines = doc.splitTextToSize(deptText, 297 - 40 - margin);
+      let currentY = 25;
+      deptLines.forEach((line: string) => {
+        doc.text(line, 40, currentY, { align: "left" });
+        currentY += 5;
+      });
 
       doc.setFontSize(11);
-      doc.text(`INTERNAL ASSESSMENT MEMO - B.TECH ${meta.year} YEAR / ${meta.semester} SEMESTER`, 148, 36, { align: "center" });
+      let reportTitle = "";
+      if (reportType === "MID_I") reportTitle = "MID-I MARKS MEMO";
+      else if (reportType === "MID_II") reportTitle = "MID-II MARKS MEMO";
+      else if (reportType === "ASSIGNMENT") reportTitle = "ASSIGNMENTS MARKS MEMO";
+      else if (reportType === "FINAL") reportTitle = "FINAL INTERNAL MARKS MEMO";
+
+      doc.text(`${reportTitle} - B.TECH ${meta.year} YEAR / ${meta.semester} SEMESTER`, 40, currentY, { align: "left" });
+      currentY += 4;
+
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, currentY, 297 - margin, currentY);
 
       // Class details table
+      const detailsY = currentY + 6;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9.5);
-      doc.text(`Academic Year: ${meta.academicYear}`, margin, 44);
-      doc.text(`Section: ${meta.section}`, 297 - margin - 40, 44);
+      doc.text(`Academic Year: ${meta.academicYear}`, margin, detailsY);
+      doc.text(`Section: ${meta.section}`, 297 - margin - 40, detailsY);
+
+      const tableStartY = detailsY + 6;
 
       // Build Headers dynamically
       const headers = [["S.No", "Roll Number", "Student Name"]];
       for (const sub of subjects) {
-        headers[0].push(`${sub.shortName || sub.code}\nMID I`, `${sub.shortName || sub.code}\nMID II`, `${sub.shortName || sub.code}\nASSIGN`, `${sub.shortName || sub.code}\nTOTAL`);
+        let colHeader = sub.shortName || sub.code;
+        if (reportType === "MID_I") colHeader += `\nMID I (30M)`;
+        else if (reportType === "MID_II") colHeader += `\nMID II (30M)`;
+        else if (reportType === "ASSIGNMENT") colHeader += `\nASSIGN (10M)`;
+        else if (reportType === "FINAL") colHeader += `\nFINAL (30M)`;
+        headers[0].push(colHeader);
       }
 
       // Build Table Data rows
@@ -368,12 +563,17 @@ export default function AdminMidExamDashboard() {
 
         for (const sub of subjects) {
           const marks = r.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
-          rowData.push(
-            marks.mid1 !== null ? marks.mid1.toString() : "AB",
-            marks.mid2 !== null ? marks.mid2.toString() : "AB",
-            marks.assignment !== null ? marks.assignment.toString() : "0",
-            marks.internal.toString()
-          );
+          let displayVal = "";
+          if (reportType === "MID_I") {
+            displayVal = marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB";
+          } else if (reportType === "MID_II") {
+            displayVal = marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB";
+          } else if (reportType === "ASSIGNMENT") {
+            displayVal = marks.assignment !== null ? Math.round(marks.assignment).toString() : "0";
+          } else if (reportType === "FINAL") {
+            displayVal = Math.round(marks.internal).toString();
+          }
+          rowData.push(displayVal);
         }
 
         return rowData;
@@ -383,11 +583,11 @@ export default function AdminMidExamDashboard() {
       autoTable(doc, {
         head: headers,
         body: tableRows,
-        startY: 48,
+        startY: tableStartY,
         margin: { left: margin, right: margin },
         styles: {
-          fontSize: 7.5,
-          cellPadding: 1.5,
+          fontSize: 8,
+          cellPadding: 2,
           halign: "center",
           valign: "middle",
           lineColor: [200, 200, 200],
@@ -398,24 +598,23 @@ export default function AdminMidExamDashboard() {
         headStyles: {
           fillColor: [240, 243, 246],
           textColor: [30, 41, 59],
-          fontSize: 7,
+          fontSize: 7.5,
           fontStyle: "bold",
           lineWidth: 0.2,
           lineColor: [180, 180, 180]
         },
         columnStyles: {
-          0: { cellWidth: 10, halign: "center" },
-          1: { cellWidth: 25, halign: "center", fontStyle: "bold" },
-          2: { cellWidth: 38, halign: "left" }
+          0: { cellWidth: 12, halign: "center" },
+          1: { cellWidth: 28, halign: "center", fontStyle: "bold" },
+          2: { cellWidth: 45, halign: "left" }
         },
         theme: "grid"
       });
 
-      // Signature lines at the bottom of the final page
+      // Signature lines
       const finalY = (doc as any).lastAutoTable.finalY || 160;
       const pageHeight = doc.internal.pageSize.height;
 
-      // Check if signatures fit on current page, if not add page
       let sigY = finalY + 16;
       if (sigY > pageHeight - 20) {
         doc.addPage();
@@ -425,16 +624,227 @@ export default function AdminMidExamDashboard() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
       doc.line(margin, sigY, margin + 45, sigY);
-      doc.text("Signature of Faculty", margin + 22, sigY + 5, { align: "center" });
+      doc.text("Signature of the Faculty", margin + 22, sigY + 5, { align: "center" });
 
-      doc.line(148 - 22, sigY, 148 + 22, sigY);
-      doc.text("HOD / Director", 148, sigY + 5, { align: "center" });
+      doc.line(148 - 30, sigY, 148 + 30, sigY);
+      doc.text("Signature of the Faculty Coordinator", 148, sigY + 5, { align: "center" });
 
       doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
-      doc.text("Principal / Controller", 297 - margin - 22, sigY + 5, { align: "center" });
+      doc.text("Signature of the HOD", 297 - margin - 22, sigY + 5, { align: "center" });
 
-      doc.save(`Internal_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`);
-      showToast("PDF Memo generated successfully!", "success");
+      let filename = "";
+      if (reportType === "MID_I") filename = `MID_I_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`;
+      else if (reportType === "MID_II") filename = `MID_II_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`;
+      else if (reportType === "ASSIGNMENT") filename = `Assignment_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`;
+      else if (reportType === "FINAL") filename = `Final_Internal_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`;
+
+      doc.save(filename);
+      showToast("PDF generated successfully!", "success");
+    } catch (e) {
+      console.error(e);
+      showToast("PDF generation failed", "error");
+    }
+  };
+
+  const generateSubjectReportPDF = async (cachedData?: any) => {
+    if (!selectedSection) {
+      showToast("Select a Section to generate reports", "error");
+      return;
+    }
+    if (!selectedReportSubjectId) {
+      showToast("Select a Subject to generate detailed report", "error");
+      return;
+    }
+
+    try {
+      showToast("Generating Detailed Subject PDF...", "success");
+      let data = cachedData;
+      if (!data) {
+        const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
+        if (!res.ok) {
+          showToast("Failed to fetch report data", "error");
+          return;
+        }
+        data = await res.json();
+      }
+
+      let logoBase64: string | null = null;
+      try {
+        const logoRes = await fetch("/logo.png");
+        const blob = await logoRes.blob();
+        logoBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        console.error("Could not load logo", e);
+      }
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const meta = data.meta;
+      const subjects = data.subjects || [];
+      const rows = data.rows || [];
+
+      const targetSubject = reportSubjects.find(s => s.id === selectedReportSubjectId);
+      const subjectName = targetSubject ? targetSubject.name : "Subject";
+      const subjectCode = targetSubject ? targetSubject.code : "";
+
+      // A4 Portrait is 210mm x 297mm
+      const margin = 12;
+
+      // Header Banner & Logo
+      if (logoBase64) {
+        const getImageType = (base64: string) => {
+          if (base64.startsWith("data:image/png")) return "PNG";
+          if (base64.startsWith("data:image/webp")) return "WEBP";
+          return "JPEG";
+        };
+        try {
+          doc.addImage(logoBase64, getImageType(logoBase64), 15, 10, 20, 20);
+        } catch (e) {
+          console.warn("Failed to add logo to PDF");
+        }
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", 40, 15, { align: "left" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("Rushikonda, Visakhapatnam - 530045.", 40, 20, { align: "left" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      const deptText = "DEPARTMENT OF " + (meta.department || "").toUpperCase();
+      const deptLines = doc.splitTextToSize(deptText, 210 - 40 - margin);
+      let currentY = 25;
+      deptLines.forEach((line: string) => {
+        doc.text(line, 40, currentY, { align: "left" });
+        currentY += 4.5;
+      });
+
+      doc.setFontSize(9.5);
+      const subjectTitleText = `SUBJECT EVALUATION SHEET - ${subjectName.toUpperCase()} (${subjectCode})`;
+      const subjectTitleLines = doc.splitTextToSize(subjectTitleText, 210 - 40 - margin);
+      subjectTitleLines.forEach((line: string) => {
+        doc.text(line, 40, currentY, { align: "left" });
+        currentY += 4.5;
+      });
+      currentY -= 0.5;
+
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, currentY, 210 - margin, currentY);
+
+      // Class details
+      const detailsY = currentY + 6;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.text(`Academic Year: ${meta.academicYear}`, margin, detailsY);
+      doc.text(`Section: ${meta.section} (B.Tech ${meta.year} Yr / ${meta.semester} Sem)`, 210 - margin - 75, detailsY);
+
+      const tableStartY = detailsY + 6;
+
+      // Build Headers
+      const headers = [
+        [
+          "S.No", 
+          "Roll Number", 
+          "Student Name", 
+          "MID-I\n(30M)", 
+          "MID-I\n(20M)", 
+          "MID-II\n(30M)", 
+          "MID-II\n(20M)", 
+          "Assign\n(10M)", 
+          "Final\n(30M)"
+        ]
+      ];
+
+      // Build Table Data rows
+      const tableRows = rows.map((r: any, idx: number) => {
+        const marks = r.subjects[selectedReportSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
+        
+        return [
+          (idx + 1).toString(),
+          r.rollNumber,
+          r.name,
+          marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB",
+          marks.mid1Scaled !== null ? Math.round(marks.mid1Scaled).toString() : "AB",
+          marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB",
+          marks.mid2Scaled !== null ? Math.round(marks.mid2Scaled).toString() : "AB",
+          marks.assignment !== null ? Math.round(marks.assignment).toString() : "0",
+          Math.round(marks.internal).toString()
+        ];
+      });
+
+      // AutoTable styles
+      autoTable(doc, {
+        head: headers,
+        body: tableRows,
+        startY: tableStartY,
+        margin: { left: margin, right: margin },
+        styles: {
+          fontSize: 8.5,
+          cellPadding: 2,
+          halign: "center",
+          valign: "middle",
+          lineColor: [200, 200, 200],
+          lineWidth: 0.1,
+          font: "helvetica",
+          textColor: [40, 40, 40]
+        },
+        headStyles: {
+          fillColor: [240, 243, 246],
+          textColor: [30, 41, 59],
+          fontSize: 8,
+          fontStyle: "bold",
+          lineWidth: 0.2,
+          lineColor: [180, 180, 180]
+        },
+        columnStyles: {
+          0: { cellWidth: 10, halign: "center" },
+          1: { cellWidth: 26, halign: "center", fontStyle: "bold" },
+          2: { cellWidth: 45, halign: "left" },
+          3: { cellWidth: 16 },
+          4: { cellWidth: 16 },
+          5: { cellWidth: 16 },
+          6: { cellWidth: 16 },
+          7: { cellWidth: 16 },
+          8: { cellWidth: 18, fontStyle: "bold" }
+        },
+        theme: "grid"
+      });
+
+      // Signature lines
+      const finalY = (doc as any).lastAutoTable.finalY || 200;
+      const pageHeight = doc.internal.pageSize.height;
+
+      let sigY = finalY + 16;
+      if (sigY > pageHeight - 20) {
+        doc.addPage();
+        sigY = 30;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.line(margin, sigY, margin + 40, sigY);
+      doc.text("Signature of the Faculty", margin + 20, sigY + 5, { align: "center" });
+
+      doc.line(105 - 25, sigY, 105 + 25, sigY);
+      doc.text("Signature of the Faculty Coordinator", 105, sigY + 5, { align: "center" });
+
+      doc.line(210 - margin - 40, sigY, 210 - margin, sigY);
+      doc.text("Signature of the HOD", 210 - margin - 20, sigY + 5, { align: "center" });
+
+      doc.save(`Subject_Marks_Memo_${subjectCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`);
+      showToast("Subject Memo generated successfully!", "success");
     } catch (e) {
       console.error(e);
       showToast("PDF generation failed", "error");
@@ -904,27 +1314,319 @@ export default function AdminMidExamDashboard() {
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Academic & University Print cell Memos</h3>
-                <p className="text-sm text-slate-500">Download fully compiled A4 Landscape university-formatted signature-ready internal evaluation sheets</p>
+                <p className="text-sm text-slate-500">View compiled reports online with dynamic heatmaps or download signature-ready PDFs</p>
               </div>
 
-              <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 max-w-xl space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Target Section</label>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 font-medium">
-                    {sections.find(s => s.id === selectedSection)?.name 
-                      ? `Section ${sections.find(s => s.id === selectedSection).name}`
-                      : "No Section Selected (Select a section in the top filters bar to generate report)"}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {/* Class-Wise Reports Card */}
+                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900">Class-Wise Reports</h4>
+                    <p className="text-xs text-slate-500">Generate section-wide reports for all subjects side-by-side</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Target Section</label>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 font-medium">
+                      {sections.find(s => s.id === selectedSection)?.name 
+                        ? `Section ${sections.find(s => s.id === selectedSection).name}`
+                        : "No Section Selected (Select a section in filters bar)"}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button
+                      onClick={() => handleViewClassReport("MID_I")}
+                      disabled={!selectedSection || fetchingReport}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {fetchingReport && previewType === "MID_I" ? <FaSpinner className="animate-spin" /> : <FaEye />} View MID-I Memo
+                    </button>
+                    <button
+                      onClick={() => handleViewClassReport("MID_II")}
+                      disabled={!selectedSection || fetchingReport}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {fetchingReport && previewType === "MID_II" ? <FaSpinner className="animate-spin" /> : <FaEye />} View MID-II Memo
+                    </button>
+                    <button
+                      onClick={() => handleViewClassReport("ASSIGNMENT")}
+                      disabled={!selectedSection || fetchingReport}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 text-xs font-semibold text-white hover:bg-amber-700 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {fetchingReport && previewType === "ASSIGNMENT" ? <FaSpinner className="animate-spin" /> : <FaEye />} View Assignment Memo
+                    </button>
+                    <button
+                      onClick={() => handleViewClassReport("FINAL")}
+                      disabled={!selectedSection || fetchingReport}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {fetchingReport && previewType === "FINAL" ? <FaSpinner className="animate-spin" /> : <FaEye />} View Final Internals
+                    </button>
                   </div>
                 </div>
 
-                <button
-                  onClick={generateMemoPDF}
-                  disabled={!selectedSection}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <FaFilePdf /> Download Marks Memo PDF
-                </button>
+                {/* Subject-Wise Reports Card */}
+                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900">Subject-Wise Detailed Report</h4>
+                    <p className="text-xs text-slate-500">Generate a detailed evaluation sheet for a specific subject</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Target Subject</label>
+                    <select
+                      value={selectedReportSubjectId}
+                      onChange={e => setSelectedReportSubjectId(e.target.value)}
+                      disabled={reportSubjects.length === 0}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:opacity-70"
+                    >
+                      {reportSubjects.length === 0 ? (
+                        <option value="">No Subjects Found</option>
+                      ) : (
+                        reportSubjects.map(sub => (
+                          <option key={sub.id} value={sub.id}>
+                            {sub.name} ({sub.code})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={handleViewSubjectReport}
+                    disabled={!selectedSection || !selectedReportSubjectId || fetchingReport}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {fetchingReport && previewType === "SUBJECT" ? <FaSpinner className="animate-spin" /> : <FaEye />} View Subject Report
+                  </button>
+                </div>
               </div>
+
+              {/* Report Preview Section */}
+              {previewData && previewType && (
+                <div id="report-preview-pane" className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-6">
+                  <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">
+                        {previewType === "MID_I" && "MID-I Marks Memo"}
+                        {previewType === "MID_II" && "MID-II Marks Memo"}
+                        {previewType === "ASSIGNMENT" && "Assignments Marks Memo"}
+                        {previewType === "FINAL" && "Final Internal Marks Memo"}
+                        {previewType === "SUBJECT" && `Subject Detailed Sheet - ${(reportSubjects.find(s => s.id === previewSubjectId)?.name || "").toUpperCase()}`}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Academic Year: {previewData.meta.academicYear} | Section: {previewData.meta.section} 
+                        {previewType === "SUBJECT" && ` (B.Tech ${previewData.meta.year} Yr / ${previewData.meta.semester} Sem)`}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Heatmap Toggle */}
+                      <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 cursor-pointer hover:bg-slate-100">
+                        <input
+                          type="checkbox"
+                          checked={showHeatmap}
+                          onChange={e => setShowHeatmap(e.target.checked)}
+                          className="rounded text-blue-600 focus:ring-blue-500"
+                        />
+                        Enable Performance Heatmap
+                      </label>
+
+                      {/* Download PDF Trigger */}
+                      <button
+                        onClick={() => {
+                          if (previewType === "SUBJECT") {
+                            generateSubjectReportPDF(previewData);
+                          } else {
+                            generateClassReportPDF(previewType, previewData);
+                          }
+                        }}
+                        className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
+                      >
+                        <FaDownload size={12} /> Download PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Heatmap Legend */}
+                  {showHeatmap && (
+                    <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-500 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3.5 w-3.5 rounded bg-red-500 border border-red-600 inline-block"></span>
+                        Critical / Low (&lt; 12 marks on 30M scale)
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3.5 w-3.5 rounded bg-amber-500 border border-amber-600 inline-block"></span>
+                        Average Performance (12 - 18 marks on 30M scale)
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3.5 w-3.5 rounded bg-emerald-500 border border-emerald-600 inline-block"></span>
+                        Good / Excellent (&gt; 18 marks on 30M scale)
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3.5 w-3.5 rounded bg-slate-400 border border-slate-500 inline-block"></span>
+                        AB (Absent)
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Top Scrollbar for easy scrolling */}
+                  {tableWidth > 0 && (
+                    <div 
+                      ref={topScrollRef} 
+                      onScroll={handleTopScroll} 
+                      className="overflow-x-auto scrollbar-thin"
+                      style={{ width: "100%", scrollbarWidth: "thin" }}
+                    >
+                      <div style={{ width: `${tableWidth}px` }} className="h-[1px]" />
+                    </div>
+                  )}
+
+                  {/* Data Table */}
+                  <div 
+                    ref={tableScrollRef}
+                    onScroll={handleTableScroll}
+                    className="overflow-x-auto rounded-xl border border-slate-150"
+                  >
+                    <table className="w-full text-left text-xs border-collapse">
+                      {previewType !== "SUBJECT" ? (
+                        <>
+                          {/* Class-Wise Report Headers */}
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                              <th className="px-4 py-3 text-center border-r border-slate-205 w-12">S.No</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205 w-28">Roll Number</th>
+                              <th className="px-4 py-3 border-r border-slate-205">Student Name</th>
+                              {previewData.subjects.map((sub: any) => (
+                                <th key={sub.id} className="px-4 py-3 text-center border-r border-slate-205 min-w-[120px]">
+                                  {sub.shortName || sub.name}
+                                  <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
+                                    {previewType === "MID_I" && "MID I (30M)"}
+                                    {previewType === "MID_II" && "MID II (30M)"}
+                                    {previewType === "ASSIGNMENT" && "Assign (10M)"}
+                                    {previewType === "FINAL" && "Final (30M)"}
+                                  </span>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150 text-slate-700">
+                            {previewData.rows.map((row: any, idx: number) => (
+                              <tr key={row.rollNumber} className="hover:bg-slate-50/50">
+                                <td className="px-4 py-2.5 text-center border-r border-slate-205">{idx + 1}</td>
+                                <td className="px-4 py-2.5 text-center font-bold text-slate-800 border-r border-slate-205">{row.rollNumber}</td>
+                                <td className="px-4 py-2.5 font-medium border-r border-slate-205">{row.name}</td>
+                                {previewData.subjects.map((sub: any) => {
+                                  const marksObj = row.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+                                  let val: number | null = null;
+                                  let displayVal = "";
+                                  const maxMarks = previewType === "ASSIGNMENT" ? 10 : 30;
+
+                                  if (previewType === "MID_I") {
+                                    val = marksObj.mid1;
+                                    displayVal = val !== null ? Math.round(val).toString() : "AB";
+                                  } else if (previewType === "MID_II") {
+                                    val = marksObj.mid2;
+                                    displayVal = val !== null ? Math.round(val).toString() : "AB";
+                                  } else if (previewType === "ASSIGNMENT") {
+                                    val = marksObj.assignment;
+                                    displayVal = val !== null ? Math.round(val).toString() : "0";
+                                  } else if (previewType === "FINAL") {
+                                    val = marksObj.internal;
+                                    displayVal = val !== null ? Math.round(val).toString() : "0";
+                                  }
+
+                                  // Get dynamic color class
+                                  let colorClass = "";
+                                  if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                    const parsedVal = parseFloat(displayVal);
+                                    if (!isNaN(parsedVal)) {
+                                      const pct = (parsedVal / maxMarks) * 100;
+                                      if (pct < 40) colorClass = "bg-red-50 text-red-700 font-semibold border border-red-100";
+                                      else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 font-semibold border border-amber-100";
+                                      else colorClass = "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100";
+                                    }
+                                  } else if (displayVal === "AB") {
+                                    colorClass = "bg-slate-100 text-slate-400 font-bold";
+                                  }
+
+                                  return (
+                                    <td key={sub.id} className={`px-4 py-2.5 text-center border-r border-slate-205 ${colorClass}`}>
+                                      {displayVal}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </>
+                      ) : (
+                        <>
+                          {/* Subject-Wise Report Headers */}
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                              <th className="px-4 py-3 text-center border-r border-slate-205 w-12">S.No</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205 w-28">Roll Number</th>
+                              <th className="px-4 py-3 border-r border-slate-205">Student Name</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (30M)</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (20M)</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (30M)</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (20M)</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205">Assign (10M)</th>
+                              <th className="px-4 py-3 text-center border-r border-slate-205 font-bold">Final (30M)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150 text-slate-700">
+                            {previewData.rows.map((row: any, idx: number) => {
+                              const marksObj = row.subjects[previewSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
+                              
+                              const fields = [
+                                { val: marksObj.mid1, max: 30, fallback: "AB" },
+                                { val: marksObj.mid1Scaled, max: 20, fallback: "AB" },
+                                { val: marksObj.mid2, max: 30, fallback: "AB" },
+                                { val: marksObj.mid2Scaled, max: 20, fallback: "AB" },
+                                { val: marksObj.assignment, max: 10, fallback: "0" },
+                                { val: marksObj.internal, max: 30, fallback: "0", isBold: true }
+                              ];
+
+                              return (
+                                <tr key={row.rollNumber} className="hover:bg-slate-50/50">
+                                  <td className="px-4 py-2.5 text-center border-r border-slate-205">{idx + 1}</td>
+                                  <td className="px-4 py-2.5 text-center font-bold text-slate-800 border-r border-slate-205">{row.rollNumber}</td>
+                                  <td className="px-4 py-2.5 font-medium border-r border-slate-205">{row.name}</td>
+                                  {fields.map((f, fIdx) => {
+                                    const displayVal = (f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback;
+                                    
+                                    let colorClass = "";
+                                    if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                      const parsedVal = parseFloat(displayVal);
+                                      if (!isNaN(parsedVal)) {
+                                        const pct = (parsedVal / f.max) * 100;
+                                        if (pct < 40) colorClass = "bg-red-50 text-red-700 font-semibold border border-red-100";
+                                        else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 font-semibold border border-amber-100";
+                                        else colorClass = "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100";
+                                      }
+                                    } else if (displayVal === "AB") {
+                                      colorClass = "bg-slate-100 text-slate-400 font-bold";
+                                    }
+
+                                    return (
+                                      <td key={fIdx} className={`px-4 py-2.5 text-center border-r border-slate-205 ${f.isBold ? "font-bold" : ""} ${colorClass}`}>
+                                        {displayVal}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </div>

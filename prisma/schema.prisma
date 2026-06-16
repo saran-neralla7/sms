@@ -608,6 +608,7 @@ model MidExamPaper {
   examType         String   // MID_I | MID_II
   schemeId         String?
   totalMarks       Float    @default(30)
+  examDate         String?
   isFrozen         Boolean  @default(false)
   frozenAt         DateTime?
   frozenById       String?

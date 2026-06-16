@@ -118,6 +118,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         data: {
           totalMarks: body.totalMarks ?? paper.totalMarks,
           schemeId: body.schemeId ?? paper.schemeId,
+          examDate: body.examDate !== undefined ? body.examDate : paper.examDate,
         },
         include: {
           questions: {
@@ -137,6 +138,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data: {
         totalMarks: body.totalMarks ?? paper.totalMarks,
         schemeId: body.schemeId ?? paper.schemeId,
+        examDate: body.examDate !== undefined ? body.examDate : paper.examDate,
       }
     });
     return NextResponse.json(updated);

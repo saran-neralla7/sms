@@ -43,6 +43,52 @@ export default function MathFieldEditor({
       if (!mathliveLoaded) {
         await import("mathlive");
         mathliveLoaded = true;
+
+        // Configure custom virtual keyboard globally
+        const vkb = (window as any).mathVirtualKeyboard;
+        if (vkb) {
+          vkb.layouts = [
+            "numeric",
+            "symbols",
+            "alphabetic",
+            "greek",
+            {
+              label: "Discrete",
+              tooltip: "Discrete Mathematics & Sets",
+              layers: [
+                {
+                  rows: [
+                    [
+                      { latex: "\\to", label: "→" },
+                      { latex: "\\leftrightarrow", label: "↔" },
+                      { latex: "\\neg", label: "¬" },
+                      { latex: "\\land", label: "∧" },
+                      { latex: "\\lor", label: "∨" }
+                    ],
+                    [
+                      { latex: "\\cap", label: "∩" },
+                      { latex: "\\cup", label: "∪" },
+                      { latex: "\\subset", label: "⊂" },
+                      { latex: "\\in", label: "∈" },
+                      { latex: "\\emptyset", label: "∅" }
+                    ],
+                    [
+                      { latex: "\\equiv", label: "≡" },
+                      { latex: "\\oplus", label: "⊕" },
+                      { latex: "\\forall", label: "∀" },
+                      { latex: "\\exists", label: "∃" },
+                      {
+                        class: "action",
+                        label: "⌫",
+                        command: ["performWithFeedback", "deleteBackward"]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ];
+        }
       }
       setIsReady(true);
     };
@@ -94,7 +140,7 @@ export default function MathFieldEditor({
       const latex = mf.value || "";
       // Wrap in $...$ for inline math compatibility with the existing system
       if (latex.trim()) {
-        onChange(latex);
+        onChange("$" + latex + "$");
       } else {
         onChange("");
       }

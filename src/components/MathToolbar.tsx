@@ -42,6 +42,20 @@ const CATEGORIES = {
     { label: "approx (≈)", latex: "\\approx" },
     { label: "degree (°)", latex: "^{\\circ}" },
     { label: "gradient (∇)", latex: "\\nabla" },
+  ],
+  "Discrete & Sets": [
+    { label: "Arrow (→)", latex: "\\to" },
+    { label: "Double Arrow (↔)", latex: "\\leftrightarrow" },
+    { label: "Intersection (∩)", latex: "\\cap" },
+    { label: "Union (∪)", latex: "\\cup" },
+    { label: "Subset (⊂)", latex: "\\subset" },
+    { label: "Element of (∈)", latex: "\\in" },
+    { label: "Negation (¬)", latex: "\\neg" },
+    { label: "Logical AND (∧)", latex: "\\land" },
+    { label: "Logical OR (∨)", latex: "\\lor" },
+    { label: "Equivalent (≡)", latex: "\\equiv" },
+    { label: "XOR (⊕)", latex: "\\oplus" },
+    { label: "Empty Set (∅)", latex: "\\emptyset" },
   ]
 };
 

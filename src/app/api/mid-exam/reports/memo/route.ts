@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateStudentTotal, calculateInternalMarks } from "@/lib/mid-exam-calc";
+import { calculateStudentTotal, calculateInternalMarks, scaleMidMarks } from "@/lib/mid-exam-calc";
 
 /**
  * GET — generate Internal Marks Memo data for PDF rendering on client
@@ -73,6 +73,9 @@ export async function GET(req: NextRequest) {
         const mid2Marks = mid2?.marksObtained ?? null;
         const assignMarks = assign?.marksObtained ?? null;
 
+        const mid1Scaled = mid1Marks !== null ? scaleMidMarks(mid1Marks, mid1?.maxMarks ?? 30, 20) : null;
+        const mid2Scaled = mid2Marks !== null ? scaleMidMarks(mid2Marks, mid2?.maxMarks ?? 30, 20) : null;
+
         // Calculate internal using default theory scheme
         const internalTotal = calculateInternalMarks({
           mid1Total: mid1Marks,
@@ -90,6 +93,8 @@ export async function GET(req: NextRequest) {
         subjectData[subject.id] = {
           mid1: mid1Marks,
           mid2: mid2Marks,
+          mid1Scaled,
+          mid2Scaled,
           assignment: assignMarks,
           internal: internalTotal,
         };

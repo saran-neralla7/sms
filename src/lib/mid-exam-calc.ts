@@ -93,7 +93,7 @@ export function scaleMidMarks(
   toMax: number
 ): number {
   if (fromMax === 0) return 0;
-  return Math.round((obtained / fromMax) * toMax * 100) / 100;
+  return Math.round((obtained / fromMax) * toMax);
 }
 
 /**
@@ -146,7 +146,7 @@ export function calculateInternalMarks(params: {
     : 0;
 
   const internal = avgMid + scaledAssignment;
-  return Math.min(Math.round(internal * 100) / 100, internalMax);
+  return Math.min(Math.round(internal), internalMax);
 }
 
 /**

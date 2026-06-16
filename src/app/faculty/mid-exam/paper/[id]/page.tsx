@@ -53,7 +53,17 @@ interface Paper {
   scheme: any;
   questions: any[];
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
+  examDate?: string | null;
 }
+
+const formatDate = (dateStr?: string | null) => {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
 
 const CO_OPTIONS = ["CO1", "CO2", "CO3", "CO4", "CO5", "CO6", "CO7", "CO8", "CO9", "CO10"];
 const BT_LEVEL_OPTIONS = [
@@ -127,7 +137,7 @@ export default function QuestionPaperBuilderPage() {
     questionNo,
     isCompulsory: true,
     choiceGroupNo: null,
-    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1", btLevel: "L1" }]
+    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 0, coMapping: "CO1", btLevel: "L1" }]
   });
 
   const addQuestion = () => {
@@ -151,7 +161,7 @@ export default function QuestionPaperBuilderPage() {
     const q = questions[qIdx];
     const labels = ["a", "b", "c", "d", "e", "f"];
     const nextLabel = labels[q.subQuestions.length] || String.fromCharCode(97 + q.subQuestions.length);
-    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 5, coMapping: "CO1", btLevel: "L1" };
+    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 0, coMapping: "CO1", btLevel: "L1" };
     setQuestions(prev => prev.map((q, i) => i === qIdx ? { ...q, subQuestions: [...q.subQuestions, newSq] } : q));
   };
 
@@ -216,7 +226,7 @@ export default function QuestionPaperBuilderPage() {
       const res = await fetch(`/api/mid-exam/papers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questions, totalMarks: paper?.totalMarks })
+        body: JSON.stringify({ questions, totalMarks: paper?.totalMarks, examDate: paper?.examDate })
       });
       if (res.ok) {
         showToast("Paper saved successfully!", "success");
@@ -234,6 +244,28 @@ export default function QuestionPaperBuilderPage() {
     if (action === "freeze") {
       const errors = validate();
       if (errors.length > 0) { setValidationErrors(errors); setShowFreezeModal(false); return; }
+
+      // Auto-save draft changes first
+      setSaving(true);
+      try {
+        const res = await fetch(`/api/mid-exam/papers/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questions, totalMarks: paper?.totalMarks, examDate: paper?.examDate })
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          showToast(data.error || "Failed to save draft before freezing", "error");
+          setSaving(false);
+          return;
+        }
+      } catch (err) {
+        showToast("Failed to save draft before freezing", "error");
+        setSaving(false);
+        return;
+      } finally {
+        setSaving(false);
+      }
     }
     setFreezing(true);
     try {
@@ -390,6 +422,27 @@ export default function QuestionPaperBuilderPage() {
               </div>
             </div>
           )}
+
+          {/* Exam Details Settings Card */}
+          <div className="mb-6 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Exam Date</h3>
+              <p className="text-xs text-slate-500">Specify the date of the exam for printing on the question paper.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="exam-date-input" className="text-xs font-semibold text-slate-600 shrink-0">Select Date:</label>
+              <input
+                id="exam-date-input"
+                type="date"
+                value={paper.examDate || ""}
+                onChange={(e) => {
+                  setPaper(prev => prev ? { ...prev, examDate: e.target.value } : null);
+                }}
+                disabled={!canEdit}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
+              />
+            </div>
+          </div>
 
           {/* Info card */}
           <div className="mb-6 rounded-xl bg-blue-50 p-4 ring-1 ring-blue-100">
@@ -671,12 +724,16 @@ export default function QuestionPaperBuilderPage() {
                                       <label className="mb-1 block text-xs font-medium text-slate-600">Marks *</label>
                                       <input
                                         type="number"
+                                        min={0}
+                                        max={30}
+                                        step={1}
                                         value={sq.maxMarks}
-                                        onChange={e => updateSubQuestion(qIdx, sqIdx, "maxMarks", parseFloat(e.target.value) || 0)}
+                                        onChange={e => {
+                                          const val = parseFloat(e.target.value);
+                                          updateSubQuestion(qIdx, sqIdx, "maxMarks", isNaN(val) ? 0 : val);
+                                        }}
                                         disabled={!canEdit}
-                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
-                                        min={0.5}
-                                        step={0.5}
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 bg-white"
                                       />
                                     </div>
                                     <div>
@@ -913,7 +970,9 @@ export default function QuestionPaperBuilderPage() {
                     <tr>
                       {/* Date */}
                       <td className="p-0.5 pl-1" style={{ borderRight: "1px solid black", borderBottom: "1px solid black" }}>Date</td>
-                      <td className="p-0.5 pl-1" style={{ borderRight: "1.2px solid black", borderBottom: "1px solid black" }}>____________________</td>
+                      <td className="p-0.5 pl-1 font-serif text-[10px]" style={{ borderRight: "1.2px solid black", borderBottom: "1px solid black" }}>
+                        {formatDate(paper.examDate) || "____________________"}
+                      </td>
                       {/* Academic Year */}
                       <td className="p-0.5 pl-1" style={{ borderRight: "1px solid black", borderBottom: "1px solid black" }}>Academic Year</td>
                       <td className="p-0.5 pl-1" style={{ borderBottom: "1px solid black" }}>{paper.academicYear.name}</td>

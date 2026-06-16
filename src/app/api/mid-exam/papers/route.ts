@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { academicYearId, departmentId, year, semester, sectionId, subjectId, examType, schemeId, totalMarks, sourcePaperId } = body;
+    const { academicYearId, departmentId, year, semester, sectionId, subjectId, examType, schemeId, totalMarks, sourcePaperId, examDate } = body;
 
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !subjectId || !examType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
         academicYearId, departmentId, year, semester, sectionId, subjectId, examType,
         schemeId: schemeId ?? null,
         totalMarks: totalMarks ?? 30,
+        examDate: examDate ?? null,
         createdById: session.user.id,
       },
       include: {

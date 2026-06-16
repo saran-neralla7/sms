@@ -287,44 +287,180 @@ export default function MarksGridPage() {
     sqIndex: number
   ) => {
     const key = e.key;
-    let nextRow = rowIndex;
-    let nextSq = sqIndex;
 
-    if (key === "Enter" || key === "ArrowRight") {
-      e.preventDefault();
-      if (sqIndex < subQuestions.length - 1) {
-        nextSq = sqIndex + 1;
-      } else if (rowIndex < rows.length - 1) {
-        nextSq = 0;
-        nextRow = rowIndex + 1;
+    const focusCell = (rIdx: number, sIdx: number, direction: "right" | "left" | "down" | "up") => {
+      let currRow = rIdx;
+      let currSq = sIdx;
+
+      // Start by moving one step in the direction of movement
+      if (direction === "right") {
+        if (currSq < subQuestions.length - 1) {
+          currSq += 1;
+        } else if (currRow < rows.length - 1) {
+          currSq = 0;
+          currRow += 1;
+        } else {
+          return;
+        }
+      } else if (direction === "left") {
+        if (currSq > 0) {
+          currSq -= 1;
+        } else if (currRow > 0) {
+          currSq = subQuestions.length - 1;
+          currRow -= 1;
+        } else {
+          return;
+        }
+      } else if (direction === "down") {
+        if (currRow < rows.length - 1) {
+          currRow += 1;
+        } else {
+          return;
+        }
+      } else if (direction === "up") {
+        if (currRow > 0) {
+          currRow -= 1;
+        } else {
+          return;
+        }
       }
+
+      // Keep moving until we find a non-disabled input
+      while (true) {
+        const targetSqId = subQuestions[currSq]?.id;
+        const targetStudentId = rows[currRow]?.studentId;
+        const targetRefKey = `${targetStudentId}_${targetSqId}`;
+        const inputEl = gridRefs.current[targetRefKey];
+
+        if (inputEl && !inputEl.disabled) {
+          inputEl.focus();
+          setTimeout(() => {
+            inputEl.select();
+          }, 10);
+          break;
+        }
+
+        // Otherwise keep moving in that direction
+        if (direction === "right") {
+          if (currSq < subQuestions.length - 1) {
+            currSq += 1;
+          } else if (currRow < rows.length - 1) {
+            currSq = 0;
+            currRow += 1;
+          } else {
+            break;
+          }
+        } else if (direction === "left") {
+          if (currSq > 0) {
+            currSq -= 1;
+          } else if (currRow > 0) {
+            currSq = subQuestions.length - 1;
+            currRow -= 1;
+          } else {
+            break;
+          }
+        } else if (direction === "down") {
+          if (currRow < rows.length - 1) {
+            currRow += 1;
+          } else {
+            break;
+          }
+        } else if (direction === "up") {
+          if (currRow > 0) {
+            currRow -= 1;
+          } else {
+            break;
+          }
+        }
+      }
+    };
+
+    if (key === "Enter" || key === "Tab") {
+      if (key === "Tab" && e.shiftKey) {
+        e.preventDefault();
+        focusCell(rowIndex, sqIndex, "left");
+      } else {
+        e.preventDefault();
+        focusCell(rowIndex, sqIndex, "right");
+      }
+    } else if (key === "ArrowRight") {
+      e.preventDefault();
+      focusCell(rowIndex, sqIndex, "right");
     } else if (key === "ArrowLeft") {
       e.preventDefault();
-      if (sqIndex > 0) {
-        nextSq = sqIndex - 1;
-      } else if (rowIndex > 0) {
-        nextSq = subQuestions.length - 1;
-        nextRow = rowIndex - 1;
-      }
+      focusCell(rowIndex, sqIndex, "left");
     } else if (key === "ArrowDown") {
       e.preventDefault();
-      nextRow = Math.min(rows.length - 1, rowIndex + 1);
+      focusCell(rowIndex, sqIndex, "down");
     } else if (key === "ArrowUp") {
       e.preventDefault();
-      nextRow = Math.max(0, rowIndex - 1);
-    } else {
+      focusCell(rowIndex, sqIndex, "up");
+    }
+  };
+
+  const handleClearAll = () => {
+    if (!window.confirm("Are you sure you want to clear all entered marks for all students? This cannot be undone until you save/submit.")) {
       return;
     }
+    setRows(prev =>
+      prev.map(row => {
+        const clearedMarks = { ...row.marks };
+        for (const key of Object.keys(clearedMarks)) {
+          clearedMarks[key] = null;
+        }
+        return {
+          ...row,
+          isAbsent: false,
+          marks: clearedMarks,
+          calculatedTotal: 0,
+        };
+      })
+    );
+    showToast("All marks cleared locally. Remember to click Save Draft to persist.", "success");
+  };
 
-    const nextSqId = subQuestions[nextSq]?.id;
-    const nextStudentId = rows[nextRow]?.studentId;
-    const nextRefKey = `${nextStudentId}_${nextSqId}`;
-    gridRefs.current[nextRefKey]?.focus();
-    
-    // Automatically select the input content for immediate overwrite
-    setTimeout(() => {
-      gridRefs.current[nextRefKey]?.select();
-    }, 10);
+  const handleFillDemoMarks = () => {
+    setRows(prev =>
+      prev.map(row => {
+        const demoMarks = { ...row.marks };
+        const isAbsent = Math.random() < 0.05;
+        
+        if (isAbsent) {
+          for (const key of Object.keys(demoMarks)) {
+            demoMarks[key] = null;
+          }
+          return {
+            ...row,
+            isAbsent: true,
+            marks: demoMarks,
+            calculatedTotal: 0,
+          };
+        }
+
+        for (const sq of subQuestions) {
+          const randomVal = Math.random();
+          let mark = 0;
+          if (randomVal < 0.08) {
+            mark = 0;
+          } else if (randomVal < 0.25) {
+            mark = Math.floor(sq.maxMarks * 0.5);
+          } else if (randomVal < 0.85) {
+            mark = Math.floor(sq.maxMarks * 0.8);
+          } else {
+            mark = sq.maxMarks;
+          }
+          demoMarks[sq.id] = Math.max(0, Math.min(sq.maxMarks, mark));
+        }
+
+        return {
+          ...row,
+          isAbsent: false,
+          marks: demoMarks,
+          calculatedTotal: calculateRowTotal(false, demoMarks, subQuestions),
+        };
+      })
+    );
+    showToast("Demo marks filled locally. Click Save Draft to save.", "success");
   };
 
   const handleSave = async (isDraft: boolean = true) => {
@@ -391,7 +527,7 @@ export default function MarksGridPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Header Bar */}
       <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <div className="mx-auto max-w-[98%] px-4 sm:px-6">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-4">
               <button onClick={() => router.back()} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 transition-colors">
@@ -426,6 +562,22 @@ export default function MarksGridPage() {
               {canEdit && (
                 <>
                   <button
+                    onClick={handleFillDemoMarks}
+                    className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 shadow-sm hover:bg-purple-100 transition-all"
+                    title="Populate random demo marks for testing"
+                  >
+                    <FaClipboardList className="text-purple-600" />
+                    Fill Demo Marks
+                  </button>
+                  <button
+                    onClick={handleClearAll}
+                    className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 transition-all"
+                    title="Clear all student marks locally"
+                  >
+                    <FaTimes className="text-red-600" />
+                    Clear All
+                  </button>
+                  <button
                     onClick={() => handleSave(true)}
                     disabled={saving}
                     className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50"
@@ -447,7 +599,7 @@ export default function MarksGridPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[98%] px-4 py-8 sm:px-6">
         {/* Helper Notice */}
         <div className="mb-6 flex gap-3 rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100 shadow-sm">
           <FaInfoCircle className="mt-0.5 text-blue-500 flex-shrink-0" />
@@ -472,25 +624,26 @@ export default function MarksGridPage() {
           <div 
             ref={tableContainerRef}
             onScroll={handleTableScroll}
-            className="overflow-x-auto"
+            className="overflow-x-auto max-h-[70vh] overflow-y-auto"
           >
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="sticky left-0 bg-slate-50 px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 z-10 w-48 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Student Detail</th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center w-24">Status</th>
+                  <th className="sticky top-0 left-0 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 z-30 w-36 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05),_0_2px_4px_rgba(0,0,0,0.02)]">Student Detail</th>
+                  <th className="sticky top-0 bg-slate-50 px-2 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center w-16 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">Status</th>
                   {subQuestions.map(sq => (
-                    <th key={sq.id} className="px-2 py-4 text-center min-w-[80px] w-28 border-l border-slate-100">
-                      <p className="text-xs font-bold text-slate-800">{sq.label}</p>
-                      <p className="text-[10px] text-slate-500">Max: {sq.maxMarks}m · {sq.coMapping}</p>
+                    <th key={sq.id} className="sticky top-0 bg-slate-50 px-1 py-2 text-center min-w-[55px] w-14 border-l border-slate-100 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                      <p className="text-[11px] font-bold text-slate-800">{sq.label}</p>
+                      <p className="text-[10px] font-extrabold text-blue-600">Max:{sq.maxMarks}</p>
+                      <p className="text-[9px] font-semibold text-slate-400">{sq.coMapping}</p>
                       {sq.choiceGroupNo && (
-                        <span className="mt-1 inline-block rounded bg-purple-50 px-1 py-0.2 text-[9px] font-semibold text-purple-600 border border-purple-100">
-                          CG{sq.choiceGroupNo} (OR)
+                        <span className="mt-0.5 inline-block rounded bg-purple-50 px-0.5 py-0.1 text-[8px] font-semibold text-purple-600 border border-purple-100">
+                          CG{sq.choiceGroupNo}
                         </span>
                       )}
                     </th>
                   ))}
-                  <th className="sticky right-0 bg-blue-50 z-10 px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-800 text-center w-28 border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Total</th>
+                  <th className="sticky top-0 right-0 bg-blue-50 z-30 px-3 py-3 text-xs font-bold uppercase tracking-wider text-slate-800 text-center w-20 border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05),_0_2px_4px_rgba(0,0,0,0.02)]">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -502,23 +655,23 @@ export default function MarksGridPage() {
                     }`}
                   >
                     {/* Student Info */}
-                    <td className="sticky left-0 bg-white hover:bg-slate-50/50 px-6 py-3.5 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-100">
-                      <p className="font-semibold text-slate-900 text-sm">{row.name}</p>
-                      <p className="text-xs text-slate-500 font-mono">{row.rollNumber}</p>
+                    <td className="sticky left-0 bg-white hover:bg-slate-50/50 px-3 py-2 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-100">
+                      <p className="font-semibold text-slate-900 text-xs truncate max-w-[130px]" title={row.name}>{row.name}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{row.rollNumber}</p>
                     </td>
 
                     {/* Absent Toggle Button */}
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-2 py-2 text-center">
                       <button
                         onClick={() => canEdit && handleAbsentToggle(row.studentId)}
                         disabled={!canEdit}
-                        className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-medium transition-all ${
+                        className={`inline-flex items-center gap-0.5 rounded-lg px-1.5 py-0.5 text-[10px] font-medium transition-all ${
                           row.isAbsent
                             ? "bg-red-100 text-red-700"
                             : "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
                         }`}
                       >
-                        {row.isAbsent ? <><FaUserSlash size={10} /> Absent</> : <><FaUserCheck size={10} /> Present</>}
+                        {row.isAbsent ? "Absent" : "Present"}
                       </button>
                     </td>
 
@@ -530,7 +683,7 @@ export default function MarksGridPage() {
                       const hasError = exceedsMax || isNegative;
 
                       return (
-                        <td key={sq.id} className="px-1 py-2 border-l border-slate-100 align-middle">
+                        <td key={sq.id} className="px-1 py-1 border-l border-slate-100 align-middle text-center">
                           <input
                             ref={el => {
                               gridRefs.current[`${row.studentId}_${sq.id}`] = el;
@@ -540,7 +693,7 @@ export default function MarksGridPage() {
                             onChange={e => handleMarksChange(row.studentId, sq.id, e.target.value)}
                             onKeyDown={e => handleKeyDown(e, rowIndex, sqIndex)}
                             disabled={row.isAbsent || !canEdit}
-                            className={`w-full rounded-xl border px-1 py-1.5 text-center text-sm font-medium focus:outline-none focus:ring-2 transition-all ${
+                            className={`w-full max-w-[48px] h-7 mx-auto block rounded-lg border px-1 py-0.5 text-center text-xs font-bold focus:outline-none focus:ring-1 transition-all ${
                               row.isAbsent
                                 ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
                                 : hasError
@@ -557,8 +710,8 @@ export default function MarksGridPage() {
                     })}
 
                     {/* Calculated Student Total */}
-                    <td className="sticky right-0 bg-blue-50 z-10 px-6 py-3.5 text-center font-bold text-sm border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                      <span className={row.isAbsent ? "text-red-500 font-mono" : "text-blue-800"}>
+                    <td className="sticky right-0 bg-blue-50 z-10 px-3 py-2 text-center font-bold border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                      <span className={row.isAbsent ? "text-red-500 font-mono text-xs" : "text-blue-800 text-xs"}>
                         {row.isAbsent ? "AB" : `${row.calculatedTotal} / ${paper.totalMarks}`}
                       </span>
                     </td>
@@ -572,6 +725,18 @@ export default function MarksGridPage() {
         {/* Bottom Actions */}
         {canEdit && (
           <div className="mt-8 flex justify-end gap-3">
+            <button
+              onClick={handleFillDemoMarks}
+              className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-6 py-3 text-sm font-medium text-purple-700 shadow-sm hover:bg-purple-100 transition-all"
+            >
+              <FaClipboardList /> Fill Demo Marks
+            </button>
+            <button
+              onClick={handleClearAll}
+              className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 transition-all"
+            >
+              <FaTimes /> Clear All Marks
+            </button>
             <button
               onClick={() => handleSave(true)}
               disabled={saving}
