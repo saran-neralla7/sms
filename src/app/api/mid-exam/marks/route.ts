@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
       where: { id: paperId },
       include: {
         subject: true,
+        section: true,
         questions: {
           orderBy: { questionNo: "asc" },
           include: {
@@ -106,6 +107,11 @@ export async function GET(req: NextRequest) {
         isFrozen: paper.isFrozen,
         isLocked: paper.publishRecord?.isLocked ?? false,
         isPublished: paper.publishRecord?.isPublished ?? false,
+        subjectName: paper.subject.name,
+        subjectCode: paper.subject.code,
+        year: paper.year,
+        semester: paper.semester,
+        sectionName: paper.section.name,
       },
       subQuestions,
       rows,

@@ -10,6 +10,7 @@ import {
 } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import { calculateStudentTotal } from "@/lib/mid-exam-calc";
+import * as XLSX from "xlsx";
 
 interface SubQuestion {
   id: string;
@@ -40,6 +41,11 @@ interface PaperInfo {
   isFrozen: boolean;
   isLocked: boolean;
   isPublished: boolean;
+  subjectName?: string;
+  subjectCode?: string;
+  year?: string;
+  semester?: string;
+  sectionName?: string;
 }
 
 export default function MarksGridPage() {
@@ -92,6 +98,36 @@ export default function MarksGridPage() {
         topScrollbarRef.current.scrollLeft = tableContainerRef.current.scrollLeft;
       }
     }
+  };
+
+  const downloadExcel = () => {
+    if (!paper || rows.length === 0) return;
+
+    const data = rows.map(row => {
+      const record: Record<string, any> = {
+        "Roll Number": row.rollNumber,
+        "Name": row.name,
+        "Status": row.isAbsent ? "Absent" : "Present",
+      };
+
+      subQuestions.forEach(sq => {
+        const mark = row.isAbsent ? "AB" : (row.marks[sq.id] ?? "-");
+        record[sq.label] = mark;
+      });
+
+      record["Total"] = row.isAbsent ? "AB" : `${row.calculatedTotal ?? 0} / ${paper.totalMarks}`;
+      return record;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Mid Exam Marks");
+    
+    const examName = paper.examType.replace(/\s+/g, "_");
+    const subjectStr = paper.subjectCode || "Subject";
+    const sectionStr = paper.sectionName ? `Sec_${paper.sectionName}` : "Sec";
+    const filename = `${examName}_Marks_${subjectStr}_${sectionStr}_Export_${Date.now()}.xlsx`;
+    XLSX.writeFile(wb, filename);
   };
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
@@ -363,9 +399,11 @@ export default function MarksGridPage() {
                 <FaArrowLeft /> Back
               </button>
               <div>
-                <h1 className="font-bold text-slate-900">Enter Student Marks</h1>
+                <h1 className="font-bold text-slate-900">
+                  {paper.subjectName ? `${paper.subjectName} (${paper.subjectCode})` : "Enter Student Marks"}
+                </h1>
                 <p className="text-xs text-slate-500">
-                  {paper.examType.replace("_", " ")} · Max {paper.totalMarks} marks
+                  {paper.examType.replace("_", " ")} · Year {paper.year} Sem {paper.semester} Sec {paper.sectionName} · Max {paper.totalMarks} marks
                 </p>
               </div>
             </div>
@@ -376,6 +414,15 @@ export default function MarksGridPage() {
                   <FaUserSlash size={10} /> Locked / Published
                 </span>
               )}
+
+              <button
+                onClick={downloadExcel}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all"
+                title="Download marks spreadsheet offline"
+              >
+                <FaFileDownload className="text-green-600" />
+                Download Excel
+              </button>
 
               {canEdit && (
                 <>
