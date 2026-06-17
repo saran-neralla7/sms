@@ -184,6 +184,7 @@ model Subject {
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   shortName             String?
+  syllabus              Json?
   history               AttendanceHistory[]
   examAppSubjects       ExamApplicationSubject[]
   department            Department               @relation(fields: [departmentId], references: [id])
@@ -196,6 +197,8 @@ model Subject {
   FeedbackResponse      FeedbackResponse[]
   midExamPapers         MidExamPaper[]
   assignmentMarks       AssignmentMark[]
+  coPoMappings          SubjectCoPoMapping[]
+  coPsoMappings         SubjectCoPsoMapping[]
 }
 
 model Period {
@@ -736,3 +739,32 @@ model MidExamPublish {
 
   paper          MidExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 }
+
+model SubjectCoPoMapping {
+  id        String   @id @default(uuid())
+  subjectId String
+  co        String   // e.g. "CO1", "CO2", "CO3", "CO4", "CO5"
+  po        String   // e.g. "PO1", "PO2", ..., "PO12"
+  weight    Int?     // null/blank or 1, 2, 3
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, co, po])
+}
+
+model SubjectCoPsoMapping {
+  id        String   @id @default(uuid())
+  subjectId String
+  co        String   // e.g. "CO1", "CO2", ...
+  pso       String   // e.g. "PSO1", "PSO2", ...
+  weight    Int?     // null/blank or 1, 2, 3
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, co, pso])
+}
+

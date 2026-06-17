@@ -21,6 +21,7 @@ export async function GET(req: NextRequest, { params }: Params) {
             name: true,
             code: true,
             type: true,
+            syllabus: true,
             department: { select: { id: true, name: true, code: true } }
           }
         },

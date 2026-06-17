@@ -52,7 +52,8 @@ export async function GET(req: NextRequest) {
                         code: true,
                         type: true,
                         year: true,
-                        semester: true
+                        semester: true,
+                        departmentId: true
                     }
                 },
                 section: {

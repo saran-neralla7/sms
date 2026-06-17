@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSlidersH, FaFilePdf, FaCheckCircle, FaLock, FaUnlock, FaSpinner,
@@ -41,9 +42,10 @@ interface Paper {
 
 export default function AdminMidExamDashboard() {
   const { data: session, status } = useSession();
+  const router = useRouter();
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports" | "co-po-mapping">("dashboard");
 
   // Sync scrollbar refs & state
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -762,6 +764,7 @@ export default function AdminMidExamDashboard() {
           "MID-I\n(20M)", 
           "MID-II\n(30M)", 
           "MID-II\n(20M)", 
+          "MID Avg\n(20M)",
           "Assign\n(10M)", 
           "Final\n(30M)"
         ]
@@ -770,6 +773,10 @@ export default function AdminMidExamDashboard() {
       // Build Table Data rows
       const tableRows = rows.map((r: any, idx: number) => {
         const marks = r.subjects[selectedReportSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
+        const m1 = marks.mid1Scaled;
+        const m2 = marks.mid2Scaled;
+        const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+        const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
         
         return [
           (idx + 1).toString(),
@@ -779,15 +786,61 @@ export default function AdminMidExamDashboard() {
           marks.mid1Scaled !== null ? Math.round(marks.mid1Scaled).toString() : "AB",
           marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB",
           marks.mid2Scaled !== null ? Math.round(marks.mid2Scaled).toString() : "AB",
+          midAvgVal !== null ? Math.round(midAvgVal).toString() : "AB",
           marks.assignment !== null ? Math.round(marks.assignment).toString() : "0",
           Math.round(marks.internal).toString()
         ];
       });
 
+      // Calculate averages for PDF footer
+      const getAvgPDF = (extractor: (marks: any) => number | null) => {
+        let sum = 0;
+        let count = 0;
+        rows.forEach((r: any) => {
+          const marks = r.subjects[selectedReportSubjectId] || {};
+          const val = extractor(marks);
+          if (val !== null && val !== undefined) {
+            sum += val;
+            count++;
+          }
+        });
+        return count > 0 ? (sum / count).toFixed(1) : "N/A";
+      };
+
+      const getMidAvgClassPDF = () => {
+        let sum = 0;
+        let count = 0;
+        rows.forEach((r: any) => {
+          const marks = r.subjects[selectedReportSubjectId] || {};
+          const m1 = marks.mid1Scaled;
+          const m2 = marks.mid2Scaled;
+          const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+          if (available.length > 0) {
+            sum += available.reduce((a, b) => a + b, 0) / available.length;
+            count++;
+          }
+        });
+        return count > 0 ? (sum / count).toFixed(1) : "N/A";
+      };
+
+      const footerRow = [
+        "",
+        "",
+        "Class Average",
+        getAvgPDF((m) => m.mid1),
+        getAvgPDF((m) => m.mid1Scaled),
+        getAvgPDF((m) => m.mid2),
+        getAvgPDF((m) => m.mid2Scaled),
+        getMidAvgClassPDF(),
+        getAvgPDF((m) => m.assignment),
+        getAvgPDF((m) => m.internal)
+      ];
+
       // AutoTable styles
       autoTable(doc, {
         head: headers,
         body: tableRows,
+        foot: [footerRow],
         startY: tableStartY,
         margin: { left: margin, right: margin },
         styles: {
@@ -808,16 +861,25 @@ export default function AdminMidExamDashboard() {
           lineWidth: 0.2,
           lineColor: [180, 180, 180]
         },
+        footStyles: {
+          fillColor: [240, 243, 246],
+          textColor: [30, 41, 59],
+          fontSize: 8,
+          fontStyle: "bold",
+          lineWidth: 0.2,
+          lineColor: [180, 180, 180]
+        },
         columnStyles: {
-          0: { cellWidth: 10, halign: "center" },
-          1: { cellWidth: 26, halign: "center", fontStyle: "bold" },
+          0: { cellWidth: 8, halign: "center" },
+          1: { cellWidth: 25, halign: "center", fontStyle: "bold" },
           2: { cellWidth: 45, halign: "left" },
-          3: { cellWidth: 16 },
-          4: { cellWidth: 16 },
-          5: { cellWidth: 16 },
-          6: { cellWidth: 16 },
-          7: { cellWidth: 16 },
-          8: { cellWidth: 18, fontStyle: "bold" }
+          3: { cellWidth: 15 },
+          4: { cellWidth: 15 },
+          5: { cellWidth: 15 },
+          6: { cellWidth: 15 },
+          7: { cellWidth: 17, fontStyle: "bold" },
+          8: { cellWidth: 15 },
+          9: { cellWidth: 16, fontStyle: "bold" }
         },
         theme: "grid"
       });
@@ -926,7 +988,7 @@ export default function AdminMidExamDashboard() {
 
         {/* Tab Navigation Menu */}
         <div className="mb-8 flex gap-2 border-b border-slate-200 pb-2">
-          {(["dashboard", "schemes", "publish", "reports"] as const).map(tab => (
+          {(["dashboard", "schemes", "publish", "reports", "co-po-mapping"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -936,7 +998,7 @@ export default function AdminMidExamDashboard() {
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
-              {tab.toUpperCase()}
+              {tab === "co-po-mapping" ? "CO-PO MAPPING" : tab.toUpperCase()}
             </button>
           ))}
         </div>
@@ -1561,72 +1623,221 @@ export default function AdminMidExamDashboard() {
                             ))}
                           </tbody>
                         </>
-                      ) : (
-                        <>
-                          {/* Subject-Wise Report Headers */}
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
-                              <th className="px-4 py-3 text-center border-r border-slate-205 w-12">S.No</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205 w-28">Roll Number</th>
-                              <th className="px-4 py-3 border-r border-slate-205">Student Name</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (30M)</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (20M)</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (30M)</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (20M)</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205">Assign (10M)</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205 font-bold">Final (30M)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-150 text-slate-700">
-                            {previewData.rows.map((row: any, idx: number) => {
-                              const marksObj = row.subjects[previewSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
-                              
-                              const fields = [
-                                { val: marksObj.mid1, max: 30, fallback: "AB" },
-                                { val: marksObj.mid1Scaled, max: 20, fallback: "AB" },
-                                { val: marksObj.mid2, max: 30, fallback: "AB" },
-                                { val: marksObj.mid2Scaled, max: 20, fallback: "AB" },
-                                { val: marksObj.assignment, max: 10, fallback: "0" },
-                                { val: marksObj.internal, max: 30, fallback: "0", isBold: true }
-                              ];
+                      ) : (() => {
+                        const getAvg = (extractor: (marks: any) => number | null) => {
+                          let sum = 0;
+                          let count = 0;
+                          previewData.rows.forEach((row: any) => {
+                            const marksObj = row.subjects[previewSubjectId] || {};
+                            const val = extractor(marksObj);
+                            if (val !== null && val !== undefined) {
+                              sum += val;
+                              count++;
+                            }
+                          });
+                          return count > 0 ? (sum / count).toFixed(1) : "N/A";
+                        };
 
-                              return (
-                                <tr key={row.rollNumber} className="hover:bg-slate-50/50">
-                                  <td className="px-4 py-2.5 text-center border-r border-slate-205">{idx + 1}</td>
-                                  <td className="px-4 py-2.5 text-center font-bold text-slate-800 border-r border-slate-205">{row.rollNumber}</td>
-                                  <td className="px-4 py-2.5 font-medium border-r border-slate-205">{row.name}</td>
-                                  {fields.map((f, fIdx) => {
-                                    const displayVal = (f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback;
-                                    
-                                    let colorClass = "";
-                                    if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
-                                      const parsedVal = parseFloat(displayVal);
-                                      if (!isNaN(parsedVal)) {
-                                        const pct = (parsedVal / f.max) * 100;
-                                        if (pct < 40) colorClass = "bg-red-50 text-red-700 font-semibold border border-red-100";
-                                        else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 font-semibold border border-amber-100";
-                                        else colorClass = "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100";
+                        const getMidAvgClass = () => {
+                          let sum = 0;
+                          let count = 0;
+                          previewData.rows.forEach((row: any) => {
+                            const marksObj = row.subjects[previewSubjectId] || {};
+                            const m1 = marksObj.mid1Scaled;
+                            const m2 = marksObj.mid2Scaled;
+                            const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+                            if (available.length > 0) {
+                              sum += available.reduce((a, b) => a + b, 0) / available.length;
+                              count++;
+                            }
+                          });
+                          return count > 0 ? (sum / count).toFixed(1) : "N/A";
+                        };
+
+                        const classAvgMid1 = getAvg((m) => m.mid1);
+                        const classAvgMid1Scaled = getAvg((m) => m.mid1Scaled);
+                        const classAvgMid2 = getAvg((m) => m.mid2);
+                        const classAvgMid2Scaled = getAvg((m) => m.mid2Scaled);
+                        const classAvgMidAvg = getMidAvgClass();
+                        const classAvgAssign = getAvg((m) => m.assignment);
+                        const classAvgInternal = getAvg((m) => m.internal);
+
+                        return (
+                          <>
+                            {/* Subject-Wise Report Headers */}
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 text-center border-r border-slate-205 w-12">S.No</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205 w-28">Roll Number</th>
+                                <th className="px-4 py-3 border-r border-slate-205">Student Name</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (30M)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (20M)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (30M)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (20M)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205 text-amber-700 font-bold">MID Avg (20M)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205">Assign (10M)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-205 font-bold">Final (30M)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150 text-slate-700">
+                              {previewData.rows.map((row: any, idx: number) => {
+                                const marksObj = row.subjects[previewSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
+                                
+                                const m1 = marksObj.mid1Scaled;
+                                const m2 = marksObj.mid2Scaled;
+                                const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+                                const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
+
+                                const fields = [
+                                  { val: marksObj.mid1, max: 30, fallback: "AB" },
+                                  { val: marksObj.mid1Scaled, max: 20, fallback: "AB" },
+                                  { val: marksObj.mid2, max: 30, fallback: "AB" },
+                                  { val: marksObj.mid2Scaled, max: 20, fallback: "AB" },
+                                  { val: midAvgVal, max: 20, fallback: "AB", isMidAvg: true },
+                                  { val: marksObj.assignment, max: 10, fallback: "0" },
+                                  { val: marksObj.internal, max: 30, fallback: "0", isBold: true }
+                                ];
+
+                                return (
+                                  <tr key={row.rollNumber} className="hover:bg-slate-50/50">
+                                    <td className="px-4 py-2.5 text-center border-r border-slate-205">{idx + 1}</td>
+                                    <td className="px-4 py-2.5 text-center font-bold text-slate-800 border-r border-slate-205">{row.rollNumber}</td>
+                                    <td className="px-4 py-2.5 font-medium border-r border-slate-205">{row.name}</td>
+                                    {fields.map((f, fIdx) => {
+                                      const displayVal = (f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback;
+                                      
+                                      let colorClass = "";
+                                      if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                        const parsedVal = parseFloat(displayVal);
+                                        if (!isNaN(parsedVal)) {
+                                          const pct = (parsedVal / f.max) * 100;
+                                          if (pct < 40) colorClass = "bg-red-50 text-red-700 font-semibold border border-red-100";
+                                          else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 font-semibold border border-amber-100";
+                                          else colorClass = "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100";
+                                        }
+                                      } else if (displayVal === "AB") {
+                                        colorClass = "bg-slate-100 text-slate-400 font-bold";
                                       }
-                                    } else if (displayVal === "AB") {
-                                      colorClass = "bg-slate-100 text-slate-400 font-bold";
-                                    }
 
-                                    return (
-                                      <td key={fIdx} className={`px-4 py-2.5 text-center border-r border-slate-205 ${f.isBold ? "font-bold" : ""} ${colorClass}`}>
-                                        {displayVal}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </>
-                      )}
+                                      return (
+                                        <td key={fIdx} className={`px-4 py-2.5 text-center border-r border-slate-205 ${f.isBold ? "font-bold" : ""} ${f.isMidAvg ? "bg-amber-50/50 text-amber-900 font-semibold" : ""} ${colorClass}`}>
+                                          {displayVal}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-50 border-t border-b border-slate-200 font-bold text-slate-800">
+                                <td className="px-4 py-3 text-center border-r border-slate-205"></td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205"></td>
+                                <td className="px-4 py-3 font-bold border-r border-slate-205 text-right uppercase text-[10px] text-slate-500">Class Average</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid1}</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid1Scaled}</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid2}</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid2Scaled}</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 text-amber-800 bg-amber-50/70">{classAvgMidAvg}</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgAssign}</td>
+                                <td className="px-4 py-3 text-center border-r border-slate-205 font-extrabold text-blue-700 bg-blue-50/30">{classAvgInternal}</td>
+                              </tr>
+                            </tfoot>
+                          </>
+                        );
+                      })()}
                     </table>
                   </div>
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {activeTab === "co-po-mapping" && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">CO-PO Course Outcomes Mapping</h3>
+                <p className="text-sm text-slate-500">Configure Course Outcomes (CO) to Program Outcomes (PO) mapping matrices for all department subjects.</p>
+              </div>
+
+              <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900">Subjects Catalog</h4>
+                    <p className="text-xs text-slate-500">List of subjects registered for the selected filters.</p>
+                  </div>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">
+                    {reportSubjects.filter(sub => {
+                      if (searchQuery.trim() !== "") {
+                        const q = searchQuery.toLowerCase();
+                        return sub.name.toLowerCase().includes(q) || sub.code.toLowerCase().includes(q);
+                      }
+                      return true;
+                    }).length} Subjects
+                  </span>
+                </div>
+
+                {reportSubjects.length === 0 ? (
+                  <p className="text-slate-400 text-sm py-4">No subjects found for the selected department, year, and semester filters.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-xs font-bold uppercase text-slate-400">
+                          <th className="pb-3 px-4">Subject Name</th>
+                          <th className="pb-3 px-4">Code</th>
+                          <th className="pb-3 px-4">Type</th>
+                          <th className="pb-3 px-4">Regulation</th>
+                          <th className="pb-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-sm">
+                        {reportSubjects
+                          .filter(sub => {
+                            if (searchQuery.trim() !== "") {
+                              const q = searchQuery.toLowerCase();
+                              return sub.name.toLowerCase().includes(q) || sub.code.toLowerCase().includes(q);
+                            }
+                            return true;
+                          })
+                          .map(sub => (
+                            <tr key={sub.id} className="hover:bg-slate-50/50">
+                              <td className="py-3 px-4 font-semibold text-slate-800">{sub.name}</td>
+                              <td className="py-3 px-4 font-mono text-xs text-slate-500">{sub.code}</td>
+                              <td className="py-3 px-4">
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  sub.type?.toUpperCase() === "LAB"
+                                    ? "bg-purple-50 text-purple-700"
+                                    : "bg-blue-50 text-blue-700"
+                                }`}>
+                                  {sub.type}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-slate-600">{sub.regulation?.name || "R22"}</td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="inline-flex gap-2">
+                                  <button
+                                    onClick={() => router.push(`/faculty/mid-exam/co-po-mapping?subjectId=${sub.id}`)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                                  >
+                                    <FaClipboardList size={11} /> CO-PO Mapping
+                                  </button>
+                                  <button
+                                    onClick={() => router.push(`/faculty/mid-exam/co-pso-mapping?subjectId=${sub.id}`)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                  >
+                                    <FaClipboardList size={11} /> CO-PSO Mapping
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
         </div>

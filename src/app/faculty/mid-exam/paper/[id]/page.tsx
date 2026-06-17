@@ -47,7 +47,7 @@ interface Paper {
   sectionId: string;
   subjectId: string;
   academicYearId: string;
-  subject: { name: string; code: string; type: string; department?: { id: string; name: string; code: string } };
+  subject: { name: string; code: string; type: string; syllabus?: any; department?: { id: string; name: string; code: string } };
   section: { name: string };
   academicYear: { name: string };
   scheme: any;
@@ -102,6 +102,22 @@ export default function QuestionPaperBuilderPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  // Dynamically extract CO options from subject syllabus if configured
+  const getCoOptions = useCallback((): string[] => {
+    if (paper?.subject?.syllabus) {
+      const syllabusObj = paper.subject.syllabus as any;
+      if (Array.isArray(syllabusObj.outcomes) && syllabusObj.outcomes.length > 0) {
+        return syllabusObj.outcomes.map((co: any) => co.code || co.id || co);
+      }
+    }
+    return CO_OPTIONS;
+  }, [paper]);
+
+  const getDefaultCo = useCallback((): string => {
+    const cos = getCoOptions();
+    return cos[0] || "CO1";
+  }, [getCoOptions]);
+
   const loadPaper = useCallback(async () => {
     try {
       const res = await fetch(`/api/mid-exam/papers/${id}`);
@@ -137,7 +153,7 @@ export default function QuestionPaperBuilderPage() {
     questionNo,
     isCompulsory: true,
     choiceGroupNo: null,
-    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 0, coMapping: "CO1", btLevel: "L1" }]
+    subQuestions: [{ subLabel: "a", questionText: "", imageUrl: null, maxMarks: 0, coMapping: getDefaultCo(), btLevel: "L1" }]
   });
 
   const addQuestion = () => {
@@ -161,7 +177,7 @@ export default function QuestionPaperBuilderPage() {
     const q = questions[qIdx];
     const labels = ["a", "b", "c", "d", "e", "f"];
     const nextLabel = labels[q.subQuestions.length] || String.fromCharCode(97 + q.subQuestions.length);
-    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 0, coMapping: "CO1", btLevel: "L1" };
+    const newSq: SubQuestion = { subLabel: nextLabel, questionText: "", imageUrl: null, maxMarks: 0, coMapping: getDefaultCo(), btLevel: "L1" };
     setQuestions(prev => prev.map((q, i) => i === qIdx ? { ...q, subQuestions: [...q.subQuestions, newSq] } : q));
   };
 
@@ -744,7 +760,7 @@ export default function QuestionPaperBuilderPage() {
                                         disabled={!canEdit}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                                       >
-                                        {CO_OPTIONS.map(co => <option key={co} value={co}>{co}</option>)}
+                                        {getCoOptions().map(co => <option key={co} value={co}>{co}</option>)}
                                       </select>
                                     </div>
                                     <div>
@@ -1121,7 +1137,7 @@ export default function QuestionPaperBuilderPage() {
                                     </span>
                                     <div className="flex-1 pr-4 text-justify">
                                       <MathRenderer text={sq.questionText} className="inline font-serif text-black text-[10px] leading-tight" />
-                                      <span className="font-bold ml-1">[{sq.maxMarks}M]</span>
+                                      <span className="font-bold ml-1">[{sq.maxMarks}M] [{sq.btLevel}]</span>
                                     </div>
                                   </div>
                                   {sq.imageUrl && (
