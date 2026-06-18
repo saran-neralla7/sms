@@ -56,7 +56,7 @@ export async function GET(
                 if (student.departmentId !== departmentId) {
                     return NextResponse.json({ error: "Access denied" }, { status: 403 });
                 }
-            } else if (role === "HOD" || role === "FACULTY") {
+            } else if (role === "HOD") {
                 if (student.departmentId !== departmentId) {
                     return NextResponse.json({ error: "Access denied" }, { status: 403 });
                 }

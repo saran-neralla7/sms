@@ -20,9 +20,21 @@ interface TestResult {
 }
 
 export default function SMSTestPage() {
+    const [selectedTemplate, setSelectedTemplate] = useState<"attendance" | "marks">("attendance");
     const [testCases, setTestCases] = useState<TestCase[]>([
         { id: Date.now(), mobile: "", rollNumber: "", name: "" }
     ]);
+    const [marksFields, setMarksFields] = useState({
+        studentName: "",
+        rollNumber: "",
+        year: "",
+        semester: "",
+        subject1: "", marks1: "",
+        subject2: "", marks2: "",
+        subject3: "", marks3: "",
+        subject4: "", marks4: "",
+        subject5: "", marks5: "",
+    });
 
     // As seen in user's image, there are multiple IDs. We will let the user try them if needed.
     const [templateId, setTemplateId] = useState("1707173598509565396");
@@ -61,13 +73,21 @@ export default function SMSTestPage() {
         setResults(null);
 
         try {
+            const payload = selectedTemplate === "marks" ? {
+                testCases: validCases.map(tc => ({
+                    mobile: tc.mobile,
+                    message: `Dear Parent, Your ward ${marksFields.studentName}, ${marksFields.rollNumber} Year ${marksFields.year} sem ${marksFields.semester} Mid Examination marks are as follows: subject 1: ${marksFields.subject1 || "N/A"} Marks: ${marksFields.marks1 || "-"} subject 2: ${marksFields.subject2 || "N/A"} Marks: ${marksFields.marks2 || "-"} subject 3: ${marksFields.subject3 || "N/A"} Marks: ${marksFields.marks3 || "-"} subject 4: ${marksFields.subject4 || "N/A"} Marks: ${marksFields.marks4 || "-"} subject 5: ${marksFields.subject5 || "N/A"} Marks: ${marksFields.marks5 || "-"} Please Contact HOD for any queries. Gayatri Vidya Parishad`
+                })),
+                templateId: templateId.trim()
+            } : {
+                testCases: validCases,
+                templateId: templateId.trim()
+            };
+
             const res = await fetch("/api/test-sms", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    testCases: validCases,
-                    templateId: templateId.trim()
-                })
+                body: JSON.stringify(payload)
             });
 
             const data = await res.json();
@@ -101,6 +121,33 @@ export default function SMSTestPage() {
                     <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-6 shadow-sm">
                         <h2 className="text-lg font-semibold text-blue-900 mb-4 tracking-tight">Message Configuration</h2>
 
+                        <div className="mb-4 flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedTemplate("attendance");
+                                    setTemplateId("1707173598509565396");
+                                }}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                                    selectedTemplate === "attendance" ? "bg-blue-600 text-white shadow-sm" : "bg-white border border-blue-200 text-blue-700 hover:bg-blue-100/50"
+                                }`}
+                            >
+                                Attendance Alert
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedTemplate("marks");
+                                    setTemplateId("1707177545746041134");
+                                }}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                                    selectedTemplate === "marks" ? "bg-blue-600 text-white shadow-sm" : "bg-white border border-blue-200 text-blue-700 hover:bg-blue-100/50"
+                                }`}
+                            >
+                                Mid Marks Alert
+                            </button>
+                        </div>
+
                         <div className="mb-6 space-y-1">
                             <label className="text-sm font-semibold text-blue-800">DLT Template ID (Optional but Recommended)</label>
                             <input
@@ -113,16 +160,99 @@ export default function SMSTestPage() {
                             <p className="text-xs text-blue-600 mt-1">If the SMS provider strictly requires this value for DLT approval.</p>
                         </div>
 
-                        <div className="bg-white rounded-lg p-4 border border-blue-100 shadow-inner">
-                            <p className="text-sm text-slate-700 italic">
-                                "Dear Parent, Your ward Roll No: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{"{#var#}"}</span> Name: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{"{#var#}"}</span> is Absent for today's first hour. Regards, GAYATRI VIDYA PARISHAD COLLEGE"
-                            </p>
-                        </div>
+                        {selectedTemplate === "attendance" ? (
+                            <div className="bg-white rounded-lg p-4 border border-blue-100 shadow-inner">
+                                <p className="text-sm text-slate-700 italic">
+                                    "Dear Parent, Your ward Roll No: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{"{#var#}"}</span> Name: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{"{#var#}"}</span> is Absent for today's first hour. Regards, GAYATRI VIDYA PARISHAD COLLEGE"
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="bg-white rounded-lg p-4 border border-blue-100 shadow-inner">
+                                    <p className="text-xs text-slate-700 italic">
+                                        "Dear Parent, Your ward <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.studentName || "Var1"}</span>, <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.rollNumber || "Var2"}</span> Year <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.year || "Var3"}</span> sem <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.semester || "Var4"}</span> Mid Examination marks are as follows: subject 1: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject1 || "Var5"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks1 || "Var6"}</span> subject 2: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject2 || "Var7"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks2 || "Var8"}</span> subject 3: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject3 || "Var9"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks3 || "Var10"}</span> subject 4: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject4 || "Var11"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks4 || "Var12"}</span> subject 5: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject5 || "Var13"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks5 || "Var14"}</span> Please Contact HOD for any queries. Gayatri Vidya Parishad"
+                                    </p>
+                                </div>
+
+                                <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Student & Class Information</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">Ward Name (Var 1)</label>
+                                            <input
+                                                type="text"
+                                                value={marksFields.studentName}
+                                                onChange={(e) => setMarksFields({ ...marksFields, studentName: e.target.value })}
+                                                placeholder="e.g. John Doe"
+                                                className="w-full rounded border border-slate-300 p-1.5 text-xs outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">Roll Number (Var 2)</label>
+                                            <input
+                                                type="text"
+                                                value={marksFields.rollNumber}
+                                                onChange={(e) => setMarksFields({ ...marksFields, rollNumber: e.target.value })}
+                                                placeholder="e.g. 22131A0501"
+                                                className="w-full rounded border border-slate-300 p-1.5 text-xs outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">Year (Var 3)</label>
+                                            <input
+                                                type="text"
+                                                value={marksFields.year}
+                                                onChange={(e) => setMarksFields({ ...marksFields, year: e.target.value })}
+                                                placeholder="e.g. 1st"
+                                                className="w-full rounded border border-slate-300 p-1.5 text-xs outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">Semester (Var 4)</label>
+                                            <input
+                                                type="text"
+                                                value={marksFields.semester}
+                                                onChange={(e) => setMarksFields({ ...marksFields, semester: e.target.value })}
+                                                placeholder="e.g. 2nd"
+                                                className="w-full rounded border border-slate-300 p-1.5 text-xs outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 pt-2 border-t border-slate-100">Subject Marks (Max 5)</h3>
+                                    <div className="space-y-2">
+                                        {[1, 2, 3, 4, 5].map((num) => {
+                                            const subKey = `subject${num}` as keyof typeof marksFields;
+                                            const marksKey = `marks${num}` as keyof typeof marksFields;
+                                            return (
+                                                <div key={num} className="grid grid-cols-3 gap-3 items-center">
+                                                    <span className="text-xs font-semibold text-slate-600">Subject {num} (Vars {num*2 + 3}, {num*2 + 4})</span>
+                                                    <input
+                                                        type="text"
+                                                        value={marksFields[subKey]}
+                                                        onChange={(e) => setMarksFields({ ...marksFields, [subKey]: e.target.value })}
+                                                        placeholder="Subject Name"
+                                                        className="w-full rounded border border-slate-300 p-1.5 text-xs outline-none focus:border-blue-500"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        value={marksFields[marksKey]}
+                                                        onChange={(e) => setMarksFields({ ...marksFields, [marksKey]: e.target.value })}
+                                                        placeholder="Marks"
+                                                        className="w-full rounded border border-slate-300 p-1.5 text-xs outline-none focus:border-blue-500"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Test Subjects</h2>
+                            <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Test Mobile Numbers</h2>
                             <button
                                 onClick={addTestCase}
                                 className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors"
@@ -134,7 +264,7 @@ export default function SMSTestPage() {
                         <div className="space-y-3">
                             {testCases.map((tc, index) => (
                                 <div key={tc.id} className="flex flex-col sm:flex-row gap-3 items-end p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                                    <div className="w-full sm:w-1/3">
+                                    <div className={selectedTemplate === "marks" ? "w-full" : "w-full sm:w-1/3"}>
                                         <label className="mb-1 block text-xs font-semibold text-slate-600 flex items-center gap-1"><FaMobileAlt /> Mobile No</label>
                                         <input
                                             type="text"
@@ -144,26 +274,30 @@ export default function SMSTestPage() {
                                             className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                         />
                                     </div>
-                                    <div className="w-full sm:w-1/3">
-                                        <label className="mb-1 block text-xs font-semibold text-slate-600 flex items-center gap-1"><FaIdCard /> Roll No (Var 1)</label>
-                                        <input
-                                            type="text"
-                                            value={tc.rollNumber}
-                                            onChange={(e) => updateTestCase(tc.id, "rollNumber", e.target.value)}
-                                            placeholder="Ex: 22131A0501"
-                                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                    <div className="w-full sm:w-1/3">
-                                        <label className="mb-1 block text-xs font-semibold text-slate-600 flex items-center gap-1"><FaUser /> Name (Var 2)</label>
-                                        <input
-                                            type="text"
-                                            value={tc.name}
-                                            onChange={(e) => updateTestCase(tc.id, "name", e.target.value)}
-                                            placeholder="Ex: John Doe"
-                                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                        />
-                                    </div>
+                                    {selectedTemplate === "attendance" && (
+                                        <>
+                                            <div className="w-full sm:w-1/3">
+                                                <label className="mb-1 block text-xs font-semibold text-slate-600 flex items-center gap-1"><FaIdCard /> Roll No (Var 1)</label>
+                                                <input
+                                                    type="text"
+                                                    value={tc.rollNumber}
+                                                    onChange={(e) => updateTestCase(tc.id, "rollNumber", e.target.value)}
+                                                    placeholder="Ex: 22131A0501"
+                                                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div className="w-full sm:w-1/3">
+                                                <label className="mb-1 block text-xs font-semibold text-slate-600 flex items-center gap-1"><FaUser /> Name (Var 2)</label>
+                                                <input
+                                                    type="text"
+                                                    value={tc.name}
+                                                    onChange={(e) => updateTestCase(tc.id, "name", e.target.value)}
+                                                    placeholder="Ex: John Doe"
+                                                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
                                     <div className="pb-1">
                                         <button
                                             onClick={() => removeTestCase(tc.id)}
@@ -234,10 +368,12 @@ export default function SMSTestPage() {
                                         </div>
                                     </div>
 
-                                    <div className="text-xs text-slate-600 mb-2 space-y-1">
-                                        <div><span className="font-medium">Roll:</span> {res.rollNumber || "N/A"}</div>
-                                        <div><span className="font-medium">Name:</span> {res.name || "N/A"}</div>
-                                    </div>
+                                    {selectedTemplate === "attendance" && (
+                                        <div className="text-xs text-slate-600 mb-2 space-y-1">
+                                            <div><span className="font-medium">Roll:</span> {res.rollNumber || "N/A"}</div>
+                                            <div><span className="font-medium">Name:</span> {res.name || "N/A"}</div>
+                                        </div>
+                                    )}
 
                                     <div className="mt-2 pt-2 border-t border-black/5">
                                         <div className="text-[10px] font-bold uppercase text-slate-400 mb-1">Gateway Dump</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
@@ -15,6 +15,15 @@ import {
   FaBookOpen,
   FaEye,
   FaDownload,
+  FaBold,
+  FaItalic,
+  FaUnderline,
+  FaAlignLeft,
+  FaAlignCenter,
+  FaAlignRight,
+  FaAlignJustify,
+  FaListUl,
+  FaListOl,
 } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import jsPDF from "jspdf";
@@ -56,6 +65,233 @@ const defaultSyllabus: Syllabus = {
   referenceBooks: ["Author Name, 'Title of the Reference Book', Edition, Publisher, Year."],
 };
 
+interface SyllabusRichFieldProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder: string;
+  className?: string;
+}
+
+function SyllabusRichField({
+  value,
+  onChange,
+  placeholder,
+  className = "",
+}: SyllabusRichFieldProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Sync initial value or external value changes to the editor content
+  useEffect(() => {
+    if (editorRef.current) {
+      if (editorRef.current.innerHTML !== (value || "")) {
+        editorRef.current.innerHTML = value || "";
+      }
+    }
+  }, [value, isEditing]);
+
+  // Click outside detection to exit editing mode
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsEditing(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleInput = () => {
+    if (editorRef.current) {
+      const html = editorRef.current.innerHTML;
+      onChange(html);
+    }
+  };
+
+  const executeCommand = (command: string, argValue: string = "") => {
+    document.execCommand(command, false, argValue);
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+    handleInput();
+  };
+
+  const handleStartEditing = () => {
+    setIsEditing(true);
+    setTimeout(() => {
+      if (editorRef.current) {
+        editorRef.current.focus();
+        // Move cursor to end of text
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(editorRef.current);
+        range.collapse(false);
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+    }, 50);
+  };
+
+  if (isEditing) {
+    return (
+      <div
+        ref={wrapperRef}
+        className={`w-full rounded-xl border border-blue-300 bg-white p-2 shadow-md focus-within:ring-2 focus-within:ring-blue-500/20 transition-all ${className}`}
+      >
+        <style>{`
+          .syllabus-rich-content ul {
+            list-style-type: disc !important;
+            padding-left: 20px !important;
+            margin-top: 4px !important;
+            margin-bottom: 4px !important;
+          }
+          .syllabus-rich-content ol {
+            list-style-type: decimal !important;
+            padding-left: 20px !important;
+            margin-top: 4px !important;
+            margin-bottom: 4px !important;
+          }
+          .syllabus-rich-content li {
+            margin-bottom: 2px !important;
+          }
+          .syllabus-rich-content[contenteditable]:empty::before {
+            content: attr(data-placeholder);
+            color: #94a3b8;
+            font-style: italic;
+            cursor: text;
+          }
+        `}</style>
+        {/* Toolbar */}
+        <div className="flex flex-wrap gap-1 items-center pb-2 mb-2 border-b border-slate-100 text-slate-600 select-none">
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("bold"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Bold"
+          >
+            <FaBold size={11} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("italic"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Italic"
+          >
+            <FaItalic size={11} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("underline"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Underline"
+          >
+            <FaUnderline size={11} />
+          </button>
+          <div className="w-px h-3.5 bg-slate-200 mx-1" />
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("justifyLeft"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Align Left"
+          >
+            <FaAlignLeft size={11} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("justifyCenter"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Align Center"
+          >
+            <FaAlignCenter size={11} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("justifyRight"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Align Right"
+          >
+            <FaAlignRight size={11} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("justifyFull"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Justify"
+          >
+            <FaAlignJustify size={11} />
+          </button>
+          <div className="w-px h-3.5 bg-slate-200 mx-1" />
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("insertUnorderedList"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Bullet List"
+          >
+            <FaListUl size={11} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); executeCommand("insertOrderedList"); }}
+            className="p-1 rounded hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Numbered List"
+          >
+            <FaListOl size={11} />
+          </button>
+        </div>
+
+        {/* Editor Content Area */}
+        <div
+          ref={editorRef}
+          contentEditable
+          onInput={handleInput}
+          data-placeholder={placeholder}
+          className="syllabus-rich-content w-full min-h-[60px] text-xs outline-none text-slate-700 font-sans leading-relaxed focus:outline-none"
+          style={{
+            wordBreak: "break-word"
+          }}
+        />
+      </div>
+    );
+  }
+
+  const hasContent = value && value.replace(/<[^>]*>/g, "").trim().length > 0;
+
+  return (
+    <div
+      onClick={handleStartEditing}
+      className={`w-full min-h-[36px] rounded border border-slate-200 hover:border-slate-300 bg-white px-3 py-2 text-xs cursor-text transition-colors syllabus-rich-content ${className}`}
+    >
+      <style>{`
+        .syllabus-rich-content ul {
+          list-style-type: disc !important;
+          padding-left: 20px !important;
+          margin-top: 4px !important;
+          margin-bottom: 4px !important;
+        }
+        .syllabus-rich-content ol {
+          list-style-type: decimal !important;
+          padding-left: 20px !important;
+          margin-top: 4px !important;
+          margin-bottom: 4px !important;
+        }
+        .syllabus-rich-content li {
+          margin-bottom: 2px !important;
+        }
+      `}</style>
+      {hasContent ? (
+        <div dangerouslySetInnerHTML={{ __html: value }} />
+      ) : (
+        <span className="text-slate-400 italic">{placeholder}</span>
+      )}
+    </div>
+  );
+}
+
 function SyllabusConfigContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,6 +305,8 @@ function SyllabusConfigContent() {
   const [hasSavedOnce, setHasSavedOnce] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const databaseSyllabusRef = useRef<Syllabus | null>(null);
+
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
@@ -81,18 +319,37 @@ function SyllabusConfigContent() {
       if (res.ok) {
         const data = await res.json();
         setSubjectInfo({ name: data.name, code: data.code });
+        let initialSyllabus = defaultSyllabus;
         if (data.syllabus) {
           // Merge loaded syllabus with default to prevent missing structure fields
-          const merged = {
+          initialSyllabus = {
             ...defaultSyllabus,
             ...data.syllabus,
             credits: { ...defaultSyllabus.credits, ...(data.syllabus.credits || {}) },
           };
-          setSyllabus(merged);
           setHasSavedOnce(true);
+        }
+        databaseSyllabusRef.current = initialSyllabus;
+
+        // Check for unsaved draft in sessionStorage
+        const draftStr = sessionStorage.getItem(`syllabus_draft_${subjectId}`);
+        if (draftStr) {
+          try {
+            const draft = JSON.parse(draftStr);
+            if (draft && typeof draft === "object") {
+              setSyllabus(draft);
+              setTimeout(() => {
+                showToast("Recovered unsaved draft from your active session.", "success");
+              }, 100);
+            } else {
+              setSyllabus(initialSyllabus);
+            }
+          } catch (e) {
+            console.error(e);
+            setSyllabus(initialSyllabus);
+          }
         } else {
-          // Set template defaults
-          setSyllabus(defaultSyllabus);
+          setSyllabus(initialSyllabus);
         }
       } else {
         showToast("Failed to load syllabus", "error");
@@ -110,6 +367,17 @@ function SyllabusConfigContent() {
       loadSyllabusData();
     }
   }, [session, loadSyllabusData]);
+
+  useEffect(() => {
+    if (!loading && subjectId && databaseSyllabusRef.current) {
+      const isDifferent = JSON.stringify(syllabus) !== JSON.stringify(databaseSyllabusRef.current);
+      if (isDifferent) {
+        sessionStorage.setItem(`syllabus_draft_${subjectId}`, JSON.stringify(syllabus));
+      } else {
+        sessionStorage.removeItem(`syllabus_draft_${subjectId}`);
+      }
+    }
+  }, [syllabus, loading, subjectId]);
 
   const handleCreditChange = (field: "L" | "T" | "P" | "C", val: string) => {
     const num = parseFloat(val) || 0;
@@ -244,6 +512,37 @@ function SyllabusConfigContent() {
     });
   };
 
+  const addUnit = () => {
+    setSyllabus((prev) => {
+      const romanNumerals = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+      const nextIndex = prev.units.length;
+      const unitName = nextIndex < romanNumerals.length ? `UNIT-${romanNumerals[nextIndex]}` : `UNIT-${nextIndex + 1}`;
+      return {
+        ...prev,
+        units: [...prev.units, { name: unitName, title: "", mappedCOs: [], content: "" }],
+      };
+    });
+  };
+
+  const removeUnit = (index: number) => {
+    setSyllabus((prev) => {
+      if (prev.units.length <= 1) {
+        return {
+          ...prev,
+          units: [{ name: "UNIT-I", title: "", mappedCOs: [], content: "" }],
+        };
+      }
+      const filtered = prev.units.filter((_, i) => i !== index);
+      const romanNumerals = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+      const remapped = filtered.map((unit, idx) => {
+        const unitName = idx < romanNumerals.length ? `UNIT-${romanNumerals[idx]}` : `UNIT-${idx + 1}`;
+        return { ...unit, name: unitName };
+      });
+      return { ...prev, units: remapped };
+    });
+  };
+
+
   const handleSave = async () => {
     // Validate Outcomes
     const invalidOutcomes = syllabus.outcomes.filter(o => !o.code.trim() || !o.description.trim());
@@ -265,6 +564,8 @@ function SyllabusConfigContent() {
       if (res.ok) {
         showToast("Syllabus configuration saved successfully!");
         setHasSavedOnce(true);
+        databaseSyllabusRef.current = syllabus;
+        sessionStorage.removeItem(`syllabus_draft_${subjectId}`);
       } else {
         const errorData = await res.json();
         showToast(errorData.error || "Failed to save syllabus", "error");
@@ -281,6 +582,22 @@ function SyllabusConfigContent() {
     try {
       showToast(mode === "download" ? "Downloading syllabus PDF..." : "Preparing preview...", "success");
       
+      const cleanHtml = (html: string): string => {
+        if (!html) return "";
+        let text = html
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n")
+          .replace(/<\/div>/gi, "\n");
+        text = text.replace(/<[^>]*>/g, "");
+        return text
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .trim();
+      };
+
       let logoBase64: string | null = null;
       try {
         const logoRes = await fetch("/logo.png");
@@ -400,7 +717,7 @@ function SyllabusConfigContent() {
       doc.text("Prerequisite(s):", margin, currentY);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      const prereqText = syllabus.prerequisites || "None";
+      const prereqText = cleanHtml(syllabus.prerequisites) || "None";
       const prereqLines = doc.splitTextToSize(prereqText, 210 - margin * 2 - 30);
       doc.text(prereqLines, margin + 30, currentY);
       currentY += (prereqLines.length * 4.5) + 3;
@@ -414,7 +731,7 @@ function SyllabusConfigContent() {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       syllabus.objectives.forEach((obj, idx) => {
-        const objText = `${idx + 1}. ${obj}`;
+        const objText = `${idx + 1}. ${cleanHtml(obj)}`;
         const objLines = doc.splitTextToSize(objText, 210 - margin * 2);
         
         // Page break check
@@ -439,7 +756,7 @@ function SyllabusConfigContent() {
       currentY += 4;
 
       const coHeaders = [["CO Code", "Outcome Description"]];
-      const coRows = syllabus.outcomes.map(co => [co.code, co.description]);
+      const coRows = syllabus.outcomes.map(co => [co.code, cleanHtml(co.description)]);
 
       autoTable(doc, {
         head: coHeaders,
@@ -484,10 +801,10 @@ function SyllabusConfigContent() {
 
       syllabus.units.forEach((unit) => {
         // Prepare title and mapped COs text
-        const unitTitleText = `${unit.name}: ${unit.title} (Mapped COs: ${unit.mappedCOs.join(", ")})`;
+        const unitTitleText = `${cleanHtml(unit.name)}: ${cleanHtml(unit.title)} (Mapped COs: ${unit.mappedCOs.join(", ")})`;
         const titleLines = doc.splitTextToSize(unitTitleText, 210 - margin * 2);
         
-        const contentLines = doc.splitTextToSize(unit.content, 210 - margin * 2);
+        const contentLines = doc.splitTextToSize(cleanHtml(unit.content), 210 - margin * 2);
         const totalHeight = (titleLines.length * 4.5) + (contentLines.length * 4.5) + 6;
 
         if (currentY + totalHeight > 280) {
@@ -523,7 +840,7 @@ function SyllabusConfigContent() {
       
       doc.setFont("helvetica", "normal");
       syllabus.textbooks.forEach((tb, idx) => {
-        const text = `${idx + 1}. ${tb}`;
+        const text = `${idx + 1}. ${cleanHtml(tb)}`;
         const lines = doc.splitTextToSize(text, 210 - margin * 2);
         if (currentY + (lines.length * 4.5) > 280) {
           doc.addPage();
@@ -545,7 +862,7 @@ function SyllabusConfigContent() {
 
       doc.setFont("helvetica", "normal");
       syllabus.referenceBooks.forEach((ref, idx) => {
-        const text = `${idx + 1}. ${ref}`;
+        const text = `${idx + 1}. ${cleanHtml(ref)}`;
         const lines = doc.splitTextToSize(text, 210 - margin * 2);
         if (currentY + (lines.length * 4.5) > 280) {
           doc.addPage();
@@ -745,12 +1062,11 @@ function SyllabusConfigContent() {
               <h3 className="mb-2 border-l-4 border-slate-700 pl-2 text-sm font-bold text-slate-900 uppercase tracking-wider">
                 Prerequisite(s)
               </h3>
-              <input
-                type="text"
+              <SyllabusRichField
                 value={syllabus.prerequisites}
-                onChange={(e) => handleMetadataChange("prerequisites", e.target.value)}
+                onChange={(val) => handleMetadataChange("prerequisites", val)}
                 placeholder="e.g. Basic Mathematics, Programming Concepts in C"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full"
               />
             </div>
 
@@ -772,12 +1088,11 @@ function SyllabusConfigContent() {
                 {syllabus.objectives.map((obj, index) => (
                   <div key={index} className="flex gap-2 items-center">
                     <span className="text-xs font-bold text-slate-400 w-6">{index + 1}.</span>
-                    <input
-                      type="text"
+                    <SyllabusRichField
                       value={obj}
-                      onChange={(e) => handleObjectiveChange(index, e.target.value)}
+                      onChange={(val) => handleObjectiveChange(index, val)}
                       placeholder={`Enter Course Objective ${index + 1}`}
-                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="flex-1"
                     />
                     <button
                       type="button"
@@ -820,12 +1135,11 @@ function SyllabusConfigContent() {
                     </div>
                     <div className="flex-1">
                       <span className="text-xs font-bold text-slate-500 block mb-1">Outcome Description</span>
-                      <textarea
-                        rows={2}
+                      <SyllabusRichField
                         value={co.description}
-                        onChange={(e) => handleOutcomeChange(index, "description", e.target.value)}
+                        onChange={(val) => handleOutcomeChange(index, "description", val)}
                         placeholder={`At the end of the course, student will be able to ...`}
-                        className="w-full rounded border border-slate-200 px-3 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                        className="w-full"
                       />
                     </div>
                     <button
@@ -842,9 +1156,18 @@ function SyllabusConfigContent() {
 
             {/* 4. Units Details */}
             <div>
-              <h3 className="mb-3 border-l-4 border-slate-700 pl-2 text-sm font-bold text-slate-900 uppercase tracking-wider">
-                4. Unit-wise Content
-              </h3>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="border-l-4 border-slate-700 pl-2 text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  4. Unit-wise Content
+                </h3>
+                <button
+                  type="button"
+                  onClick={addUnit}
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  <FaPlus size={10} /> Add Unit
+                </button>
+              </div>
               <div className="space-y-6">
                 {syllabus.units.map((unit, index) => (
                   <div key={index} className="border border-slate-300 rounded-lg p-4 bg-slate-50/30">
@@ -860,13 +1183,22 @@ function SyllabusConfigContent() {
                       </div>
                       <div className="md:col-span-2">
                         <label className="text-xs font-bold text-slate-500 block mb-1">Unit Title</label>
-                        <input
-                          type="text"
-                          value={unit.title}
-                          onChange={(e) => handleUnitChange(index, "title", e.target.value)}
-                          placeholder="e.g. Introduction to Algorithms"
-                          className="w-full rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
+                        <div className="flex items-center gap-2">
+                          <SyllabusRichField
+                            value={unit.title}
+                            onChange={(val) => handleUnitChange(index, "title", val)}
+                            placeholder="e.g. Introduction to Algorithms"
+                            className="flex-1 font-semibold"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeUnit(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors p-2 border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-lg shadow-sm font-semibold"
+                            title={`Remove ${unit.name}`}
+                          >
+                            <FaTrash size={12} />
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -893,12 +1225,11 @@ function SyllabusConfigContent() {
 
                     <div>
                       <label className="text-xs font-bold text-slate-500 block mb-1">Unit Content / Topics</label>
-                      <textarea
-                        rows={4}
+                      <SyllabusRichField
                         value={unit.content}
-                        onChange={(e) => handleUnitChange(index, "content", e.target.value)}
+                        onChange={(val) => handleUnitChange(index, "content", val)}
                         placeholder="Detail the chapters, topics, sections and lab contents if any..."
-                        className="w-full rounded border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                        className="w-full"
                       />
                     </div>
                   </div>
@@ -928,12 +1259,11 @@ function SyllabusConfigContent() {
                   {syllabus.textbooks.map((tb, index) => (
                     <div key={index} className="flex gap-2 items-center">
                       <span className="text-xs font-bold text-slate-400 w-6">{index + 1}.</span>
-                      <input
-                        type="text"
+                      <SyllabusRichField
                         value={tb}
-                        onChange={(e) => handleTextbookChange(index, e.target.value)}
+                        onChange={(val) => handleTextbookChange(index, val)}
                         placeholder="Author, 'Book Title', Publisher, Edition, Year"
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="flex-1"
                       />
                       <button
                         type="button"
@@ -963,12 +1293,11 @@ function SyllabusConfigContent() {
                   {syllabus.referenceBooks.map((refB, index) => (
                     <div key={index} className="flex gap-2 items-center">
                       <span className="text-xs font-bold text-slate-400 w-6">{index + 1}.</span>
-                      <input
-                        type="text"
+                      <SyllabusRichField
                         value={refB}
-                        onChange={(e) => handleReferenceChange(index, e.target.value)}
+                        onChange={(val) => handleReferenceChange(index, val)}
                         placeholder="Author, 'Book Title', Publisher, Edition, Year"
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="flex-1"
                       />
                       <button
                         type="button"

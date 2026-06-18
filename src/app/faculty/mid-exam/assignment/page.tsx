@@ -247,6 +247,25 @@ function AssignmentMarksContent() {
             ))}
           </div>
         </div>
+
+        {/* Buttons at the bottom */}
+        <div className="mt-6 flex justify-end gap-2 bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <button
+            onClick={() => handleSave(true)}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
+            Save Draft
+          </button>
+          <button
+            onClick={() => handleSave(false)}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            <FaCheck /> Submit Final
+          </button>
+        </div>
       </div>
 
       {toast && (

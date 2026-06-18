@@ -41,7 +41,7 @@ export async function POST(request: Request) {
             const cleanMobile = tc.mobile.replace(/\D/g, "");
 
             // Format message
-            const messageText = `Dear Parent, Your ward Roll No: ${tc.rollNumber} Name: ${tc.name} is Absent for today's first hour. Regards, GAYATRI VIDYA PARISHAD COLLEGE`;
+            const messageText = tc.message || `Dear Parent, Your ward Roll No: ${tc.rollNumber} Name: ${tc.name} is Absent for today's first hour. Regards, GAYATRI VIDYA PARISHAD COLLEGE`;
 
             // Build URL
             const params = new URLSearchParams({

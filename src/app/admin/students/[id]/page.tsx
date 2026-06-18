@@ -10,8 +10,13 @@ import EditStudentModal from "@/components/EditStudentModal";
 import Modal from "@/components/Modal";
 import AttendanceGraph from "@/components/AttendanceGraph";
 import { formatISTDate } from "@/lib/dateUtils";
+import { useSession } from "next-auth/react";
 
 export default function StudentProfilePage() {
+    const { data: session, status: sessionStatus } = useSession();
+    const role = (session?.user as any)?.role;
+    const canEdit = ["ADMIN", "HOD"].includes(role);
+
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -55,10 +60,10 @@ export default function StudentProfilePage() {
     }, [searchParams]);
 
     useEffect(() => {
-        if (params?.id) {
+        if (params?.id && sessionStatus !== "loading") {
             fetchStudent();
         }
-    }, [params?.id]);
+    }, [params?.id, sessionStatus]);
 
     useEffect(() => {
         if (activeTab === "attendance" && student && !stats) {
@@ -75,7 +80,11 @@ export default function StudentProfilePage() {
                 const data = await res.json();
                 setStudent(data);
             } else {
-                router.push("/admin/students");
+                if (role === "FACULTY") {
+                    router.push("/faculty/mid-exam");
+                } else {
+                    router.push("/admin/students");
+                }
             }
         } catch (error) {
             console.error(error);
@@ -249,7 +258,7 @@ export default function StudentProfilePage() {
         }
     };
 
-    if (loading) {
+    if (loading || sessionStatus === "loading") {
         return <div className="flex h-96 items-center justify-center text-slate-500">Loading Profile...</div>;
     }
 
@@ -295,13 +304,15 @@ export default function StudentProfilePage() {
                                     <h1 className="text-2xl font-bold text-slate-900">{student.name}</h1>
                                     <p className="font-mono text-lg text-blue-600">{student.rollNumber}</p>
                                 </div>
-                                <button
-                                    onClick={() => setIsEditModalOpen(true)}
-                                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
-                                >
-                                    <FaEdit className="text-blue-500" />
-                                    Edit Profile
-                                </button>
+                                {canEdit && (
+                                    <button
+                                        onClick={() => setIsEditModalOpen(true)}
+                                        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+                                    >
+                                        <FaEdit className="text-blue-500" />
+                                        Edit Profile
+                                    </button>
+                                )}
                                 <button
                                     onClick={openSmsLogs}
                                     className="ml-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
@@ -673,13 +684,15 @@ export default function StudentProfilePage() {
                                                         <div className="text-slate-400">▼</div>
                                                     </div>
                                                 </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleEditResultClick(semResult); }}
-                                                    className="px-4 bg-slate-50 border-l border-slate-200 text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors text-xs font-semibold flex items-center gap-1"
-                                                    title="Edit this result"
-                                                >
-                                                    ✏️ Edit
-                                                </button>
+                                                {canEdit && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleEditResultClick(semResult); }}
+                                                        className="px-4 bg-slate-50 border-l border-slate-200 text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors text-xs font-semibold flex items-center gap-1"
+                                                        title="Edit this result"
+                                                    >
+                                                        ✏️ Edit
+                                                    </button>
+                                                )}
 
                                                 </div>
                                                 {/* end header row */}
@@ -770,8 +783,12 @@ export default function StudentProfilePage() {
                                                     return (
                                                         <div className="flex items-center justify-center gap-1">
                                                             <span className="font-bold text-slate-900 w-8 text-right mr-2">{mark.marksObtained}</span>
-                                                            <button onClick={() => handleEditInternalMark(mark)} className="text-blue-500 hover:bg-blue-50 p-1 rounded" title="Edit">Edit</button>
-                                                            <button onClick={() => handleDeleteInternalMark(mark)} className="text-red-500 hover:bg-red-50 p-1 rounded" title="Delete">Del</button>
+                                                            {canEdit && (
+                                                                <>
+                                                                    <button onClick={() => handleEditInternalMark(mark)} className="text-blue-500 hover:bg-blue-50 p-1 rounded" title="Edit">Edit</button>
+                                                                    <button onClick={() => handleDeleteInternalMark(mark)} className="text-red-500 hover:bg-red-50 p-1 rounded" title="Delete">Del</button>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     );
                                                 };

@@ -3,17 +3,31 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSlidersH, FaFilePdf, FaCheckCircle, FaLock, FaUnlock, FaSpinner,
-  FaPlus, FaTrash, FaPen, FaClipboardList, FaDownload, FaEye, FaLayerGroup, FaCalendarAlt, FaFileAlt
+  FaPlus, FaTrash, FaPen, FaClipboardList, FaDownload, FaEye, FaLayerGroup, FaCalendarAlt, FaFileAlt,
+  FaFileExcel, FaPaperPlane
 } from "react-icons/fa";
 import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
+import * as XLSX from "xlsx";
 
 // jsPDF imports for report generation
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+} from "recharts";
 
 interface Scheme {
   id: string;
@@ -45,7 +59,7 @@ export default function AdminMidExamDashboard() {
   const router = useRouter();
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports" | "co-po-mapping">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports" | "co-po-mapping" | "analysis">("dashboard");
 
   // Sync scrollbar refs & state
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -74,6 +88,9 @@ export default function AdminMidExamDashboard() {
   const [previewSubjectId, setPreviewSubjectId] = useState<string>("");
   const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
   const [fetchingReport, setFetchingReport] = useState<boolean>(false);
+  const [showAttendance, setShowAttendance] = useState<boolean>(false);
+  const [fetchingAttendance, setFetchingAttendance] = useState<boolean>(false);
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, number>>({});
 
   // Keep top scroll width in sync with data table container
   useEffect(() => {
@@ -113,10 +130,18 @@ export default function AdminMidExamDashboard() {
   const [selectedSem, setSelectedSem] = useState("1");
   const [selectedSection, setSelectedSection] = useState("");
 
+  // Analysis states
+  const [analysisData, setAnalysisData] = useState<any | null>(null);
+  const [fetchingAnalysis, setFetchingAnalysis] = useState(false);
+  const [selectedAnalysisExamType, setSelectedAnalysisExamType] = useState<"MID_I" | "MID_II">("MID_I");
+
   useEffect(() => {
     setPreviewData(null);
     setPreviewType(null);
-  }, [selectedAY, selectedDept, selectedYear, selectedSem, selectedSection]);
+    setShowAttendance(false);
+    setAttendanceMap({});
+    setAnalysisData(null);
+  }, [selectedAY, selectedDept, selectedYear, selectedSem, selectedSection, selectedAnalysisExamType]);
 
   const [loading, setLoading] = useState(true);
   const [papers, setPapers] = useState<Paper[]>([]);
@@ -188,11 +213,109 @@ export default function AdminMidExamDashboard() {
 
   // Lock/Publish Actions Loader
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
-  const showToast = (msg: string, type: "success" | "error" = "success") => {
+  const showToast = (msg: string, type: "success" | "error" | "info" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // Publish Confirmation Modals & Faculty selection states
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showDemoPublishModal, setShowDemoPublishModal] = useState(false);
+  const [selectedPaperForPublish, setSelectedPaperForPublish] = useState<any>(null);
+  const [sendSMSCheckbox, setSendSMSCheckbox] = useState(false);
+
+  const [facultiesList, setFacultiesList] = useState<any[]>([]);
+  const [selectedFacultyMobiles, setSelectedFacultyMobiles] = useState<string[]>([]);
+  const [facultySearchQuery, setFacultySearchQuery] = useState("");
+  const [loadingFaculties, setLoadingFaculties] = useState(false);
+
+  const openDemoPublishModal = async (paper: any) => {
+    setSelectedPaperForPublish(paper);
+    setShowDemoPublishModal(true);
+    setLoadingFaculties(true);
+    try {
+      const res = await fetch("/api/faculty");
+      if (res.ok) {
+        const data = await res.json();
+        setFacultiesList(data || []);
+        setSelectedFacultyMobiles([]); // reset selected list
+      } else {
+        showToast("Failed to fetch faculty list", "error");
+      }
+    } catch (e) {
+      showToast("Network error fetching faculty", "error");
+    } finally {
+      setLoadingFaculties(false);
+    }
+  };
+
+  const executePublish = async () => {
+    if (!selectedPaperForPublish) return;
+    const paperId = selectedPaperForPublish.id;
+    setShowPublishModal(false);
+    
+    setActionLoading(prev => ({ ...prev, [paperId]: true }));
+    try {
+      const res = await fetch("/api/mid-exam/marks/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paperId,
+          action: "publish",
+          sendSMS: sendSMSCheckbox
+        })
+      });
+      if (res.ok) {
+        showToast("Marks published successfully!", "success");
+        if (sendSMSCheckbox) {
+          showToast("SMS dispatch triggered in background.", "info");
+        }
+        await loadPapers();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Action failed", "error");
+      }
+    } catch (e) {
+      showToast("Network error", "error");
+    } finally {
+      setActionLoading(prev => ({ ...prev, [paperId]: false }));
+    }
+  };
+
+  const executeDemoPublish = async () => {
+    if (!selectedPaperForPublish) return;
+    if (selectedFacultyMobiles.length === 0) {
+      showToast("Please select at least one faculty member.", "error");
+      return;
+    }
+    const paperId = selectedPaperForPublish.id;
+    setShowDemoPublishModal(false);
+    
+    setActionLoading(prev => ({ ...prev, [paperId]: true }));
+    try {
+      const res = await fetch("/api/mid-exam/marks/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paperId,
+          action: "demo_publish",
+          facultyMobiles: selectedFacultyMobiles
+        })
+      });
+      if (res.ok) {
+        showToast("Demo publish triggered. SMS dispatch started in background.", "success");
+        await loadPapers();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Demo publish failed", "error");
+      }
+    } catch (e) {
+      showToast("Network error", "error");
+    } finally {
+      setActionLoading(prev => ({ ...prev, [paperId]: false }));
+    }
   };
 
   // Load Filters & initial data
@@ -255,8 +378,285 @@ export default function AdminMidExamDashboard() {
     loadPapers();
   }, [loadPapers]);
 
+  const fetchAnalysis = useCallback(async () => {
+    if (!selectedSection) {
+      showToast("Select a Section to view analysis", "error");
+      return;
+    }
+    setFetchingAnalysis(true);
+    try {
+      const res = await fetch(
+        `/api/mid-exam/analysis?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}&examType=${selectedAnalysisExamType}`
+      );
+      if (!res.ok) {
+        showToast("Failed to fetch analysis data", "error");
+        return;
+      }
+      const data = await res.json();
+      setAnalysisData(data);
+    } catch (e) {
+      console.error(e);
+      showToast("Error loading analysis data", "error");
+    } finally {
+      setFetchingAnalysis(false);
+    }
+  }, [selectedAY, selectedDept, selectedYear, selectedSem, selectedSection, selectedAnalysisExamType]);
+
+  useEffect(() => {
+    if (activeTab === "analysis" && selectedSection) {
+      fetchAnalysis();
+    }
+  }, [activeTab, selectedSection, selectedAnalysisExamType, fetchAnalysis]);
+
+  const downloadAnalysisExcel = () => {
+    if (!analysisData) return;
+    const { metadata, subjectAnalysis, performance, matrix } = analysisData;
+
+    const wb = XLSX.utils.book_new();
+
+    const ws1Data = [
+      ["MID EXAM ANALYSIS REPORT"],
+      [`Academic Year: ${metadata.academicYear} | Department: ${metadata.department} | Year: ${metadata.year} | Sem: ${metadata.semester} | Section: ${metadata.section}`],
+      [`Exam: ${metadata.examType === "MID_I" ? "MID - I" : "MID - II"}`],
+      [],
+      ["S.No", "Subject Code", "Subject Name", "Class Strength", "Absentees", "Average Marks", "Gap", "Difficulty Index (%)", "Insight", "Remarks"]
+    ];
+
+    subjectAnalysis.forEach((sub: any) => {
+      ws1Data.push([
+        sub.sNo,
+        sub.subjectCode,
+        sub.subjectName,
+        sub.classStrength,
+        sub.absentees,
+        sub.averageMarks,
+        sub.gap,
+        sub.difficultyIndex,
+        sub.insight,
+        sub.remarks
+      ]);
+    });
+
+    const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+    XLSX.utils.book_append_sheet(wb, ws1, "Subject Analysis");
+
+    const ws2Data = [
+      ["STUDENT COUNTS BY PERFORMANCE LEVELS"],
+      [`Academic Year: ${metadata.academicYear} | Department: ${metadata.department} | Section: ${metadata.section}`],
+      [],
+      ["Performance Level", "High Attendance (>=75%)", "Medium Attendance (65%-74.9%)", "Low Attendance (<65%)", "Total"]
+    ];
+
+    performance.forEach((perf: any) => {
+      ws2Data.push([
+        perf.level,
+        perf.high,
+        perf.medium,
+        perf.low,
+        perf.total
+      ]);
+    });
+
+    const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
+    XLSX.utils.book_append_sheet(wb, ws2, "Performance Levels");
+
+    const ws3Data = [
+      ["CORRELATION MATRIX (ATTENDANCE VS MARKS)"],
+      [`Academic Year: ${metadata.academicYear} | Department: ${metadata.department} | Section: ${metadata.section}`],
+      [],
+      ["Attendance Range", "High Marks (>=18)", "Medium Marks (12-17.9)", "Low Marks (<12)", "Total Students", "Percentage (%)"]
+    ];
+
+    matrix.forEach((row: any) => {
+      ws3Data.push([
+        row.range,
+        row.high,
+        row.medium,
+        row.low,
+        row.total,
+        row.percentage
+      ]);
+    });
+
+    const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
+    XLSX.utils.book_append_sheet(wb, ws3, "Correlation Matrix");
+
+    XLSX.writeFile(wb, `Mid_Exam_Analysis_${metadata.departmentCode}_Sem${metadata.semester}_Sec_${metadata.section}_${metadata.examType}.xlsx`);
+  };
+
+  const generateAnalysisPDF = async (cachedData: any) => {
+    if (!cachedData) return;
+    const { metadata, subjectAnalysis, performance, matrix } = cachedData;
+
+    try {
+      showToast("Generating PDF report...", "success");
+
+      let logoBase64: string | null = null;
+      try {
+        const logoRes = await fetch("/logo.png");
+        const blob = await logoRes.blob();
+        logoBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        console.error("Could not load logo", e);
+      }
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const margin = 15;
+
+      // Header Banner
+      if (logoBase64) {
+        try {
+          doc.addImage(logoBase64, "PNG", margin, 10, 20, 20);
+        } catch (e) {
+          console.warn("Failed to add logo to PDF");
+        }
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES (AUTONOMOUS)", 38, 14);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("Accredited by NAAC | Rushikonda, Visakhapatnam - 530045.", 38, 19);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`DEPARTMENT OF ${(metadata.department || "").toUpperCase()}`, 38, 24);
+
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, 32, 210 - margin, 32);
+
+      // Report Info
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`MID EXAM PERFORMANCE & ATTENDANCE ANALYSIS REPORT`, margin, 39);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.text(`Academic Year: ${metadata.academicYear}`, margin, 45);
+      doc.text(`Year / Sem: B.Tech ${metadata.year} Year / Sem ${metadata.semester}`, margin, 50);
+      doc.text(`Section: Section ${metadata.section}`, 140, 45);
+      doc.text(`Exam: ${metadata.examType === "MID_I" ? "MID - I" : "MID - II"} (30 Marks)`, 140, 50);
+
+      // Table 1: Subject-wise Analysis
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("1. Subject-wise Performance Analysis", margin, 58);
+
+      const subHeaders = [["S.No", "Code", "Subject Name", "Abs", "Avg", "Gap", "Diff %"]];
+      const subRows = subjectAnalysis.map((sub: any) => [
+        sub.sNo,
+        sub.subjectCode,
+        sub.subjectName,
+        sub.absentees,
+        sub.averageMarks,
+        sub.gap,
+        sub.difficultyIndex
+      ]);
+
+      autoTable(doc, {
+        head: subHeaders,
+        body: subRows,
+        startY: 61,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8.5, halign: "center", cellPadding: 2, lineColor: [210, 210, 210], lineWidth: 0.1 },
+        columnStyles: {
+          2: { halign: "left" }
+        },
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" }
+      });
+
+      // Table 2: Student Counts by Performance Levels
+      let nextY = (doc as any).lastAutoTable.finalY + 8;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("2. Student Distribution by Performance Levels", margin, nextY);
+
+      const perfHeaders = [["Performance Level", "High Attendance (>=75%)", "Med Attendance (65%-74.9%)", "Low Attendance (<65%)", "Total"]];
+      const perfRows = [
+        ["Top Performers (>=18)", performance.topHigh, performance.topMedium, performance.topLow, performance.topTotal],
+        ["Middle Performers (12-17.9)", performance.middleHigh, performance.middleMedium, performance.middleLow, performance.middleTotal],
+        ["Low Performers (<12)", performance.lowHigh, performance.lowMedium, performance.lowLow, performance.lowTotal]
+      ];
+
+      autoTable(doc, {
+        head: perfHeaders,
+        body: perfRows,
+        startY: nextY + 3,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8.5, halign: "center", cellPadding: 2.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+        columnStyles: {
+          0: { halign: "left", fontStyle: "bold" }
+        },
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" }
+      });
+
+      // Table 3: Correlation Matrix
+      nextY = (doc as any).lastAutoTable.finalY + 8;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("3. Correlation Matrix (Attendance vs Academic Performance)", margin, nextY);
+
+      const matrixHeaders = [["Attendance Range", "High Marks (>=18)", "Med Marks (12-17.9)", "Low Marks (<12)", "Total", "Pct %"]];
+      const matrixRows = matrix.map((row: any) => [
+        row.range,
+        row.high,
+        row.medium,
+        row.low,
+        row.total,
+        row.percentage
+      ]);
+
+      autoTable(doc, {
+        head: matrixHeaders,
+        body: matrixRows,
+        startY: nextY + 3,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8.5, halign: "center", cellPadding: 2.5, lineColor: [210, 210, 210], lineWidth: 0.1 },
+        columnStyles: {
+          0: { halign: "left", fontStyle: "bold" }
+        },
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" }
+      });
+
+      // Footer
+      nextY = (doc as any).lastAutoTable.finalY + 20;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("Signature of HOD / Coordinator", margin + 5, nextY);
+      doc.text("Signature of Director / Principal", 140, nextY);
+
+      doc.save(`Mid_Exam_Analysis_${metadata.departmentCode}_Sem${metadata.semester}_Sec_${metadata.section}_${metadata.examType}.pdf`);
+      showToast("PDF report generated successfully", "success");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to generate PDF", "error");
+    }
+  };
+
   // Lock / Unlock / Publish handler
   const handlePaperAction = async (paperId: string, action: "lock" | "unlock" | "publish") => {
+    if (action === "publish") {
+      const paper = papers.find(p => p.id === paperId);
+      if (paper) {
+        setSelectedPaperForPublish(paper);
+        setSendSMSCheckbox(false);
+        setShowPublishModal(true);
+      }
+      return;
+    }
+
     setActionLoading(prev => ({ ...prev, [paperId]: true }));
     try {
       const res = await fetch("/api/mid-exam/marks/publish", {
@@ -400,6 +800,8 @@ export default function AdminMidExamDashboard() {
       const data = await res.json();
       setPreviewData(data);
       setPreviewType(reportType);
+      setShowAttendance(false);
+      setAttendanceMap({});
       // Scroll to preview element smoothly
       setTimeout(() => {
         document.getElementById("report-preview-pane")?.scrollIntoView({ behavior: "smooth" });
@@ -432,6 +834,8 @@ export default function AdminMidExamDashboard() {
       setPreviewData(data);
       setPreviewType("SUBJECT");
       setPreviewSubjectId(selectedReportSubjectId);
+      setShowAttendance(false);
+      setAttendanceMap({});
       // Scroll to preview element smoothly
       setTimeout(() => {
         document.getElementById("report-preview-pane")?.scrollIntoView({ behavior: "smooth" });
@@ -442,6 +846,188 @@ export default function AdminMidExamDashboard() {
     } finally {
       setFetchingReport(false);
     }
+  };
+
+  const fetchAttendance = async () => {
+    if (!previewData || !previewType) return;
+    if (showAttendance) {
+      setShowAttendance(false);
+      return;
+    }
+
+    if (Object.keys(attendanceMap).length > 0) {
+      setShowAttendance(true);
+      return;
+    }
+
+    setFetchingAttendance(true);
+    try {
+      const year = previewData.meta.year;
+      const semester = previewData.meta.semester;
+      const promises = previewData.rows.map(async (row: any) => {
+        try {
+          const res = await fetch(`/api/students/${row.studentId}/stats?year=${year}&semester=${semester}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (previewType === "SUBJECT") {
+              const subStat = data.subjects?.find((s: any) => s.id === previewSubjectId);
+              return { studentId: row.studentId, pct: subStat ? subStat.percentage : (data.overall?.percentage ?? 0) };
+            } else {
+              return { studentId: row.studentId, pct: data.overall?.percentage ?? 0 };
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        return { studentId: row.studentId, pct: 0 };
+      });
+      const results = await Promise.all(promises);
+      const map: Record<string, number> = {};
+      results.forEach(r => {
+        map[r.studentId] = r.pct;
+      });
+      setAttendanceMap(map);
+      setShowAttendance(true);
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to fetch attendance data", "error");
+    } finally {
+      setFetchingAttendance(false);
+    }
+  };
+
+  const downloadExcel = async () => {
+    if (!previewData || !previewType) return;
+
+    const includeAttendance = confirm("Would you like to include the Attendance column in the Excel report?");
+    let currentAttendanceMap = attendanceMap;
+
+    if (includeAttendance) {
+      if (Object.keys(currentAttendanceMap).length === 0) {
+        setFetchingAttendance(true);
+        try {
+          const year = previewData.meta.year;
+          const semester = previewData.meta.semester;
+          const promises = previewData.rows.map(async (row: any) => {
+            try {
+              const res = await fetch(`/api/students/${row.studentId}/stats?year=${year}&semester=${semester}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (previewType === "SUBJECT") {
+                  const subStat = data.subjects?.find((s: any) => s.id === previewSubjectId);
+                  return { studentId: row.studentId, pct: subStat ? subStat.percentage : (data.overall?.percentage ?? 0) };
+                } else {
+                  return { studentId: row.studentId, pct: data.overall?.percentage ?? 0 };
+                }
+              }
+            } catch (e) {
+              console.error(e);
+            }
+            return { studentId: row.studentId, pct: 0 };
+          });
+          const results = await Promise.all(promises);
+          const map: Record<string, number> = {};
+          results.forEach(r => {
+            map[r.studentId] = r.pct;
+          });
+          currentAttendanceMap = map;
+          setAttendanceMap(map);
+          setShowAttendance(true);
+        } catch (e) {
+          console.error(e);
+          alert("Failed to load attendance for Excel export.");
+        } finally {
+          setFetchingAttendance(false);
+        }
+      }
+    }
+
+    const rowsList: any[] = [];
+    rowsList.push([`${previewType === "SUBJECT" ? "SUBJECT DETAILED EVALUATION SHEET" : previewType.replace("_", " ") + " MARKS MEMO"}`]);
+    rowsList.push([`Department: ${previewData.meta.department}`]);
+    rowsList.push([`Academic Year: ${previewData.meta.academicYear} | B.Tech Year: ${previewData.meta.year} | Semester: ${previewData.meta.semester} | Section: ${previewData.meta.section}`]);
+    if (previewType === "SUBJECT") {
+      const subName = reportSubjects.find(s => s.id === previewSubjectId)?.name || "";
+      rowsList.push([`Subject: ${subName}`]);
+    }
+    rowsList.push([]);
+
+    if (previewType !== "SUBJECT") {
+      const headers = ["S.No", "Roll Number", "Student Name"];
+      if (includeAttendance) {
+        headers.push("Attendance (%)");
+      }
+      previewData.subjects.forEach((sub: any) => {
+        headers.push(`${sub.shortName || sub.name} (${previewType === "MID_I" ? "MID I 30M" : previewType === "MID_II" ? "MID II 30M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M"})`);
+      });
+      rowsList.push(headers);
+
+      previewData.rows.forEach((row: any, idx: number) => {
+        const rowData: any[] = [idx + 1, row.rollNumber, row.name];
+        if (includeAttendance) {
+          rowData.push(currentAttendanceMap[row.studentId] !== undefined ? `${currentAttendanceMap[row.studentId]}%` : "");
+        }
+        previewData.subjects.forEach((sub: any) => {
+          const marksObj = row.subjects[sub.id] || {};
+          let val: number | null = null;
+          if (previewType === "MID_I") val = marksObj.mid1;
+          else if (previewType === "MID_II") val = marksObj.mid2;
+          else if (previewType === "ASSIGNMENT") val = marksObj.assignment;
+          else if (previewType === "FINAL") val = marksObj.internal;
+
+          rowData.push(val !== null ? Math.round(val) : "");
+        });
+        rowsList.push(rowData);
+      });
+    } else {
+      const headers = ["S.No", "Roll Number", "Student Name"];
+      if (includeAttendance) {
+        headers.push("Attendance (%)");
+      }
+      headers.push("MID-I (30M)", "MID-I (20M)", "MID-II (30M)", "MID-II (20M)", "MID Avg (20M)", "Assign (10M)", "Final (30M)");
+      rowsList.push(headers);
+
+      previewData.rows.forEach((row: any, idx: number) => {
+        const marksObj = row.subjects[previewSubjectId] || {};
+        const m1 = marksObj.mid1Scaled;
+        const m2 = marksObj.mid2Scaled;
+        const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+        const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
+
+        const rowData: any[] = [idx + 1, row.rollNumber, row.name];
+        if (includeAttendance) {
+          rowData.push(currentAttendanceMap[row.studentId] !== undefined ? `${currentAttendanceMap[row.studentId]}%` : "");
+        }
+
+        const fields = [
+          marksObj.mid1,
+          marksObj.mid1Scaled,
+          marksObj.mid2,
+          marksObj.mid2Scaled,
+          midAvgVal,
+          marksObj.assignment,
+          marksObj.internal
+        ];
+
+        fields.forEach(val => {
+          rowData.push(val !== null && val !== undefined ? Math.round(val) : "");
+        });
+        rowsList.push(rowData);
+      });
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rowsList);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Report");
+
+    let filename = "";
+    if (previewType === "SUBJECT") {
+      filename = `Subject_Detailed_Report_${previewData.meta.departmentCode}_Sem${previewData.meta.semester}_Sec_${previewData.meta.section}.xlsx`;
+    } else {
+      filename = `${previewType}_Marks_Report_${previewData.meta.departmentCode}_Sem${previewData.meta.semester}_Sec_${previewData.meta.section}.xlsx`;
+    }
+
+    XLSX.writeFile(wb, filename);
   };
 
   // Generate strict, high-alignment landscape PDF reports
@@ -988,7 +1574,7 @@ export default function AdminMidExamDashboard() {
 
         {/* Tab Navigation Menu */}
         <div className="mb-8 flex gap-2 border-b border-slate-200 pb-2">
-          {(["dashboard", "schemes", "publish", "reports", "co-po-mapping"] as const).map(tab => (
+          {(["dashboard", "schemes", "publish", "reports", "co-po-mapping", "analysis"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -998,7 +1584,7 @@ export default function AdminMidExamDashboard() {
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
-              {tab === "co-po-mapping" ? "CO-PO MAPPING" : tab.toUpperCase()}
+              {tab === "co-po-mapping" ? "CO-PO MAPPING" : tab === "analysis" ? "PERFORMANCE ANALYSIS" : tab.toUpperCase()}
             </button>
           ))}
         </div>
@@ -1350,15 +1936,26 @@ export default function AdminMidExamDashboard() {
                                 )}
 
                                 {!isPublished && (
-                                  <button
-                                    onClick={() => handlePaperAction(p.id, "publish")}
-                                    disabled={loading || !p.isFrozen}
-                                    className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    title={!p.isFrozen ? "Paper must be frozen by faculty first" : "Publish to ERP matrices"}
-                                  >
-                                    {loading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle size={10} />}
-                                    Publish Marks
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => handlePaperAction(p.id, "publish")}
+                                      disabled={loading || !p.isFrozen}
+                                      className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                      title={!p.isFrozen ? "Paper must be frozen by faculty first" : "Publish to ERP matrices"}
+                                    >
+                                      {loading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle size={10} />}
+                                      Publish Marks
+                                    </button>
+                                    <button
+                                      onClick={() => openDemoPublishModal(p)}
+                                      disabled={loading || !p.isFrozen}
+                                      className="flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                                      title={!p.isFrozen ? "Paper must be frozen by faculty first" : "Demo publish (send SMS to selected faculty)"}
+                                    >
+                                      {loading ? <FaSpinner className="animate-spin" /> : <FaPaperPlane size={10} />}
+                                      Demo Publish
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -1495,6 +2092,33 @@ export default function AdminMidExamDashboard() {
                         Enable Performance Heatmap
                       </label>
 
+                      {/* Attendance Toggle */}
+                      <button
+                        onClick={fetchAttendance}
+                        disabled={fetchingAttendance}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm transition-colors ${
+                          showAttendance
+                            ? "bg-green-600 border-green-600 text-white hover:bg-green-700"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {fetchingAttendance ? (
+                          <FaSpinner className="animate-spin" size={12} />
+                        ) : (
+                          <FaCalendarAlt size={12} />
+                        )}
+                        {showAttendance ? "Hide Attendance" : "Show Attendance"}
+                      </button>
+
+                      {/* Download Excel Trigger */}
+                      <button
+                        onClick={downloadExcel}
+                        disabled={fetchingAttendance}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                      >
+                        <FaFileExcel size={12} /> Export Excel
+                      </button>
+
                       {/* Download PDF Trigger */}
                       <button
                         onClick={() => {
@@ -1556,12 +2180,15 @@ export default function AdminMidExamDashboard() {
                         <>
                           {/* Class-Wise Report Headers */}
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
-                              <th className="px-4 py-3 text-center border-r border-slate-205 w-12">S.No</th>
-                              <th className="px-4 py-3 text-center border-r border-slate-205 w-28">Roll Number</th>
-                              <th className="px-4 py-3 border-r border-slate-205">Student Name</th>
+                            <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
+                              <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
+                              <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
+                              <th className="px-4 py-3 border border-black">Student Name</th>
+                              {showAttendance && (
+                                <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
+                              )}
                               {previewData.subjects.map((sub: any) => (
-                                <th key={sub.id} className="px-4 py-3 text-center border-r border-slate-205 min-w-[120px]">
+                                <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[120px]">
                                   {sub.shortName || sub.name}
                                   <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
                                     {previewType === "MID_I" && "MID I (30M)"}
@@ -1576,9 +2203,22 @@ export default function AdminMidExamDashboard() {
                           <tbody className="divide-y divide-slate-150 text-slate-700">
                             {previewData.rows.map((row: any, idx: number) => (
                               <tr key={row.rollNumber} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-2.5 text-center border-r border-slate-205">{idx + 1}</td>
-                                <td className="px-4 py-2.5 text-center font-bold text-slate-800 border-r border-slate-205">{row.rollNumber}</td>
-                                <td className="px-4 py-2.5 font-medium border-r border-slate-205">{row.name}</td>
+                                <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
+                                <td className="px-4 py-2.5 text-center border border-black">
+                                  <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
+                                    {row.rollNumber}
+                                  </Link>
+                                </td>
+                                <td className="px-4 py-2.5 border border-black">
+                                  <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
+                                    {row.name}
+                                  </Link>
+                                </td>
+                                {showAttendance && (
+                                  <td className="px-4 py-2.5 text-center font-bold border border-black">
+                                    {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
+                                  </td>
+                                )}
                                 {previewData.subjects.map((sub: any) => {
                                   const marksObj = row.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
                                   let val: number | null = null;
@@ -1605,16 +2245,16 @@ export default function AdminMidExamDashboard() {
                                     const parsedVal = parseFloat(displayVal);
                                     if (!isNaN(parsedVal)) {
                                       const pct = (parsedVal / maxMarks) * 100;
-                                      if (pct < 40) colorClass = "bg-red-50 text-red-700 font-semibold border border-red-100";
-                                      else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 font-semibold border border-amber-100";
-                                      else colorClass = "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100";
+                                      if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
+                                      else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
+                                      else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
                                     }
                                   } else if (displayVal === "AB") {
-                                    colorClass = "bg-slate-100 text-slate-400 font-bold";
+                                    colorClass = "bg-slate-100 text-slate-400 border border-black";
                                   }
 
                                   return (
-                                    <td key={sub.id} className={`px-4 py-2.5 text-center border-r border-slate-205 ${colorClass}`}>
+                                    <td key={sub.id} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${colorClass}`}>
                                       {displayVal}
                                     </td>
                                   );
@@ -1666,17 +2306,20 @@ export default function AdminMidExamDashboard() {
                           <>
                             {/* Subject-Wise Report Headers */}
                             <thead>
-                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
-                                <th className="px-4 py-3 text-center border-r border-slate-205 w-12">S.No</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205 w-28">Roll Number</th>
-                                <th className="px-4 py-3 border-r border-slate-205">Student Name</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (30M)</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-I (20M)</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (30M)</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205">MID-II (20M)</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205 text-amber-700 font-bold">MID Avg (20M)</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205">Assign (10M)</th>
-                                <th className="px-4 py-3 text-center border-r border-slate-205 font-bold">Final (30M)</th>
+                              <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
+                                <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
+                                <th className="px-4 py-3 border border-black">Student Name</th>
+                                {showAttendance && (
+                                  <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
+                                )}
+                                <th className="px-4 py-3 text-center border border-black">MID-I (30M)</th>
+                                <th className="px-4 py-3 text-center border border-black">MID-I (20M)</th>
+                                <th className="px-4 py-3 text-center border border-black">MID-II (30M)</th>
+                                <th className="px-4 py-3 text-center border border-black">MID-II (20M)</th>
+                                <th className="px-4 py-3 text-center border border-black text-amber-700 font-bold">MID Avg (20M)</th>
+                                <th className="px-4 py-3 text-center border border-black">Assign (10M)</th>
+                                <th className="px-4 py-3 text-center border border-black font-bold">Final (30M)</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150 text-slate-700">
@@ -1700,9 +2343,22 @@ export default function AdminMidExamDashboard() {
 
                                 return (
                                   <tr key={row.rollNumber} className="hover:bg-slate-50/50">
-                                    <td className="px-4 py-2.5 text-center border-r border-slate-205">{idx + 1}</td>
-                                    <td className="px-4 py-2.5 text-center font-bold text-slate-800 border-r border-slate-205">{row.rollNumber}</td>
-                                    <td className="px-4 py-2.5 font-medium border-r border-slate-205">{row.name}</td>
+                                    <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
+                                    <td className="px-4 py-2.5 text-center border border-black">
+                                      <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
+                                        {row.rollNumber}
+                                      </Link>
+                                    </td>
+                                    <td className="px-4 py-2.5 border border-black">
+                                      <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
+                                        {row.name}
+                                      </Link>
+                                    </td>
+                                    {showAttendance && (
+                                      <td className="px-4 py-2.5 text-center font-bold border border-black">
+                                        {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
+                                      </td>
+                                    )}
                                     {fields.map((f, fIdx) => {
                                       const displayVal = (f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback;
                                       
@@ -1711,16 +2367,16 @@ export default function AdminMidExamDashboard() {
                                         const parsedVal = parseFloat(displayVal);
                                         if (!isNaN(parsedVal)) {
                                           const pct = (parsedVal / f.max) * 100;
-                                          if (pct < 40) colorClass = "bg-red-50 text-red-700 font-semibold border border-red-100";
-                                          else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 font-semibold border border-amber-100";
-                                          else colorClass = "bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100";
+                                          if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
+                                          else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
+                                          else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
                                         }
                                       } else if (displayVal === "AB") {
-                                        colorClass = "bg-slate-100 text-slate-400 font-bold";
+                                        colorClass = "bg-slate-100 text-slate-400 border border-black";
                                       }
 
                                       return (
-                                        <td key={fIdx} className={`px-4 py-2.5 text-center border-r border-slate-205 ${f.isBold ? "font-bold" : ""} ${f.isMidAvg ? "bg-amber-50/50 text-amber-900 font-semibold" : ""} ${colorClass}`}>
+                                        <td key={fIdx} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${f.isMidAvg ? "bg-amber-50/50 text-amber-900" : ""} ${colorClass}`}>
                                           {displayVal}
                                         </td>
                                       );
@@ -1731,16 +2387,17 @@ export default function AdminMidExamDashboard() {
                             </tbody>
                             <tfoot>
                               <tr className="bg-slate-50 border-t border-b border-slate-200 font-bold text-slate-800">
-                                <td className="px-4 py-3 text-center border-r border-slate-205"></td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205"></td>
-                                <td className="px-4 py-3 font-bold border-r border-slate-205 text-right uppercase text-[10px] text-slate-500">Class Average</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid1}</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid1Scaled}</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid2}</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgMid2Scaled}</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 text-amber-800 bg-amber-50/70">{classAvgMidAvg}</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 text-slate-700">{classAvgAssign}</td>
-                                <td className="px-4 py-3 text-center border-r border-slate-205 font-extrabold text-blue-700 bg-blue-50/30">{classAvgInternal}</td>
+                                <td className="px-4 py-3 text-center border border-black"></td>
+                                <td className="px-4 py-3 text-center border border-black"></td>
+                                <td className="px-4 py-3 font-bold border border-black text-right uppercase text-[10px] text-slate-500">Class Average</td>
+                                {showAttendance && <td className="px-4 py-3 text-center border border-black"></td>}
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black text-slate-700">{classAvgMid1}</td>
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black text-slate-700">{classAvgMid1Scaled}</td>
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black text-slate-700">{classAvgMid2}</td>
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black text-slate-700">{classAvgMid2Scaled}</td>
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black text-amber-800 bg-amber-50/70">{classAvgMidAvg}</td>
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black text-slate-700">{classAvgAssign}</td>
+                                <td className="px-4 py-3 text-center text-sm font-bold border border-black font-extrabold text-blue-700 bg-blue-50/30">{classAvgInternal}</td>
                               </tr>
                             </tfoot>
                           </>
@@ -1838,6 +2495,291 @@ export default function AdminMidExamDashboard() {
                   </div>
                 )}
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === "analysis" && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 font-sans">Mid Exam Performance & Attendance Analysis</h3>
+                <p className="text-sm text-slate-500">Analyze class performance, difficulty index, and correlate attendance with academic results</p>
+              </div>
+
+              {/* Selection filters */}
+              <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Target Class Section</label>
+                    <div className="flex items-center gap-2 font-medium text-slate-800 text-sm">
+                      {selectedSection ? (
+                        <span>
+                          Sec {sections.find(s => s.id === selectedSection)?.name || selectedSection}
+                        </span>
+                      ) : (
+                        <span className="text-red-500 font-semibold">Please select a section from the filter bar at the top</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mid Exam Type</label>
+                    <div className="flex gap-2">
+                      {(["MID_I", "MID_II"] as const).map(examType => (
+                        <button
+                          key={examType}
+                          onClick={() => setSelectedAnalysisExamType(examType)}
+                          className={`flex-1 rounded-xl py-2.5 text-xs font-semibold shadow-sm transition-colors ${
+                            selectedAnalysisExamType === examType
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          {examType === "MID_I" ? "MID - I" : "MID - II"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {!selectedSection ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl bg-white py-20 shadow-sm ring-1 ring-slate-100">
+                  <FaClipboardList className="mb-4 h-12 w-12 text-slate-300" />
+                  <p className="text-lg font-semibold text-slate-600">No Section Selected</p>
+                  <p className="text-sm text-slate-400">Please choose a specific Section from the top filter bar to load the analysis report.</p>
+                </div>
+              ) : fetchingAnalysis ? (
+                <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>
+              ) : !analysisData ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl bg-white py-20 shadow-sm ring-1 ring-slate-100">
+                  <FaClipboardList className="mb-4 h-12 w-12 text-slate-300" />
+                  <p className="text-lg font-semibold text-slate-600">No Data Available</p>
+                  <p className="text-sm text-slate-400">No mid exam analysis data found for the selected section and parameters.</p>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {/* Meta info & Action row */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-800">
+                        {analysisData.metadata.year} Year {analysisData.metadata.semester} Sem {analysisData.metadata.examType === "MID_I" ? "I Mid" : "II Mid"} Analysis (AY: {analysisData.metadata.academicYear})
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Branch: {analysisData.metadata.department} ({analysisData.metadata.departmentCode}) | Section: {analysisData.metadata.section}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={downloadAnalysisExcel}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                      >
+                        <FaFileExcel size={12} /> Export Excel
+                      </button>
+                      <button
+                        onClick={() => generateAnalysisPDF(analysisData)}
+                        className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
+                      >
+                        <FaDownload size={12} /> Download PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Table 1: Subject-wise Mid Analysis */}
+                  <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                    <h4 className="text-md font-bold text-slate-800">Subject-wise Performance & Difficulty Analysis</h4>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                            <th className="px-4 py-3 text-center border-r border-slate-200">S.No</th>
+                            <th className="px-4 py-3 border-r border-slate-200">Subject Code</th>
+                            <th className="px-4 py-3 border-r border-slate-200">Subject Name</th>
+                            <th className="px-4 py-3 text-center border-r border-slate-200">Strength</th>
+                            <th className="px-4 py-3 text-center border-r border-slate-200">Absentees</th>
+                            <th className="px-4 py-3 text-center border-r border-slate-200 font-bold">Average Marks</th>
+                            <th className="px-4 py-3 text-center border-r border-slate-200">Gap</th>
+                            <th className="px-4 py-3 text-center border-r border-slate-200">Diff Index (%)</th>
+                            <th className="px-4 py-3 text-center border-r border-slate-200">Insight</th>
+                            <th className="px-4 py-3 text-center">Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
+                          {analysisData.subjectAnalysis.map((sub: any) => (
+                            <tr key={sub.subjectId} className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 text-center border-r border-slate-200">{sub.sNo}</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                              <td className="px-4 py-3 text-center border-r border-slate-200">{sub.classStrength}</td>
+                              <td className="px-4 py-3 text-center border-r border-slate-200 text-red-600 font-semibold">{sub.absentees}</td>
+                              <td className="px-4 py-3 text-center border-r border-slate-200 font-bold text-slate-900">{sub.average}</td>
+                              <td className="px-4 py-3 text-center border-r border-slate-200">{sub.gap}</td>
+                              <td className="px-4 py-3 text-center border-r border-slate-200 font-semibold">{sub.difficultyIndex}%</td>
+                              <td className="px-4 py-3 text-center border-r border-slate-200">
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  sub.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                  sub.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                  "bg-red-100 text-red-700"
+                                }`}>
+                                  {sub.insight}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  sub.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                  sub.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                  "bg-red-100 text-red-700"
+                                }`}>
+                                  {sub.remarks}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Grid for Table 2 & Matrix */}
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                    {/* Table 2: Performance Levels */}
+                    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 md:col-span-1">
+                      <h4 className="text-md font-bold text-slate-800">Performance Levels</h4>
+                      <div className="overflow-hidden rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                              <th className="px-4 py-3 border-r border-slate-200">Performance Category</th>
+                              <th className="px-4 py-3 text-center">Count</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
+                            <tr className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 border-r border-slate-200 font-medium text-emerald-700">Top Performers (&ge;18)</td>
+                              <td className="px-4 py-3 text-center font-bold">{analysisData.performance.top}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 border-r border-slate-200 font-medium text-amber-700">Middle Performers (12-17.9)</td>
+                              <td className="px-4 py-3 text-center font-bold">{analysisData.performance.middle}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 border-r border-slate-200 font-medium text-red-700">Low Performers (&lt;12)</td>
+                              <td className="px-4 py-3 text-center font-bold">{analysisData.performance.low}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Table 3: Matrix */}
+                    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 md:col-span-2">
+                      <h4 className="text-md font-bold text-slate-800">Attendance vs Performance Correlation Matrix</h4>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                              <th className="px-4 py-3 text-left border-r border-slate-200">Attendance / Performance</th>
+                              <th className="px-4 py-3 border-r border-slate-200">Top Performers (&ge;18)</th>
+                              <th className="px-4 py-3 border-r border-slate-200">Middle Performers (12-17.9)</th>
+                              <th className="px-4 py-3">Low Performers (&lt;12)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 text-slate-700 text-center font-bold">
+                            <tr className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">High Attendance (&ge;75%)</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.highAttHighPerf}</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.highAttMediumPerf}</td>
+                              <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.highAttLowPerf}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">Medium Attendance (65%-74.9%)</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.mediumAttHighPerf}</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.mediumAttMediumPerf}</td>
+                              <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.mediumAttLowPerf}</td>
+                            </tr>
+                            <tr className="hover:bg-slate-50/50">
+                              <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">Low Attendance (&lt;65%)</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.lowAttHighPerf}</td>
+                              <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.lowAttMediumPerf}</td>
+                              <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.lowAttLowPerf}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Charts */}
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    {/* Attendance vs Performance Stacked Bar Chart */}
+                    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                      <h4 className="text-md font-bold text-slate-800">Attendance vs Performance Distribution</h4>
+                      <div className="h-80 w-full text-xs">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={[
+                              {
+                                name: "High Att (>=75%)",
+                                "Top Performer": analysisData.matrix.highAttHighPerf,
+                                "Middle Performer": analysisData.matrix.highAttMediumPerf,
+                                "Low Performer": analysisData.matrix.highAttLowPerf,
+                              },
+                              {
+                                name: "Medium Att (65%-74.9%)",
+                                "Top Performer": analysisData.matrix.mediumAttHighPerf,
+                                "Middle Performer": analysisData.matrix.mediumAttMediumPerf,
+                                "Low Performer": analysisData.matrix.mediumAttLowPerf,
+                              },
+                              {
+                                name: "Low Att (<65%)",
+                                "Top Performer": analysisData.matrix.lowAttHighPerf,
+                                "Middle Performer": analysisData.matrix.lowAttMediumPerf,
+                                "Low Performer": analysisData.matrix.lowAttLowPerf,
+                              },
+                            ]}
+                            margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <RechartsTooltip />
+                            <RechartsLegend />
+                            <Bar dataKey="Top Performer" stackId="a" fill="#10b981" />
+                            <Bar dataKey="Middle Performer" stackId="a" fill="#f59e0b" />
+                            <Bar dataKey="Low Performer" stackId="a" fill="#ef4444" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Subject-wise Analysis Grouped Bar Chart */}
+                    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                      <h4 className="text-md font-bold text-slate-800">Subject Performance & Difficulty Index</h4>
+                      <div className="h-80 w-full text-xs">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={analysisData.subjectAnalysis.map((item: any) => ({
+                              name: item.subjectCode || item.subjectName,
+                              Average: item.average,
+                              Gap: item.gap,
+                              "Diff Index (%)": item.difficultyIndex,
+                            }))}
+                            margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <RechartsTooltip />
+                            <RechartsLegend />
+                            <Bar dataKey="Average" fill="#3b82f6" />
+                            <Bar dataKey="Gap" fill="#f59e0b" />
+                            <Bar dataKey="Diff Index (%)" fill="#ef4444" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </div>
@@ -1939,10 +2881,168 @@ export default function AdminMidExamDashboard() {
         </div>
       </Modal>
 
+      {/* Publish Marks Modal */}
+      <Modal isOpen={showPublishModal} onClose={() => setShowPublishModal(false)} title="Publish Exam Marks" maxWidth="max-w-md">
+        <div className="space-y-4 p-6">
+          <div className="text-slate-600 text-sm">
+            <p className="font-semibold text-slate-800 mb-2">Are you sure you want to publish marks?</p>
+            <p className="mb-1"><span className="font-semibold text-slate-700">Subject:</span> {selectedPaperForPublish?.subject?.name} ({selectedPaperForPublish?.subject?.code})</p>
+            <p className="mb-1"><span className="font-semibold text-slate-700">Section:</span> Sec {selectedPaperForPublish?.section?.name}</p>
+            <p className="mb-1"><span className="font-semibold text-slate-700">Exam:</span> {selectedPaperForPublish?.examType?.replace("_", " ")}</p>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="sendSMSCheckbox"
+              checked={sendSMSCheckbox}
+              onChange={e => setSendSMSCheckbox(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <label htmlFor="sendSMSCheckbox" className="text-sm font-semibold text-slate-800 cursor-pointer">
+                Send Marks SMS to Parents
+              </label>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Sends a DLT template-compliant SMS to the parents' registered mobile numbers in the background.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-slate-100">
+            <button
+              onClick={() => setShowPublishModal(false)}
+              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={executePublish}
+              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+            >
+              Publish Marks
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Demo Publish Modal */}
+      <Modal isOpen={showDemoPublishModal} onClose={() => setShowDemoPublishModal(false)} title="Demo Publish — Send Test SMS to Faculty" maxWidth="max-w-lg">
+        <div className="space-y-4 p-6">
+          <div className="text-slate-600 text-sm">
+            <p className="font-semibold text-slate-800 mb-2">Test SMS for ward marks will be sent to the selected faculty mobile numbers.</p>
+            <p className="mb-1"><span className="font-semibold text-slate-700">Subject:</span> {selectedPaperForPublish?.subject?.name}</p>
+            <p className="mb-1"><span className="font-semibold text-slate-700">Section:</span> Sec {selectedPaperForPublish?.section?.name}</p>
+          </div>
+
+          {/* Search and Selection Tools */}
+          <div className="space-y-3 pt-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={facultySearchQuery}
+                onChange={e => setFacultySearchQuery(e.target.value)}
+                placeholder="Search faculty by name..."
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={() => {
+                  const filtered = facultiesList
+                    .filter(f => f.empName.toLowerCase().includes(facultySearchQuery.toLowerCase()))
+                    .map(f => f.mobile);
+                  
+                  const allSelected = filtered.every(m => selectedFacultyMobiles.includes(m));
+                  if (allSelected) {
+                    // Deselect only the filtered ones
+                    setSelectedFacultyMobiles(prev => prev.filter(m => !filtered.includes(m)));
+                  } else {
+                    // Select all filtered ones
+                    setSelectedFacultyMobiles(prev => Array.from(new Set([...prev, ...filtered])));
+                  }
+                }}
+                className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Toggle Page
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
+              <span>Selected: {selectedFacultyMobiles.length} / {facultiesList.length}</span>
+              <button
+                onClick={() => {
+                  if (selectedFacultyMobiles.length === facultiesList.length) {
+                    setSelectedFacultyMobiles([]);
+                  } else {
+                    setSelectedFacultyMobiles(facultiesList.map(f => f.mobile));
+                  }
+                }}
+                className="text-blue-600 hover:underline"
+              >
+                {selectedFacultyMobiles.length === facultiesList.length ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+
+            {/* Faculty List Box */}
+            <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-2 divide-y divide-slate-50 scrollbar-thin">
+              {loadingFaculties ? (
+                <div className="flex items-center justify-center py-6 text-slate-400 gap-2">
+                  <FaSpinner className="animate-spin" /> Fetching faculties...
+                </div>
+              ) : facultiesList.filter(f => f.empName.toLowerCase().includes(facultySearchQuery.toLowerCase())).length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-sm">No faculty members found.</div>
+              ) : (
+                facultiesList
+                  .filter(f => f.empName.toLowerCase().includes(facultySearchQuery.toLowerCase()))
+                  .map(f => {
+                    const isChecked = selectedFacultyMobiles.includes(f.mobile);
+                    return (
+                      <label key={f.id} className="flex items-center gap-3 py-2 px-1 hover:bg-slate-50 rounded cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedFacultyMobiles(prev => prev.filter(m => m !== f.mobile));
+                            } else {
+                              setSelectedFacultyMobiles(prev => [...prev, f.mobile]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="text-sm">
+                          <p className="font-semibold text-slate-800">{f.empName}</p>
+                          <p className="text-xs text-slate-500">{f.designation} • {f.mobile}</p>
+                        </div>
+                      </label>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-slate-100">
+            <button
+              onClick={() => setShowDemoPublishModal(false)}
+              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={executeDemoPublish}
+              disabled={selectedFacultyMobiles.length === 0}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-purple-600 py-2.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
+            >
+              <FaPaperPlane size={12} />
+              Send Test SMS ({selectedFacultyMobiles.length})
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Toast Popup */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-lg transition-all ${
-          toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
+          toast.type === "success" ? "bg-emerald-600" : toast.type === "info" ? "bg-blue-600" : "bg-red-600"
         }`}>
           {toast.msg}
         </div>

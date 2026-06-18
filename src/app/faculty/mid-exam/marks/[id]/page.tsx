@@ -110,7 +110,7 @@ export default function MarksGridPage() {
       };
 
       subQuestions.forEach(sq => {
-        const mark = row.isAbsent ? "AB" : (row.marks[sq.id] ?? "-");
+        const mark = row.isAbsent ? "AB" : (row.marks[sq.id] ?? "");
         record[sq.label] = mark;
       });
 
@@ -288,12 +288,19 @@ export default function MarksGridPage() {
   ) => {
     const key = e.key;
 
-    const focusCell = (rIdx: number, sIdx: number, direction: "right" | "left" | "down" | "up") => {
+    const focusCell = (rIdx: number, sIdx: number, direction: "right" | "left" | "down" | "up" | "enter_next_row") => {
       let currRow = rIdx;
       let currSq = sIdx;
 
       // Start by moving one step in the direction of movement
-      if (direction === "right") {
+      if (direction === "enter_next_row") {
+        if (currRow < rows.length - 1) {
+          currRow += 1;
+          currSq = 0;
+        } else {
+          return;
+        }
+      } else if (direction === "right") {
         if (currSq < subQuestions.length - 1) {
           currSq += 1;
         } else if (currRow < rows.length - 1) {
@@ -341,7 +348,7 @@ export default function MarksGridPage() {
         }
 
         // Otherwise keep moving in that direction
-        if (direction === "right") {
+        if (direction === "enter_next_row" || direction === "right") {
           if (currSq < subQuestions.length - 1) {
             currSq += 1;
           } else if (currRow < rows.length - 1) {
@@ -379,9 +386,12 @@ export default function MarksGridPage() {
       if (key === "Tab" && e.shiftKey) {
         e.preventDefault();
         focusCell(rowIndex, sqIndex, "left");
-      } else {
+      } else if (key === "Tab") {
         e.preventDefault();
         focusCell(rowIndex, sqIndex, "right");
+      } else {
+        e.preventDefault();
+        focusCell(rowIndex, sqIndex, "enter_next_row");
       }
     } else if (key === "ArrowRight") {
       e.preventDefault();
@@ -605,7 +615,7 @@ export default function MarksGridPage() {
           <FaInfoCircle className="mt-0.5 text-blue-500 flex-shrink-0" />
           <div className="text-sm text-blue-800">
             <p className="font-semibold">Slick Navigation Enabled</p>
-            <p>Use keyboard arrow keys <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">←</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">→</kbd> or <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Enter</kbd> to enter marks horizontally for the same student, and <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↑</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↓</kbd> to navigate vertically between students.</p>
+            <p>Use keyboard arrow keys <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">←</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">→</kbd> or <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Tab</kbd> to navigate horizontally, <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Enter</kbd> to go to the first cell of the next row, and <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↑</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↓</kbd> to navigate vertically between students.</p>
           </div>
         </div>
 
@@ -628,22 +638,46 @@ export default function MarksGridPage() {
           >
             <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="sticky top-0 left-0 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 z-30 w-36 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05),_0_2px_4px_rgba(0,0,0,0.02)]">Student Detail</th>
-                  <th className="sticky top-0 bg-slate-50 px-2 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center w-16 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">Status</th>
+                <tr className="bg-slate-50 border-b border-slate-100 h-16">
+                  <th className="sticky top-0 left-0 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 z-30 w-36 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05),_0_2px_4px_rgba(0,0,0,0.02)]">Student Detail</th>
+                  <th className="sticky top-0 bg-slate-50 px-2 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center w-16 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">Status</th>
                   {subQuestions.map(sq => (
-                    <th key={sq.id} className="sticky top-0 bg-slate-50 px-1 py-2 text-center min-w-[55px] w-14 border-l border-slate-100 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                      <p className="text-[11px] font-bold text-slate-800">{sq.label}</p>
-                      <p className="text-[10px] font-extrabold text-blue-600">Max:{sq.maxMarks}</p>
-                      <p className="text-[9px] font-semibold text-slate-400">{sq.coMapping}</p>
-                      {sq.choiceGroupNo && (
-                        <span className="mt-0.5 inline-block rounded bg-purple-50 px-0.5 py-0.1 text-[8px] font-semibold text-purple-600 border border-purple-100">
-                          CG{sq.choiceGroupNo}
-                        </span>
-                      )}
+                    <th key={sq.id} className="sticky top-0 bg-slate-50 px-1 py-1 text-center min-w-[55px] w-14 border-l border-slate-100 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                      {/* Choice Group at the top with small font */}
+                      <div className="min-h-[12px] flex items-center justify-center">
+                        {sq.choiceGroupNo ? (
+                          <span className="text-[9px] font-bold text-purple-600">
+                            CG{sq.choiceGroupNo}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-transparent select-none">-</span>
+                        )}
+                      </div>
+                      {/* Question No */}
+                      <div className="text-xs font-bold text-slate-800 mt-0.5">
+                        {sq.label}
+                      </div>
+                      {/* CO mapping */}
+                      <div className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                        {sq.coMapping}
+                      </div>
                     </th>
                   ))}
-                  <th className="sticky top-0 right-0 bg-blue-50 z-30 px-3 py-3 text-xs font-bold uppercase tracking-wider text-slate-800 text-center w-20 border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05),_0_2px_4px_rgba(0,0,0,0.02)]">Total</th>
+                  <th className="sticky top-0 right-0 bg-blue-50 z-30 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-800 text-center w-20 border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05),_0_2px_4px_rgba(0,0,0,0.02)]">Total</th>
+                </tr>
+                {/* Second Row: Max Marks */}
+                <tr className="bg-slate-100 border-b border-slate-200 h-9">
+                  <th colSpan={2} className="sticky top-16 left-0 z-30 bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase text-slate-600 text-left border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                    Maximum Marks
+                  </th>
+                  {subQuestions.map(sq => (
+                    <th key={`max-${sq.id}`} className="sticky top-16 bg-slate-100 px-1 py-1.5 text-center text-sm font-extrabold text-blue-700 border-l border-slate-200 z-20">
+                      {sq.maxMarks}M
+                    </th>
+                  ))}
+                  <th className="sticky top-16 right-0 bg-blue-100 z-30 px-3 py-1.5 text-sm font-extrabold text-slate-800 text-center border-l border-slate-200">
+                    {paper?.totalMarks}M
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

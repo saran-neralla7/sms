@@ -22,7 +22,7 @@ export default function Navbar({ years = [], currentYearId }: Props) {
 
     if (!session) return null;
 
-    const isDashboard = pathname === "/dashboard";
+    const isDashboard = pathname === "/dashboard" || pathname === "/faculty";
 
     return (
         <motion.nav

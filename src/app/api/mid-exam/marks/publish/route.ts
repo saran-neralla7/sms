@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks } from "@/lib/mid-exam-calc";
+import { sendMarksSMS } from "@/lib/sms";
 
 // POST — lock and/or publish marks (writes to InternalMark table)
 export async function POST(req: NextRequest) {
@@ -55,7 +56,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, action });
     }
 
-    if (action === "publish") {
+    if (action === "publish" || action === "demo_publish") {
+      const { sendSMS, facultyMobiles } = body;
+
       // Get all students for this academic class
       const students = await prisma.student.findMany({
         where: {
@@ -65,7 +68,15 @@ export async function POST(req: NextRequest) {
           departmentId: paper.subject.departmentId,
           isAlumni: false,
         },
-        select: { id: true }
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true,
+          mobile: true,
+          studentContactNumber: true,
+          year: true,
+          semester: true,
+        }
       });
 
       // Get all marks entries
@@ -83,6 +94,39 @@ export async function POST(req: NextRequest) {
         }
       });
 
+      // Map questions to calc format
+      const calcQuestions = paper.questions.map(q => ({
+        id: q.id,
+        questionNo: q.questionNo,
+        isCompulsory: q.isCompulsory,
+        choiceGroupId: q.choiceGroupId,
+        subQuestions: q.subQuestions.map(sq => ({
+          id: sq.id,
+          subLabel: sq.subLabel,
+          maxMarks: sq.maxMarks,
+          questionId: q.id,
+          coMapping: sq.coMapping,
+        }))
+      }));
+
+      const calcChoiceGroups = choiceGroups.map(cg => ({
+        id: cg.id,
+        groupNo: cg.groupNo,
+        questions: cg.questions.map(q => ({
+          id: q.id,
+          questionNo: q.questionNo,
+          isCompulsory: q.isCompulsory,
+          choiceGroupId: q.choiceGroupId,
+          subQuestions: q.subQuestions.map(sq => ({
+            id: sq.id,
+            subLabel: sq.subLabel,
+            maxMarks: sq.maxMarks,
+            questionId: q.id,
+            coMapping: sq.coMapping,
+          }))
+        }))
+      }));
+
       const scheme = paper.scheme;
       let published = 0;
       let errors = 0;
@@ -96,39 +140,6 @@ export async function POST(req: NextRequest) {
         for (const e of studentEntries) {
           marksMap[e.subQuestionId] = e.marksObtained;
         }
-
-        // Map questions to calc format
-        const calcQuestions = paper.questions.map(q => ({
-          id: q.id,
-          questionNo: q.questionNo,
-          isCompulsory: q.isCompulsory,
-          choiceGroupId: q.choiceGroupId,
-          subQuestions: q.subQuestions.map(sq => ({
-            id: sq.id,
-            subLabel: sq.subLabel,
-            maxMarks: sq.maxMarks,
-            questionId: q.id,
-            coMapping: sq.coMapping,
-          }))
-        }));
-
-        const calcChoiceGroups = choiceGroups.map(cg => ({
-          id: cg.id,
-          groupNo: cg.groupNo,
-          questions: cg.questions.map(q => ({
-            id: q.id,
-            questionNo: q.questionNo,
-            isCompulsory: q.isCompulsory,
-            choiceGroupId: q.choiceGroupId,
-            subQuestions: q.subQuestions.map(sq => ({
-              id: sq.id,
-              subLabel: sq.subLabel,
-              maxMarks: sq.maxMarks,
-              questionId: q.id,
-              coMapping: sq.coMapping,
-            }))
-          }))
-        }));
 
         const { total } = calculateStudentTotal(calcQuestions, calcChoiceGroups, marksMap, isAbsent);
 
@@ -168,32 +179,132 @@ export async function POST(req: NextRequest) {
 
           published++;
         } catch (err) {
-          console.error(`Failed to publish for student ${student.id}:`, err);
+          console.error(`Failed to publish/calculate for student ${student.id}:`, err);
           errors++;
         }
       }
 
-      // Update publish record
-      await prisma.midExamPublish.upsert({
-        where: { paperId },
-        create: {
-          paperId,
-          isLocked: true,
-          lockedAt: new Date(),
-          lockedById: session.user.id,
-          isPublished: true,
-          publishedAt: new Date(),
-          publishedById: session.user.id,
-        },
-        update: {
-          isLocked: true,
-          isPublished: true,
-          publishedAt: new Date(),
-          publishedById: session.user.id,
-        }
-      });
+      // Update publish record (Only for official publish action)
+      if (action === "publish") {
+        await prisma.midExamPublish.upsert({
+          where: { paperId },
+          create: {
+            paperId,
+            isLocked: true,
+            lockedAt: new Date(),
+            lockedById: session.user.id,
+            isPublished: true,
+            publishedAt: new Date(),
+            publishedById: session.user.id,
+          },
+          update: {
+            isLocked: true,
+            isPublished: true,
+            publishedAt: new Date(),
+            publishedById: session.user.id,
+          }
+        });
+      }
 
-      return NextResponse.json({ success: true, published, errors });
+      // Asynchronous background SMS dispatch to avoid timing out the API response
+      const shouldSendSMS = (action === "publish" && sendSMS) || (action === "demo_publish" && Array.isArray(facultyMobiles) && facultyMobiles.length > 0);
+      if (shouldSendSMS) {
+        (async () => {
+          try {
+            // Query other subjects' marks for students in this class/section
+            const studentMarks = await prisma.internalMark.findMany({
+              where: {
+                student: {
+                  sectionId: paper.sectionId,
+                  year: paper.year,
+                  semester: paper.semester,
+                  isAlumni: false,
+                },
+                academicYearId: paper.academicYearId,
+                examType: paper.examType,
+              },
+              include: {
+                subject: true,
+              }
+            });
+
+            const targetStudents = action === "demo_publish" ? students.slice(0, 1) : students;
+            for (const student of targetStudents) {
+              const studentEntries = allEntries.filter(e => e.studentId === student.id);
+              const isAbsent = studentEntries.some(e => e.isAbsent);
+
+              // Calculate student's marks for current paper
+              const studentMarksMap: Record<string, number | null> = {};
+              for (const e of studentEntries) {
+                studentMarksMap[e.subQuestionId] = e.marksObtained;
+              }
+
+              const { total: currentTotal } = calculateStudentTotal(calcQuestions, calcChoiceGroups, studentMarksMap, isAbsent);
+
+              // Build DLT subjects list: Current subject is always subject 1
+              const subjectsList = [
+                {
+                  name: paper.subject.shortName || paper.subject.name,
+                  marks: isAbsent ? "A" : currentTotal
+                }
+              ];
+
+              // Find other subject marks for this student
+              const otherMarks = studentMarks.filter(m => m.studentId === student.id && m.subjectId !== paper.subjectId);
+              for (const m of otherMarks) {
+                subjectsList.push({
+                  name: m.subject.shortName || m.subject.name,
+                  marks: m.marksObtained
+                });
+              }
+
+              // Send SMS based on action type
+              if (action === "publish") {
+                const mobile = student.mobile || student.studentContactNumber;
+                if (mobile) {
+                  const cleanMobile = mobile.replace(/\D/g, "");
+                  if (cleanMobile.length >= 10) {
+                    const result = await sendMarksSMS(cleanMobile, student.name, student.rollNumber, student.year, student.semester, subjectsList);
+                    await prisma.sMSLog.create({
+                      data: {
+                        studentId: student.id,
+                        sentById: session.user.id,
+                        targetDate: new Date(),
+                        mobileNumber: cleanMobile,
+                        messageType: "MARKS_ALERT",
+                        status: result.success ? "SUCCESS" : "FAILED",
+                        gatewayResponse: result.response,
+                      }
+                    });
+                  }
+                }
+              } else if (action === "demo_publish" && Array.isArray(facultyMobiles)) {
+                for (const fMobile of facultyMobiles) {
+                  const cleanMobile = fMobile.replace(/\D/g, "");
+                  if (cleanMobile.length >= 10) {
+                    const result = await sendMarksSMS(cleanMobile, student.name, student.rollNumber, student.year, student.semester, subjectsList);
+                    await prisma.sMSLog.create({
+                      data: {
+                        studentId: student.id,
+                        sentById: session.user.id,
+                        targetDate: new Date(),
+                        mobileNumber: cleanMobile,
+                        messageType: "MARKS_ALERT",
+                        status: result.success ? "SUCCESS" : "FAILED",
+                        gatewayResponse: result.response,
+                      }
+                    });
+                  }
+                }
+              }
+            }
+          } catch (smsErr) {
+            console.error("Background marks SMS dispatch error:", smsErr);
+          }
+        })();
+      }
+
+      return NextResponse.json({ success: true, published, errors, action });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

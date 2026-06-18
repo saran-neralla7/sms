@@ -40,3 +40,51 @@ export async function sendAbsenteeSMS(mobile: string, rollNumber: string, name: 
         };
     }
 }
+
+export const SMS_MARKS_TEMPLATE_ID = "1707177545746041134";
+
+export async function sendMarksSMS(
+    mobile: string,
+    studentName: string,
+    rollNumber: string,
+    year: string,
+    semester: string,
+    subjects: { name: string; marks: string | number }[]
+) {
+    try {
+        // Pad the subjects array to exactly 5 elements
+        const paddedSubjects = [...subjects];
+        while (paddedSubjects.length < 5) {
+            paddedSubjects.push({ name: "N/A", marks: "-" });
+        }
+
+        // Construct DLT-compliant message text
+        const message = `Dear Parent, Your ward ${studentName}, ${rollNumber} Year ${year} sem ${semester} Mid Examination marks are as follows: subject 1: ${paddedSubjects[0].name} Marks: ${paddedSubjects[0].marks} subject 2: ${paddedSubjects[1].name} Marks: ${paddedSubjects[1].marks} subject 3: ${paddedSubjects[2].name} Marks: ${paddedSubjects[2].marks} subject 4: ${paddedSubjects[3].name} Marks: ${paddedSubjects[3].marks} subject 5: ${paddedSubjects[4].name} Marks: ${paddedSubjects[4].marks} Please Contact HOD for any queries. Gayatri Vidya Parishad`;
+
+        const url = new URL('http://sms.platinumsms.co.in/sendsms.jsp');
+        url.searchParams.append('user', SMS_USER);
+        url.searchParams.append('password', SMS_PASS);
+        url.searchParams.append('senderid', SMS_SENDER);
+        url.searchParams.append('mobiles', mobile);
+        url.searchParams.append('sms', message);
+        url.searchParams.append('tempid', SMS_MARKS_TEMPLATE_ID);
+
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+        });
+
+        const data = await response.text();
+        const isSuccess = data.toLowerCase().includes('success') || data.toLowerCase().includes('sent');
+
+        return {
+            success: isSuccess,
+            response: data.trim()
+        };
+    } catch (error: any) {
+        console.error('Error sending Marks SMS to ' + mobile + ':', error);
+        return {
+            success: false,
+            response: error?.message || 'Unknown network error'
+        };
+    }
+}
