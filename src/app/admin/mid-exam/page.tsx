@@ -92,6 +92,110 @@ export default function AdminMidExamDashboard() {
   const [fetchingAttendance, setFetchingAttendance] = useState<boolean>(false);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, number>>({});
 
+  const getSubjectStats = (subId: string, subType: string) => {
+    if (!previewData || !previewData.rows) {
+      return { average: "0.0", countAbove: 0, countBetween: 0, countBelow: 0, countZero: 0, countAbsent: 0 };
+    }
+    
+    let sum = 0;
+    let count = 0;
+    let countAbove = 0;
+    let countBetween = 0;
+    let countBelow = 0;
+    let countZero = 0;
+    let countAbsent = 0;
+
+    const isLab = subType?.toUpperCase() === "LAB";
+    let maxMarks = 30;
+    if (previewType === "ASSIGNMENT") {
+      maxMarks = 10;
+    } else if (previewType === "FINAL" && isLab) {
+      maxMarks = 50;
+    } else if (previewType === "MID_I" && isLab) {
+      maxMarks = 50;
+    } else if (previewType === "MID_II" && isLab) {
+      maxMarks = 50;
+    }
+
+    previewData.rows.forEach((row: any) => {
+      const marksObj = row.subjects[subId] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+      let val: number | null = null;
+      if (previewType === "MID_I") {
+        val = marksObj.mid1;
+      } else if (previewType === "MID_II") {
+        val = marksObj.mid2;
+      } else if (previewType === "ASSIGNMENT") {
+        val = marksObj.assignment;
+      } else if (previewType === "FINAL") {
+        val = marksObj.internal;
+      }
+
+      if (val === null || val === undefined) {
+        countAbsent++;
+      } else {
+        const numVal = Math.round(val);
+        sum += numVal;
+        count++;
+
+        if (numVal === 0) {
+          countZero++;
+        }
+
+        const pct = (numVal / maxMarks) * 100;
+        if (pct >= 60) {
+          countAbove++;
+        } else if (pct >= 40) {
+          countBetween++;
+        } else {
+          countBelow++;
+        }
+      }
+    });
+
+    const average = count > 0 ? (sum / count).toFixed(1) : "#DIV/0!";
+    return {
+      average,
+      countAbove,
+      countBetween,
+      countBelow,
+      countZero,
+      countAbsent
+    };
+  };
+
+  const getAttendanceStats = () => {
+    if (!previewData || !previewData.rows) {
+      return { count75Plus: 0, count65To74: 0, count50To64: 0, countBelow50: 0, countZero: 0, totalCalculated: 0 };
+    }
+    
+    let count75Plus = 0;
+    let count65To74 = 0;
+    let count50To64 = 0;
+    let countBelow50 = 0;
+    let countZero = 0;
+
+    previewData.rows.forEach((row: any) => {
+      const pct = attendanceMap[row.studentId];
+      if (pct === undefined) return;
+      if (pct > 75) count75Plus++;
+      else if (pct >= 65) count65To74++;
+      else if (pct >= 50) count50To64++;
+      else if (pct > 0) countBelow50++;
+      else countZero++;
+    });
+
+    const totalCalculated = count75Plus + count65To74 + count50To64 + countBelow50 + countZero;
+
+    return {
+      count75Plus,
+      count65To74,
+      count50To64,
+      countBelow50,
+      countZero,
+      totalCalculated
+    };
+  };
+
   // Keep top scroll width in sync with data table container
   useEffect(() => {
     const updateWidth = () => {
@@ -2188,7 +2292,7 @@ export default function AdminMidExamDashboard() {
                                 <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
                               )}
                               {previewData.subjects.map((sub: any) => (
-                                <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[120px]">
+                                <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[75px]">
                                   {sub.shortName || sub.name}
                                   <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
                                     {previewType === "MID_I" && "MID I (30M)"}
@@ -2262,6 +2366,80 @@ export default function AdminMidExamDashboard() {
                               </tr>
                             ))}
                           </tbody>
+                          <tfoot className="print:hidden">
+                            {/* Column Average Row */}
+                            <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
+                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">column average</td>
+                              {previewData.subjects.map((sub: any) => {
+                                const stats = getSubjectStats(sub.id, sub.type);
+                                return (
+                                  <td key={sub.id} className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">
+                                    {stats.average}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                            {/* Above 60% Row */}
+                            <tr className="bg-white text-slate-700">
+                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Above 60% (18 and above)</td>
+                              {previewData.subjects.map((sub: any) => {
+                                const stats = getSubjectStats(sub.id, sub.type);
+                                return (
+                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                    {stats.countAbove}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                            {/* Between 60% to 40% Row */}
+                            <tr className="bg-white text-slate-700">
+                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Between 60% to 40% (17 - 12 Marks)</td>
+                              {previewData.subjects.map((sub: any) => {
+                                const stats = getSubjectStats(sub.id, sub.type);
+                                return (
+                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                    {stats.countBetween}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                            {/* Below 40% Row */}
+                            <tr className="bg-white text-slate-700">
+                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Below 40% ( &lt; 12 Marks)</td>
+                              {previewData.subjects.map((sub: any) => {
+                                const stats = getSubjectStats(sub.id, sub.type);
+                                return (
+                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                    {stats.countBelow}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                            {/* With zero Marks Row */}
+                            <tr className="bg-white text-slate-700">
+                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students With zero Marks</td>
+                              {previewData.subjects.map((sub: any) => {
+                                const stats = getSubjectStats(sub.id, sub.type);
+                                return (
+                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                    {stats.countZero}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                            {/* Total No. of Absentees Row */}
+                            <tr className="bg-white text-slate-700">
+                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Absentees</td>
+                              {previewData.subjects.map((sub: any) => {
+                                const stats = getSubjectStats(sub.id, sub.type);
+                                return (
+                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                    {stats.countAbsent}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </tfoot>
                         </>
                       ) : (() => {
                         const getAvg = (extractor: (marks: any) => number | null) => {
@@ -2405,6 +2583,52 @@ export default function AdminMidExamDashboard() {
                       })()}
                     </table>
                   </div>
+
+                  {/* Attendance Statistics Section below the table */}
+                  {previewType !== "SUBJECT" && (() => {
+                    const attStats = getAttendanceStats();
+                    return (
+                      <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col md:flex-row justify-between items-start gap-6 print:hidden">
+                        <div className="text-xs text-slate-500 max-w-md">
+                          <p className="font-semibold text-slate-700 mb-1 text-sm">Report Insights & Statistics</p>
+                          <p className="leading-relaxed">The subject-wise columns in the footer display real-time class averages and grade distributions. Toggle the <strong className="text-slate-700">Show Attendance</strong> button to load active attendance percentages and populate the overall Attendance Statistics card.</p>
+                        </div>
+                        
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm w-72">
+                          <h5 className="text-xs font-bold text-slate-700 uppercase mb-3 text-center tracking-wider">Attendance Statistics</h5>
+                          <table className="w-full text-xs border-collapse bg-white">
+                            <tbody>
+                              <tr>
+                                <td rowSpan={5} className="px-3 py-2 border border-slate-200 font-bold text-center bg-slate-50 text-slate-700 w-24">Attendance</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(&gt;75%)</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.count75Plus}</td>
+                              </tr>
+                              <tr>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(65 to 74%)</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.count65To74}</td>
+                              </tr>
+                              <tr>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(65 to 50%)</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.count50To64}</td>
+                              </tr>
+                              <tr>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(&lt;50 %)</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.countBelow50}</td>
+                              </tr>
+                              <tr>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(=0%)</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.countZero}</td>
+                              </tr>
+                              <tr className="bg-slate-50">
+                                <td colSpan={2} className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-700">Total</td>
+                                <td className="px-3 py-2 border border-slate-200 text-center font-extrabold text-slate-900 bg-white">{attStats.totalCalculated}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </motion.div>

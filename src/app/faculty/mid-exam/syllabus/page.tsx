@@ -65,6 +65,388 @@ const defaultSyllabus: Syllabus = {
   referenceBooks: ["Author Name, 'Title of the Reference Book', Edition, Publisher, Year."],
 };
 
+interface TextRun {
+  text: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+}
+
+interface Block {
+  runs: TextRun[];
+  align: "left" | "center" | "right" | "justify";
+  isListItem: boolean;
+  listType: "bullet" | "number" | null;
+  listIndex: number;
+}
+
+interface Token {
+  type: "text" | "tag";
+  value: string;
+}
+
+function tokenizeHtml(html: string): Token[] {
+  const tokens: Token[] = [];
+  let currentText = "";
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] === "<") {
+      if (currentText) {
+        tokens.push({ type: "text", value: currentText });
+        currentText = "";
+      }
+      let tag = "";
+      i++;
+      while (i < html.length && html[i] !== ">") {
+        tag += html[i];
+        i++;
+      }
+      tokens.push({ type: "tag", value: tag });
+      i++;
+    } else {
+      currentText += html[i];
+      i++;
+    }
+  }
+  if (currentText) {
+    tokens.push({ type: "text", value: currentText });
+  }
+  return tokens;
+}
+
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+function parseHtml(html: string): Block[] {
+  const tokens = tokenizeHtml(html);
+  const blocks: Block[] = [];
+  let currentRuns: TextRun[] = [];
+  
+  let bold = false;
+  let italic = false;
+  let underline = false;
+  let align: "left" | "center" | "right" | "justify" = "left";
+  
+  let listType: "bullet" | "number" | null = null;
+  let listIndex = 0;
+  let isListItem = false;
+  
+  const pushBlock = () => {
+    if (currentRuns.length > 0 || isListItem) {
+      blocks.push({
+        runs: [...currentRuns],
+        align,
+        isListItem,
+        listType,
+        listIndex
+      });
+      currentRuns = [];
+    }
+  };
+
+  for (const token of tokens) {
+    if (token.type === "tag") {
+      const tagLower = token.value.toLowerCase().trim();
+      
+      if (tagLower.startsWith("p") || tagLower.startsWith("div")) {
+        pushBlock();
+        isListItem = false;
+        if (tagLower.includes("text-align: center") || tagLower.includes("align=\"center\"") || tagLower.includes("align='center'")) {
+          align = "center";
+        } else if (tagLower.includes("text-align: right") || tagLower.includes("align=\"right\"") || tagLower.includes("align='right'")) {
+          align = "right";
+        } else if (tagLower.includes("text-align: justify") || tagLower.includes("align=\"justify\"") || tagLower.includes("align='justify'")) {
+          align = "justify";
+        } else {
+          align = "left";
+        }
+      } else if (tagLower === "/p" || tagLower === "/div") {
+        pushBlock();
+        align = "left";
+      } else if (tagLower === "ul") {
+        pushBlock();
+        listType = "bullet";
+        listIndex = 0;
+      } else if (tagLower === "/ul") {
+        pushBlock();
+        listType = null;
+      } else if (tagLower === "ol") {
+        pushBlock();
+        listType = "number";
+        listIndex = 0;
+      } else if (tagLower === "/ol") {
+        pushBlock();
+        listType = null;
+      } else if (tagLower.startsWith("li")) {
+        pushBlock();
+        isListItem = true;
+        listIndex++;
+        align = "left";
+      } else if (tagLower === "/li") {
+        pushBlock();
+        isListItem = false;
+      } else if (tagLower === "b" || tagLower === "strong") {
+        bold = true;
+      } else if (tagLower === "/b" || tagLower === "/strong") {
+        bold = false;
+      } else if (tagLower === "i" || tagLower === "em") {
+        italic = true;
+      } else if (tagLower === "/i" || tagLower === "/em") {
+        italic = false;
+      } else if (tagLower === "u") {
+        underline = true;
+      } else if (tagLower === "/u") {
+        underline = false;
+      } else if (tagLower === "br" || tagLower === "br/" || tagLower === "br /") {
+        pushBlock();
+      }
+    } else {
+      const text = decodeEntities(token.value);
+      if (text) {
+        currentRuns.push({
+          text,
+          bold,
+          italic,
+          underline
+        });
+      }
+    }
+  }
+  
+  pushBlock();
+  
+  if (blocks.length === 0) {
+    blocks.push({
+      runs: [],
+      align: "left",
+      isListItem: false,
+      listType: null,
+      listIndex: 0
+    });
+  }
+  
+  return blocks;
+}
+
+interface WordItem {
+  text: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+}
+
+function splitRunsToWords(runs: TextRun[]): WordItem[] {
+  const words: WordItem[] = [];
+  for (const run of runs) {
+    const parts = run.text.match(/\S+\s*/g) || [];
+    if (parts.length === 0 && run.text.length > 0) {
+      words.push({
+        text: run.text,
+        bold: run.bold,
+        italic: run.italic,
+        underline: run.underline
+      });
+    } else {
+      parts.forEach((part, idx) => {
+        let wordText = part;
+        if (idx === 0) {
+          const leadingSpaces = run.text.match(/^\s+/);
+          if (leadingSpaces) {
+            wordText = leadingSpaces[0] + wordText;
+          }
+        }
+        words.push({
+          text: wordText,
+          bold: run.bold,
+          italic: run.italic,
+          underline: run.underline
+        });
+      });
+    }
+  }
+  return words;
+}
+
+function getWordWidth(doc: jsPDF, word: WordItem): number {
+  let style = "normal";
+  if (word.bold && word.italic) style = "bolditalic";
+  else if (word.bold) style = "bold";
+  else if (word.italic) style = "italic";
+  
+  doc.setFont("helvetica", style);
+  return doc.getTextWidth(word.text);
+}
+
+interface LayoutLine {
+  words: WordItem[];
+  width: number;
+}
+
+function layoutWordsToLines(doc: jsPDF, words: WordItem[], maxW: number): LayoutLine[] {
+  const lines: LayoutLine[] = [];
+  let currentWords: WordItem[] = [];
+  let currentWidth = 0;
+  
+  for (const word of words) {
+    const wWidth = getWordWidth(doc, word);
+    if (currentWords.length > 0 && currentWidth + wWidth > maxW) {
+      const lastWord = currentWords[currentWords.length - 1];
+      const trimmedText = lastWord.text.trimEnd();
+      let trimmedWidth = currentWidth;
+      if (trimmedText !== lastWord.text) {
+        const fullW = getWordWidth(doc, lastWord);
+        const trimmedWord = { ...lastWord, text: trimmedText };
+        const trimW = getWordWidth(doc, trimmedWord);
+        trimmedWidth = currentWidth - fullW + trimW;
+        currentWords[currentWords.length - 1] = trimmedWord;
+      }
+      
+      lines.push({ words: currentWords, width: trimmedWidth });
+      currentWords = [word];
+      currentWidth = wWidth;
+    } else {
+      currentWords.push(word);
+      currentWidth += wWidth;
+    }
+  }
+  
+  if (currentWords.length > 0) {
+    lines.push({ words: currentWords, width: currentWidth });
+  }
+  
+  return lines;
+}
+
+function renderBlock(
+  doc: jsPDF,
+  block: Block,
+  startX: number,
+  startY: number,
+  maxW: number,
+  lineH: number,
+  pageHeight: number,
+  margin: number,
+  isLastLineInDoc: boolean
+): number {
+  let currentY = startY;
+  const indent = block.isListItem ? 6 : 0;
+  const blockMaxW = block.isListItem ? maxW - indent : maxW;
+  
+  const words = splitRunsToWords(block.runs);
+  if (words.length === 0) {
+    if (block.isListItem) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      if (block.listType === "bullet") {
+        doc.text("•", startX + 2, currentY);
+      } else if (block.listType === "number") {
+        doc.text(`${block.listIndex}.`, startX + 2, currentY);
+      }
+    }
+    return currentY + lineH;
+  }
+  
+  const lines = layoutWordsToLines(doc, words, blockMaxW);
+  
+  lines.forEach((line, lineIdx) => {
+    if (currentY > pageHeight - margin) {
+      doc.addPage();
+      currentY = margin;
+    }
+    
+    let drawX = startX + indent;
+    const isLastLine = lineIdx === lines.length - 1;
+    
+    if (block.isListItem && lineIdx === 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      if (block.listType === "bullet") {
+        doc.text("•", startX + 2, currentY);
+      } else if (block.listType === "number") {
+        doc.text(`${block.listIndex}.`, startX + 2, currentY);
+      }
+    }
+    
+    let extraSpacePerGap = 0;
+    if (block.align === "justify" && !isLastLine && line.words.length > 1) {
+      const lineW = line.width;
+      extraSpacePerGap = (blockMaxW - lineW) / (line.words.length - 1);
+    }
+    
+    if (block.align === "center") {
+      drawX = startX + indent + (blockMaxW - line.width) / 2;
+    } else if (block.align === "right") {
+      drawX = startX + indent + (blockMaxW - line.width);
+    }
+    
+    line.words.forEach((word, wordIdx) => {
+      let style = "normal";
+      if (word.bold && word.italic) style = "bolditalic";
+      else if (word.bold) style = "bold";
+      else if (word.italic) style = "italic";
+      
+      doc.setFont("helvetica", style);
+      doc.setFontSize(9);
+      doc.text(word.text, drawX, currentY);
+      
+      const wordW = doc.getTextWidth(word.text);
+      if (word.underline) {
+        doc.setLineWidth(0.1);
+        doc.line(drawX, currentY + 0.4, drawX + wordW, currentY + 0.4);
+      }
+      
+      drawX += wordW;
+      if (block.align === "justify" && !isLastLine) {
+        drawX += extraSpacePerGap;
+      }
+    });
+    
+    currentY += lineH;
+  });
+  
+  return currentY;
+}
+
+const renderHtmlToPdf = (
+  doc: jsPDF,
+  html: string,
+  startX: number,
+  startY: number,
+  maxW: number,
+  lineH: number = 4.5,
+  pageHeight: number = 297,
+  margin: number = 15
+): number => {
+  if (!html) return startY;
+  const blocks = parseHtml(html);
+  let currentY = startY;
+  blocks.forEach((block, idx) => {
+    currentY = renderBlock(
+      doc,
+      block,
+      startX,
+      currentY,
+      maxW,
+      lineH,
+      pageHeight,
+      margin,
+      idx === blocks.length - 1
+    );
+    if (!block.isListItem) {
+      currentY += 1.5;
+    } else {
+      currentY += 0.5;
+    }
+  });
+  return currentY;
+};
+
 interface SyllabusRichFieldProps {
   value: string;
   onChange: (val: string) => void;
@@ -715,12 +1097,15 @@ function SyllabusConfigContent() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.text("Prerequisite(s):", margin, currentY);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      const prereqText = cleanHtml(syllabus.prerequisites) || "None";
-      const prereqLines = doc.splitTextToSize(prereqText, 210 - margin * 2 - 30);
-      doc.text(prereqLines, margin + 30, currentY);
-      currentY += (prereqLines.length * 4.5) + 3;
+      if (!syllabus.prerequisites || cleanHtml(syllabus.prerequisites) === "None") {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text("None", margin + 30, currentY);
+        currentY += 4.5 + 3;
+      } else {
+        currentY = renderHtmlToPdf(doc, syllabus.prerequisites, margin + 30, currentY, 210 - margin * 2 - 30, 4.5, 297, 15);
+        currentY += 3;
+      }
 
       // Section 2: Course Objectives
       doc.setFont("helvetica", "bold");
@@ -728,20 +1113,20 @@ function SyllabusConfigContent() {
       doc.text("2. Course Objectives", margin, currentY);
       currentY += 5;
       
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
       syllabus.objectives.forEach((obj, idx) => {
-        const objText = `${idx + 1}. ${cleanHtml(obj)}`;
-        const objLines = doc.splitTextToSize(objText, 210 - margin * 2);
-        
-        // Page break check
-        if (currentY + (objLines.length * 4.5) > 280) {
-          doc.addPage();
-          currentY = 15;
+        const blocks = parseHtml(obj);
+        if (blocks.length > 0) {
+          blocks[0].runs.unshift({
+            text: `${idx + 1}. `,
+            bold: true,
+            italic: false,
+            underline: false
+          });
         }
-        
-        doc.text(objLines, margin, currentY);
-        currentY += (objLines.length * 4.5) + 1.5;
+        blocks.forEach((block) => {
+          currentY = renderBlock(doc, block, margin, currentY, 210 - margin * 2, 4.5, 297, 15, false);
+        });
+        currentY += 1.5;
       });
       currentY += 3;
 
@@ -800,14 +1185,10 @@ function SyllabusConfigContent() {
       currentY += 5;
 
       syllabus.units.forEach((unit) => {
-        // Prepare title and mapped COs text
         const unitTitleText = `${cleanHtml(unit.name)}: ${cleanHtml(unit.title)} (Mapped COs: ${unit.mappedCOs.join(", ")})`;
         const titleLines = doc.splitTextToSize(unitTitleText, 210 - margin * 2);
         
-        const contentLines = doc.splitTextToSize(cleanHtml(unit.content), 210 - margin * 2);
-        const totalHeight = (titleLines.length * 4.5) + (contentLines.length * 4.5) + 6;
-
-        if (currentY + totalHeight > 280) {
+        if (currentY + (titleLines.length * 4.5) + 10 > 280) {
           doc.addPage();
           currentY = 15;
         }
@@ -817,10 +1198,8 @@ function SyllabusConfigContent() {
         doc.text(titleLines, margin, currentY);
         currentY += (titleLines.length * 4.5) + 1.5;
 
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8.5);
-        doc.text(contentLines, margin, currentY);
-        currentY += (contentLines.length * 4.5) + 4;
+        currentY = renderHtmlToPdf(doc, unit.content, margin, currentY, 210 - margin * 2, 4.5, 297, 15);
+        currentY += 4;
       });
 
       // Section 5: Textbooks & Reference Books
@@ -838,16 +1217,20 @@ function SyllabusConfigContent() {
       doc.text("Textbooks:", margin, currentY);
       currentY += 4.5;
       
-      doc.setFont("helvetica", "normal");
       syllabus.textbooks.forEach((tb, idx) => {
-        const text = `${idx + 1}. ${cleanHtml(tb)}`;
-        const lines = doc.splitTextToSize(text, 210 - margin * 2);
-        if (currentY + (lines.length * 4.5) > 280) {
-          doc.addPage();
-          currentY = 15;
+        const blocks = parseHtml(tb);
+        if (blocks.length > 0) {
+          blocks[0].runs.unshift({
+            text: `${idx + 1}. `,
+            bold: true,
+            italic: false,
+            underline: false
+          });
         }
-        doc.text(lines, margin, currentY);
-        currentY += (lines.length * 4.5) + 1.5;
+        blocks.forEach((block) => {
+          currentY = renderBlock(doc, block, margin, currentY, 210 - margin * 2, 4.5, 297, 15, false);
+        });
+        currentY += 1.5;
       });
       currentY += 3;
 
@@ -860,16 +1243,20 @@ function SyllabusConfigContent() {
       doc.text("Reference Books:", margin, currentY);
       currentY += 4.5;
 
-      doc.setFont("helvetica", "normal");
       syllabus.referenceBooks.forEach((ref, idx) => {
-        const text = `${idx + 1}. ${cleanHtml(ref)}`;
-        const lines = doc.splitTextToSize(text, 210 - margin * 2);
-        if (currentY + (lines.length * 4.5) > 280) {
-          doc.addPage();
-          currentY = 15;
+        const blocks = parseHtml(ref);
+        if (blocks.length > 0) {
+          blocks[0].runs.unshift({
+            text: `${idx + 1}. `,
+            bold: true,
+            italic: false,
+            underline: false
+          });
         }
-        doc.text(lines, margin, currentY);
-        currentY += (lines.length * 4.5) + 1.5;
+        blocks.forEach((block) => {
+          currentY = renderBlock(doc, block, margin, currentY, 210 - margin * 2, 4.5, 297, 15, false);
+        });
+        currentY += 1.5;
       });
 
       const filename = `Syllabus_${subjectInfo?.code || "Subject"}.pdf`;
