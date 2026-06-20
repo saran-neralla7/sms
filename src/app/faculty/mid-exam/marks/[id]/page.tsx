@@ -429,50 +429,6 @@ export default function MarksGridPage() {
     showToast("All marks cleared locally. Remember to click Save Draft to persist.", "success");
   };
 
-  const handleFillDemoMarks = () => {
-    setRows(prev =>
-      prev.map(row => {
-        const demoMarks = { ...row.marks };
-        const isAbsent = Math.random() < 0.05;
-        
-        if (isAbsent) {
-          for (const key of Object.keys(demoMarks)) {
-            demoMarks[key] = null;
-          }
-          return {
-            ...row,
-            isAbsent: true,
-            marks: demoMarks,
-            calculatedTotal: 0,
-          };
-        }
-
-        for (const sq of subQuestions) {
-          const randomVal = Math.random();
-          let mark = 0;
-          if (randomVal < 0.08) {
-            mark = 0;
-          } else if (randomVal < 0.25) {
-            mark = Math.floor(sq.maxMarks * 0.5);
-          } else if (randomVal < 0.85) {
-            mark = Math.floor(sq.maxMarks * 0.8);
-          } else {
-            mark = sq.maxMarks;
-          }
-          demoMarks[sq.id] = Math.max(0, Math.min(sq.maxMarks, mark));
-        }
-
-        return {
-          ...row,
-          isAbsent: false,
-          marks: demoMarks,
-          calculatedTotal: calculateRowTotal(false, demoMarks, subQuestions),
-        };
-      })
-    );
-    showToast("Demo marks filled locally. Click Save Draft to save.", "success");
-  };
-
   const handleSave = async (isDraft: boolean = true) => {
     // Validate first
     const errors: string[] = [];
@@ -571,14 +527,7 @@ export default function MarksGridPage() {
 
               {canEdit && (
                 <>
-                  <button
-                    onClick={handleFillDemoMarks}
-                    className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 shadow-sm hover:bg-purple-100 transition-all"
-                    title="Populate random demo marks for testing"
-                  >
-                    <FaClipboardList className="text-purple-600" />
-                    Fill Demo Marks
-                  </button>
+
                   <button
                     onClick={handleClearAll}
                     className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 transition-all"
@@ -759,12 +708,7 @@ export default function MarksGridPage() {
         {/* Bottom Actions */}
         {canEdit && (
           <div className="mt-8 flex justify-end gap-3">
-            <button
-              onClick={handleFillDemoMarks}
-              className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-6 py-3 text-sm font-medium text-purple-700 shadow-sm hover:bg-purple-100 transition-all"
-            >
-              <FaClipboardList /> Fill Demo Marks
-            </button>
+
             <button
               onClick={handleClearAll}
               className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 transition-all"

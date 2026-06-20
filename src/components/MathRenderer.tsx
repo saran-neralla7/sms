@@ -9,16 +9,36 @@ interface MathRendererProps {
   className?: string;
 }
 
+// Automatically wrap LaTeX constructs (like matrices, Greek letters, superscripts, subscripts) in $ delimiters if not already present
+function autoWrapMath(text: string): string {
+  if (!text || typeof text !== "string") return text;
+  if (text.includes("$")) return text;
+
+  let processed = text;
+
+  // 1. Wrap \begin{env} ... \end{env} (and optional non-space prefix like "A=") in $...$
+  processed = processed.replace(/((?:[a-zA-Z0-9_\-+*\/=<>]+)?\\begin\{[a-zA-Z*]+\}[\s\S]*?\\end\{[a-zA-Z*]+\})/g, (_, match) => `$${match.trim()}$`);
+
+  // 2. Wrap non-space segments containing ^ or _ in $...$
+  processed = processed.replace(/(\S*[\^_]+\S*)/g, (_, match) => {
+    if (match.startsWith("$") && match.endsWith("$")) return match;
+    return `$${match}$`;
+  });
+
+  return processed;
+}
+
 export default function MathRenderer({ text, className = "" }: MathRendererProps) {
   const renderedSegments = useMemo(() => {
-    if (!text) return [];
+    const processedText = autoWrapMath(text);
+    if (!processedText) return [];
 
     // Split text into tokens based on block math "$$" first, then inline math "$"
     // We parse block math ($$...$$) and inline math ($...$)
     const parts: { type: "text" | "inline" | "block"; content: string }[] = [];
     
     // Step 1: Parse block math "$$"
-    const blockSplit = text.split("$$");
+    const blockSplit = processedText.split("$$");
     blockSplit.forEach((blockChunk, bIdx) => {
       if (bIdx % 2 === 1) {
         // This is inside a $$ ... $$ block
@@ -83,3 +103,4 @@ export default function MathRenderer({ text, className = "" }: MathRendererProps
 
   return <div className={`whitespace-pre-wrap leading-relaxed ${className}`}>{renderedSegments}</div>;
 }
+

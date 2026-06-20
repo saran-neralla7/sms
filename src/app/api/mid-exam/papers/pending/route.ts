@@ -25,11 +25,8 @@ export async function GET(req: NextRequest) {
       where: {
         academicYearId,
         ...(sectionId && { sectionId }),
-        OR: [
-          { subject: { departmentId } },
-          { faculty: { departmentId } }
-        ],
         subject: {
+          departmentId,
           type: { not: "LAB" },
           ...(year && { year }),
           ...(semester && { semester })
@@ -55,10 +52,7 @@ export async function GET(req: NextRequest) {
       where: {
         academicYearId,
         ...(sectionId && { sectionId }),
-        OR: [
-          { departmentId },
-          { subject: { departmentId } }
-        ],
+        subject: { departmentId },
         ...(year && { year }),
         ...(semester && { semester })
       },

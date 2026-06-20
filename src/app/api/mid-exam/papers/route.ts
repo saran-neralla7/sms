@@ -20,10 +20,7 @@ export async function GET(req: NextRequest) {
   const where: any = {};
   if (academicYearId) where.academicYearId = academicYearId;
   if (departmentId) {
-    where.OR = [
-      { departmentId },
-      { subject: { departmentId } }
-    ];
+    where.subject = { departmentId };
   }
   if (year) where.year = year;
   if (semester) where.semester = semester;
@@ -116,10 +113,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
+    if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+    const resolvedDeptId = subject.departmentId;
+
     // Check if paper already exists for this combination
     const existing = await prisma.midExamPaper.findUnique({
       where: { academicYearId_departmentId_year_semester_sectionId_subjectId_examType: {
-        academicYearId, departmentId, year, semester, sectionId, subjectId, examType
+        academicYearId, departmentId: resolvedDeptId, year, semester, sectionId, subjectId, examType
       }}
     });
     if (existing) {
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
 
     const paper = await prisma.midExamPaper.create({
       data: {
-        academicYearId, departmentId, year, semester, sectionId, subjectId, examType,
+        academicYearId, departmentId: resolvedDeptId, year, semester, sectionId, subjectId, examType,
         schemeId: schemeId ?? null,
         totalMarks: totalMarks ?? 30,
         examDate: examDate ?? null,

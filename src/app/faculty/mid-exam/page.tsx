@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaFileAlt, FaPen, FaLock, FaUnlock, FaCheckCircle, FaClipboardList,
   FaChevronRight, FaBook, FaLayerGroup, FaCalendarAlt, FaSpinner,
-  FaPlus, FaEye, FaDownload, FaFileExcel
+  FaPlus, FaEye, FaDownload, FaFileExcel, FaFlask
 } from "react-icons/fa";
 import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -82,13 +82,42 @@ export default function FacultyMidExamPage() {
 
   const [activeTab, setActiveTab] = useState<"assigned" | "reports" | "analysis">("assigned");
 
+  useEffect(() => {
+    const savedTab = sessionStorage.getItem("faculty_mid_exam_active_tab");
+    if (savedTab && ["assigned", "reports", "analysis"].includes(savedTab)) {
+      setActiveTab(savedTab as any);
+    }
+  }, []);
+
+  // Save active tab to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("faculty_mid_exam_active_tab", activeTab);
+  }, [activeTab]);
+
+  // Reports states
+  const [selectedMappingId, setSelectedMappingId] = useState("");
+
+  const isRestored = useRef(false);
+
+  // Save filters to sessionStorage
+  useEffect(() => {
+    if (isRestored.current && selectedAY) {
+      sessionStorage.setItem("faculty_mid_exam_filter_ay", selectedAY);
+    }
+  }, [selectedAY]);
+
+  useEffect(() => {
+    if (isRestored.current && selectedMappingId) {
+      sessionStorage.setItem("faculty_mid_exam_filter_mapping", selectedMappingId);
+    }
+  }, [selectedMappingId]);
+
   // Analysis states
   const [analysisData, setAnalysisData] = useState<any | null>(null);
   const [fetchingAnalysis, setFetchingAnalysis] = useState<boolean>(false);
   const [selectedAnalysisExamType, setSelectedAnalysisExamType] = useState<"MID_I" | "MID_II">("MID_I");
 
   // Reports states
-  const [selectedMappingId, setSelectedMappingId] = useState("");
   const [previewData, setPreviewData] = useState<any | null>(null);
   const [previewType, setPreviewType] = useState<"MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL" | "SUBJECT" | null>(null);
   const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
@@ -98,12 +127,15 @@ export default function FacultyMidExamPage() {
   const [fetchingAttendance, setFetchingAttendance] = useState<boolean>(false);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, number>>({});
 
+  const [showLabMarks, setShowLabMarks] = useState<boolean>(false);
+
   useEffect(() => {
     setPreviewData(null);
     setPreviewType(null);
     setShowAttendance(false);
     setAttendanceMap({});
     setAnalysisData(null);
+    setShowLabMarks(false);
   }, [selectedMappingId, selectedAnalysisExamType]);
 
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -144,6 +176,110 @@ export default function FacultyMidExamPage() {
       if (observer) observer.disconnect();
     };
   }, [previewData, previewType]);
+
+  const getSubjectStats = (subId: string, subType: string) => {
+    if (!previewData || !previewData.rows) {
+      return { average: "0.0", countAbove: 0, countBetween: 0, countBelow: 0, countZero: 0, countAbsent: 0 };
+    }
+    
+    let sum = 0;
+    let count = 0;
+    let countAbove = 0;
+    let countBetween = 0;
+    let countBelow = 0;
+    let countZero = 0;
+    let countAbsent = 0;
+
+    const isLab = subType?.toUpperCase() === "LAB";
+    let maxMarks = 30;
+    if (previewType === "ASSIGNMENT") {
+      maxMarks = 10;
+    } else if (previewType === "FINAL" && isLab) {
+      maxMarks = 50;
+    } else if (previewType === "MID_I" && isLab) {
+      maxMarks = 50;
+    } else if (previewType === "MID_II" && isLab) {
+      maxMarks = 50;
+    }
+
+    previewData.rows.forEach((row: any) => {
+      const marksObj = row.subjects[subId] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+      let val: number | null = null;
+      if (previewType === "MID_I") {
+        val = marksObj.mid1;
+      } else if (previewType === "MID_II") {
+        val = marksObj.mid2;
+      } else if (previewType === "ASSIGNMENT") {
+        val = marksObj.assignment;
+      } else if (previewType === "FINAL") {
+        val = marksObj.internal;
+      }
+
+      if (val === null || val === undefined) {
+        countAbsent++;
+      } else {
+        const numVal = Math.round(val);
+        sum += numVal;
+        count++;
+
+        if (numVal === 0) {
+          countZero++;
+        }
+
+        const pct = (numVal / maxMarks) * 100;
+        if (pct >= 60) {
+          countAbove++;
+        } else if (pct >= 40) {
+          countBetween++;
+        } else {
+          countBelow++;
+        }
+      }
+    });
+
+    const average = count > 0 ? (sum / count).toFixed(1) : "#DIV/0!";
+    return {
+      average,
+      countAbove,
+      countBetween,
+      countBelow,
+      countZero,
+      countAbsent
+    };
+  };
+
+  const getAttendanceStats = () => {
+    if (!previewData || !previewData.rows) {
+      return { count75Plus: 0, count65To74: 0, count50To64: 0, countBelow50: 0, countZero: 0, totalCalculated: 0 };
+    }
+    
+    let count75Plus = 0;
+    let count65To74 = 0;
+    let count50To64 = 0;
+    let countBelow50 = 0;
+    let countZero = 0;
+
+    previewData.rows.forEach((row: any) => {
+      const pct = attendanceMap[row.studentId];
+      if (pct === undefined) return;
+      if (pct > 75) count75Plus++;
+      else if (pct >= 65) count65To74++;
+      else if (pct >= 50) count50To64++;
+      else if (pct > 0) countBelow50++;
+      else countZero++;
+    });
+
+    const totalCalculated = count75Plus + count65To74 + count50To64 + countBelow50 + countZero;
+
+    return {
+      count75Plus,
+      count65To74,
+      count50To64,
+      countBelow50,
+      countZero,
+      totalCalculated
+    };
+  };
 
   const fetchAnalysis = useCallback(async () => {
     const mapping = mappings.find(m => m.id === selectedMappingId);
@@ -491,12 +627,18 @@ export default function FacultyMidExamPage() {
     rowsList.push([]);
 
     if (previewType !== "SUBJECT") {
+      const filteredSubjects = previewData.subjects.filter((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (isLab) return showLabMarks;
+        return true;
+      });
       const headers = ["S.No", "Roll Number", "Student Name"];
       if (includeAttendance) {
         headers.push("Attendance (%)");
       }
-      previewData.subjects.forEach((sub: any) => {
-        headers.push(`${sub.shortName || sub.name} (${previewType === "MID_I" ? "MID I 30M" : previewType === "MID_II" ? "MID II 30M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M"})`);
+      filteredSubjects.forEach((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        headers.push(`${sub.shortName || sub.name} (${isLab ? (previewType === "MID_I" ? "MID I 50M" : previewType === "MID_II" ? "MID II 50M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 50M") : (previewType === "MID_I" ? "MID I 30M" : previewType === "MID_II" ? "MID II 30M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M")})`);
       });
       rowsList.push(headers);
 
@@ -505,7 +647,7 @@ export default function FacultyMidExamPage() {
         if (includeAttendance) {
           rowData.push(currentAttendanceMap[row.studentId] !== undefined ? `${currentAttendanceMap[row.studentId]}%` : "");
         }
-        previewData.subjects.forEach((sub: any) => {
+        filteredSubjects.forEach((sub: any) => {
           const marksObj = row.subjects[sub.id] || {};
           let val: number | null = null;
           if (previewType === "MID_I") val = marksObj.mid1;
@@ -522,7 +664,17 @@ export default function FacultyMidExamPage() {
       if (includeAttendance) {
         headers.push("Attendance (%)");
       }
-      headers.push("MID-I (30M)", "MID-I (20M)", "MID-II (30M)", "MID-II (20M)", "MID Avg (20M)", "Assign (10M)", "Final (30M)");
+      const targetSub = previewData.subjects[0];
+      const isLab = targetSub?.type?.toUpperCase() === "LAB";
+      headers.push(
+        isLab ? "MID-I (50M)" : "MID-I (30M)",
+        isLab ? "MID-I (50M)" : "MID-I (20M)",
+        isLab ? "MID-II (50M)" : "MID-II (30M)",
+        isLab ? "MID-II (50M)" : "MID-II (20M)",
+        isLab ? "MID Avg (50M)" : "MID Avg (20M)",
+        "Assign (10M)",
+        isLab ? "Final (50M)" : "Final (30M)"
+      );
       rowsList.push(headers);
 
       const subId = previewData.subjects[0]?.id;
@@ -593,7 +745,11 @@ export default function FacultyMidExamPage() {
       });
 
       const meta = cachedData.meta;
-      const subjects = cachedData.subjects || [];
+      const subjects = (cachedData.subjects || []).filter((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (isLab) return showLabMarks;
+        return true;
+      });
       const rows = cachedData.rows || [];
       const margin = 12;
 
@@ -656,10 +812,11 @@ export default function FacultyMidExamPage() {
       const headers = [["S.No", "Roll Number", "Student Name"]];
       for (const sub of subjects) {
         let colHeader = sub.shortName || sub.code;
-        if (reportType === "MID_I") colHeader += `\nMID I (30M)`;
-        else if (reportType === "MID_II") colHeader += `\nMID II (30M)`;
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (reportType === "MID_I") colHeader += `\nMID I ${isLab ? "(50M)" : "(30M)"}`;
+        else if (reportType === "MID_II") colHeader += `\nMID II ${isLab ? "(50M)" : "(30M)"}`;
         else if (reportType === "ASSIGNMENT") colHeader += `\nASSIGN (10M)`;
-        else if (reportType === "FINAL") colHeader += `\nFINAL (30M)`;
+        else if (reportType === "FINAL") colHeader += `\nFINAL ${isLab ? "(50M)" : "(30M)"}`;
         headers[0].push(colHeader);
       }
 
@@ -694,7 +851,7 @@ export default function FacultyMidExamPage() {
         head: headers,
         body: tableRows,
         startY: tableStartY,
-        margin: { left: margin, right: margin },
+        margin: { left: margin, right: margin, bottom: 28 },
         styles: {
           fontSize: 8.5,
           cellPadding: 2.5,
@@ -721,26 +878,35 @@ export default function FacultyMidExamPage() {
         theme: "grid"
       });
 
-      // Signature lines
-      const finalY = (doc as any).lastAutoTable.finalY || 160;
+      // Signature lines on every page (for FINAL) or last page (for others)
+      const totalPages = (doc as any).internal.getNumberOfPages();
       const pageHeight = doc.internal.pageSize.height;
+      const sigY = pageHeight - 18;
 
-      let sigY = finalY + 16;
-      if (sigY > pageHeight - 20) {
-        doc.addPage();
-        sigY = 30;
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+
+        if (reportType === "FINAL") {
+          doc.line(margin, sigY, margin + 45, sigY);
+          doc.text("Signature of the HOD", margin + 22.5, sigY + 5, { align: "center" });
+
+          doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
+          doc.text("Signature of the Director", 297 - margin - 22.5, sigY + 5, { align: "center" });
+        } else {
+          if (i === totalPages) {
+            doc.line(margin, sigY, margin + 45, sigY);
+            doc.text("Signature of the Faculty", margin + 22.5, sigY + 5, { align: "center" });
+
+            doc.line(148 - 30, sigY, 148 + 30, sigY);
+            doc.text("Signature of the Faculty Coordinator", 148, sigY + 5, { align: "center" });
+
+            doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
+            doc.text("Signature of the HOD", 297 - margin - 22.5, sigY + 5, { align: "center" });
+          }
+        }
       }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.line(margin, sigY, margin + 45, sigY);
-      doc.text("Signature of the Faculty", margin + 22, sigY + 5, { align: "center" });
-
-      doc.line(148 - 30, sigY, 148 + 30, sigY);
-      doc.text("Signature of the Faculty Coordinator", 148, sigY + 5, { align: "center" });
-
-      doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
-      doc.text("Signature of the HOD", 297 - margin - 22, sigY + 5, { align: "center" });
 
       let filename = "";
       const semStr = meta.semester ? `Sem${meta.semester}` : "";
@@ -845,19 +1011,20 @@ export default function FacultyMidExamPage() {
 
       const tableStartY = detailsY + 6;
 
+      const isLab = targetSubject?.type?.toUpperCase() === "LAB";
       // Build Headers
       const headers = [
         [
           "S.No", 
           "Roll Number", 
           "Student Name", 
-          "MID-I\n(30M)", 
-          "MID-I\n(20M)", 
-          "MID-II\n(30M)", 
-          "MID-II\n(20M)", 
-          "MID Avg\n(20M)",
+          `MID-I\n${isLab ? "(50M)" : "(30M)"}`, 
+          `MID-I\n${isLab ? "(50M)" : "(20M)"}`, 
+          `MID-II\n${isLab ? "(50M)" : "(30M)"}`, 
+          `MID-II\n${isLab ? "(50M)" : "(20M)"}`, 
+          `MID Avg\n${isLab ? "(50M)" : "(20M)"}`,
           "Assign\n(10M)", 
-          "Final\n(30M)"
+          `Final\n${isLab ? "(50M)" : "(30M)"}`
         ]
       ];
 
@@ -987,14 +1154,11 @@ export default function FacultyMidExamPage() {
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
-      doc.line(margin, sigY, margin + 45, sigY);
-      doc.text("Signature of the Faculty", margin + 22, sigY + 5, { align: "center" });
+      doc.line(margin, sigY, margin + 40, sigY);
+      doc.text("Signature of the Faculty", margin + 20, sigY + 5, { align: "center" });
 
-      doc.line(105 - 25, sigY, 105 + 25, sigY);
-      doc.text("Signature of the Faculty Coordinator", 105, sigY + 5, { align: "center" });
-
-      doc.line(210 - margin - 45, sigY, 210 - margin, sigY);
-      doc.text("Signature of the HOD", 210 - margin - 22, sigY + 5, { align: "center" });
+      doc.line(210 - margin - 40, sigY, 210 - margin, sigY);
+      doc.text("Signature of the HOD", 210 - margin - 20, sigY + 5, { align: "center" });
 
       let filename = `Subject_Evaluation_${subjectCode}_Sec_${meta.section}.pdf`;
       doc.save(filename);
@@ -1012,8 +1176,24 @@ export default function FacultyMidExamPage() {
         fetch(`/api/faculty-mappings?academicYearId=${ayId}`),
         fetch(`/api/mid-exam/papers?academicYearId=${ayId}`)
       ]);
-      if (mappingsRes.ok) setMappings(await mappingsRes.json());
+      let fetchedMappings: Mapping[] = [];
+      if (mappingsRes.ok) {
+        fetchedMappings = await mappingsRes.json();
+        setMappings(fetchedMappings);
+      }
       if (papersRes.ok) setPapers(await papersRes.json());
+
+      const savedMapping = sessionStorage.getItem("faculty_mid_exam_filter_mapping");
+      if (savedMapping && fetchedMappings.some(m => m.id === savedMapping)) {
+        setSelectedMappingId(savedMapping);
+      } else if (fetchedMappings.length > 0) {
+        setSelectedMappingId(fetchedMappings[0].id);
+      } else {
+        setSelectedMappingId("");
+      }
+      setTimeout(() => {
+        isRestored.current = true;
+      }, 100);
     } finally {
       setLoading(false);
     }
@@ -1024,8 +1204,10 @@ export default function FacultyMidExamPage() {
       .then(r => r.json())
       .then(data => {
         setAcademicYears(data);
-        const current = data.find((y: any) => y.isCurrent);
-        const ay = current?.id || data[0]?.id || "";
+        const savedAY = sessionStorage.getItem("faculty_mid_exam_filter_ay");
+        const ay = savedAY && data.some((y: any) => y.id === savedAY)
+          ? savedAY
+          : (data.find((y: any) => y.isCurrent)?.id || data[0]?.id || "");
         setSelectedAY(ay);
         if (ay) loadData(ay);
       });
@@ -1048,7 +1230,7 @@ export default function FacultyMidExamPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           academicYearId: mapping.academicYear.id,
-          departmentId: (session?.user as any).departmentId,
+          departmentId: mapping.subject.departmentId,
           year: mapping.subject.year,
           semester: mapping.subject.semester,
           sectionId: mapping.section.id,
@@ -1512,6 +1694,21 @@ export default function FacultyMidExamPage() {
                       {showAttendance ? "Hide Attendance" : "Show Attendance"}
                     </button>
 
+                    {/* Show Lab Marks Toggle */}
+                    {previewType !== "SUBJECT" && (
+                      <button
+                        onClick={() => setShowLabMarks(prev => !prev)}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm transition-colors ${
+                          showLabMarks
+                            ? "bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <FaFlask size={12} />
+                        {showLabMarks ? "Hide Lab Marks" : "Show Lab Marks"}
+                      </button>
+                    )}
+
                     {/* Download Excel Trigger */}
                     <button
                       onClick={downloadExcel}
@@ -1578,181 +1775,379 @@ export default function FacultyMidExamPage() {
                   className="overflow-x-auto rounded-xl border border-slate-150"
                 >
                   <table className="w-full text-left text-xs border-collapse">
-                    {previewType !== "SUBJECT" ? (
-                      <>
-                        {/* Class-Wise Report Headers */}
-                        <thead>
-                          <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
-                            <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
-                            <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
-                            <th className="px-4 py-3 border border-black">Student Name</th>
-                            {showAttendance && (
-                              <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
-                            )}
-                            {previewData.subjects.map((sub: any) => (
-                              <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[120px]">
-                                {sub.shortName || sub.name}
-                                <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
-                                  {previewType === "MID_I" && "MID I (30M)"}
-                                  {previewType === "MID_II" && "MID II (30M)"}
-                                  {previewType === "ASSIGNMENT" && "Assign (10M)"}
-                                  {previewType === "FINAL" && "Final (30M)"}
-                                </span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-150 text-slate-700">
-                          {previewData.rows.map((row: any, idx: number) => (
-                            <tr key={row.rollNumber} className="hover:bg-slate-50/50">
-                              <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
-                              <td className="px-4 py-2.5 text-center border border-black">
-                                <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
-                                  {row.rollNumber}
-                                </Link>
-                              </td>
-                              <td className="px-4 py-2.5 border border-black">
-                                <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
-                                  {row.name}
-                                </Link>
-                              </td>
-                              {showAttendance && (
-                                <td className="px-4 py-2.5 text-center font-bold border border-black">
-                                  {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
-                                </td>
-                              )}
-                              {previewData.subjects.map((sub: any) => {
-                                const marksObj = row.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
-                                let val: number | null = null;
-                                let displayVal = "";
-                                const maxMarks = previewType === "ASSIGNMENT" ? 10 : 30;
+                    {(() => {
+                      const filteredSubjects = (previewData.subjects || []).filter((sub: any) => {
+                        const isLab = sub.type?.toUpperCase() === "LAB";
+                        if (isLab) return showLabMarks;
+                        return true;
+                      });
 
-                                if (previewType === "MID_I") {
-                                  val = marksObj.mid1;
-                                  displayVal = val !== null ? Math.round(val).toString() : "AB";
-                                } else if (previewType === "MID_II") {
-                                  val = marksObj.mid2;
-                                  displayVal = val !== null ? Math.round(val).toString() : "AB";
-                                } else if (previewType === "ASSIGNMENT") {
-                                  val = marksObj.assignment;
-                                  displayVal = val !== null ? Math.round(val).toString() : "0";
-                                } else if (previewType === "FINAL") {
-                                  val = marksObj.internal;
-                                  displayVal = val !== null ? Math.round(val).toString() : "0";
-                                }
-
-                                // Get dynamic color class
-                                let colorClass = "";
-                                if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
-                                  const parsedVal = parseFloat(displayVal);
-                                  if (!isNaN(parsedVal)) {
-                                    const pct = (parsedVal / maxMarks) * 100;
-                                    if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
-                                    else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
-                                    else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
-                                  }
-                                } else if (displayVal === "AB") {
-                                  colorClass = "bg-slate-100 text-slate-400 border border-black";
-                                }
-
-                                return (
-                                  <td key={sub.id} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${colorClass}`}>
-                                    {displayVal}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </>
-                    ) : (
-                      <>
-                        {/* Subject-Wise Report Headers */}
-                        <thead>
-                          <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
-                            <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
-                            <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
-                            <th className="px-4 py-3 border border-black">Student Name</th>
-                            {showAttendance && (
-                              <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
-                            )}
-                            <th className="px-4 py-3 text-center border border-black">MID-I (30M)</th>
-                            <th className="px-4 py-3 text-center border border-black">MID-I (20M)</th>
-                            <th className="px-4 py-3 text-center border border-black">MID-II (30M)</th>
-                            <th className="px-4 py-3 text-center border border-black">MID-II (20M)</th>
-                            <th className="px-4 py-3 text-center border border-black text-amber-700 font-bold">MID Avg (20M)</th>
-                            <th className="px-4 py-3 text-center border border-black">Assign (10M)</th>
-                            <th className="px-4 py-3 text-center border border-black font-bold">Final (30M)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-150 text-slate-700">
-                          {previewData.rows.map((row: any, idx: number) => {
-                            const subId = previewData.subjects[0]?.id;
-                            const marksObj = row.subjects[subId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
-                            
-                            const m1 = marksObj.mid1Scaled;
-                            const m2 = marksObj.mid2Scaled;
-                            const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
-                            const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
-
-                            const fields = [
-                              { val: marksObj.mid1, max: 30, fallback: "AB" },
-                              { val: marksObj.mid1Scaled, max: 20, fallback: "AB" },
-                              { val: marksObj.mid2, max: 30, fallback: "AB" },
-                              { val: marksObj.mid2Scaled, max: 20, fallback: "AB" },
-                              { val: midAvgVal, max: 20, fallback: "AB", isMidAvg: true },
-                              { val: marksObj.assignment, max: 10, fallback: "0" },
-                              { val: marksObj.internal, max: 30, fallback: "0", isBold: true }
-                            ];
-
-                            return (
-                              <tr key={row.rollNumber} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
-                                <td className="px-4 py-2.5 text-center border border-black">
-                                  <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
-                                    {row.rollNumber}
-                                  </Link>
-                                </td>
-                                <td className="px-4 py-2.5 border border-black">
-                                  <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
-                                    {row.name}
-                                  </Link>
-                                </td>
+                      if (previewType !== "SUBJECT") {
+                        return (
+                          <>
+                            {/* Class-Wise Report Headers */}
+                            <thead>
+                              <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
+                                <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
+                                <th className="px-4 py-3 border border-black">Student Name</th>
                                 {showAttendance && (
-                                  <td className="px-4 py-2.5 text-center font-bold border border-black">
-                                    {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
-                                  </td>
+                                  <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
                                 )}
-                                {fields.map((f, fIdx) => {
-                                  const displayVal = (f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback;
-                                  
-                                  let colorClass = "";
-                                  if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
-                                    const parsedVal = parseFloat(displayVal);
-                                    if (!isNaN(parsedVal)) {
-                                      const pct = (parsedVal / f.max) * 100;
-                                      if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
-                                      else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
-                                      else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
-                                    }
-                                  } else if (displayVal === "AB") {
-                                    colorClass = "bg-slate-100 text-slate-400 border border-black";
-                                  }
-
+                                {filteredSubjects.map((sub: any) => {
+                                  const isLab = sub.type?.toUpperCase() === "LAB";
                                   return (
-                                    <td key={fIdx} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${f.isBold ? "font-bold" : ""} ${colorClass}`}>
-                                      {displayVal}
+                                    <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[120px]">
+                                      {sub.shortName || sub.name}
+                                      <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
+                                        {previewType === "MID_I" && `MID I ${isLab ? "(50M)" : "(30M)"}`}
+                                        {previewType === "MID_II" && `MID II ${isLab ? "(50M)" : "(30M)"}`}
+                                        {previewType === "ASSIGNMENT" && "Assign (10M)"}
+                                        {previewType === "FINAL" && `Final ${isLab ? "(50M)" : "(30M)"}`}
+                                      </span>
+                                    </th>
+                                  );
+                                })}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150 text-slate-700">
+                              {previewData.rows.map((row: any, idx: number) => (
+                                <tr key={row.rollNumber} className="hover:bg-slate-50/50">
+                                  <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
+                                  <td className="px-4 py-2.5 text-center border border-black">
+                                    <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
+                                      {row.rollNumber}
+                                    </Link>
+                                  </td>
+                                  <td className="px-4 py-2.5 border border-black">
+                                    <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
+                                      {row.name}
+                                    </Link>
+                                  </td>
+                                  {showAttendance && (
+                                    <td className="px-4 py-2.5 text-center font-bold border border-black">
+                                      {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
+                                    </td>
+                                  )}
+                                  {filteredSubjects.map((sub: any) => {
+                                    const marksObj = row.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+                                    let val: number | null = null;
+                                    let displayVal = "";
+                                    const isLab = sub.type?.toUpperCase() === "LAB";
+                                    let maxMarks = 30;
+                                    if (previewType === "ASSIGNMENT") {
+                                      maxMarks = 10;
+                                    } else if (previewType === "FINAL" && isLab) {
+                                      maxMarks = 50;
+                                    } else if (previewType === "MID_I" && isLab) {
+                                      maxMarks = 50;
+                                    } else if (previewType === "MID_II" && isLab) {
+                                      maxMarks = 50;
+                                    }
+
+                                    if (previewType === "MID_I") {
+                                      val = marksObj.mid1;
+                                      displayVal = val !== null ? Math.round(val).toString() : "AB";
+                                    } else if (previewType === "MID_II") {
+                                      val = marksObj.mid2;
+                                      displayVal = val !== null ? Math.round(val).toString() : "AB";
+                                    } else if (previewType === "ASSIGNMENT") {
+                                      val = marksObj.assignment;
+                                      displayVal = val !== null ? Math.round(val).toString() : "0";
+                                    } else if (previewType === "FINAL") {
+                                      val = marksObj.internal;
+                                      displayVal = val !== null ? Math.round(val).toString() : "0";
+                                    }
+
+                                    // Get dynamic color class
+                                    let colorClass = "";
+                                    if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                      const parsedVal = parseFloat(displayVal);
+                                      if (!isNaN(parsedVal)) {
+                                        const pct = (parsedVal / maxMarks) * 100;
+                                        if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
+                                        else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
+                                        else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
+                                      }
+                                    } else if (displayVal === "AB") {
+                                      colorClass = "bg-slate-100 text-slate-400 border border-black";
+                                    }
+
+                                    return (
+                                      <td key={sub.id} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${colorClass}`}>
+                                        {displayVal}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="print:hidden">
+                              {/* Column Average Row */}
+                              <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">column average</td>
+                                {filteredSubjects.map((sub: any) => {
+                                  const stats = getSubjectStats(sub.id, sub.type);
+                                  return (
+                                    <td key={sub.id} className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">
+                                      {stats.average}
                                     </td>
                                   );
                                 })}
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </>
-                    )}
+                              {/* Above 60% Row */}
+                              <tr className="bg-white text-slate-700">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Above 60%</td>
+                                {filteredSubjects.map((sub: any) => {
+                                  const stats = getSubjectStats(sub.id, sub.type);
+                                  return (
+                                    <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                      {stats.countAbove}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              {/* Between 60% to 40% Row */}
+                              <tr className="bg-white text-slate-700">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Between 60% to 40%</td>
+                                {filteredSubjects.map((sub: any) => {
+                                  const stats = getSubjectStats(sub.id, sub.type);
+                                  return (
+                                    <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                      {stats.countBetween}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              {/* Below 40% Row */}
+                              <tr className="bg-white text-slate-700">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Below 40%</td>
+                                {filteredSubjects.map((sub: any) => {
+                                  const stats = getSubjectStats(sub.id, sub.type);
+                                  return (
+                                    <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                      {stats.countBelow}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              {/* With zero Marks Row */}
+                              <tr className="bg-white text-slate-700">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students With zero Marks</td>
+                                {filteredSubjects.map((sub: any) => {
+                                  const stats = getSubjectStats(sub.id, sub.type);
+                                  return (
+                                    <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                      {stats.countZero}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              {/* Total No. of Absentees Row */}
+                              <tr className="bg-white text-slate-700">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Absentees</td>
+                                {filteredSubjects.map((sub: any) => {
+                                  const stats = getSubjectStats(sub.id, sub.type);
+                                  return (
+                                    <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                      {stats.countAbsent}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            </tfoot>
+                          </>
+                        );
+                      } else {
+                        // Detailed subject sheet
+                        const previewSubjectId = previewData.subjects[0]?.id;
+                        const isLab = previewData.subjects[0]?.type?.toUpperCase() === "LAB";
+
+                        const getAvg = (extractor: (marks: any) => number | null) => {
+                          let sum = 0;
+                          let count = 0;
+                          previewData.rows.forEach((row: any) => {
+                            const marksObj = row.subjects[previewSubjectId] || {};
+                            const val = extractor(marksObj);
+                            if (val !== null && val !== undefined) {
+                              sum += val;
+                              count++;
+                            }
+                          });
+                          return count > 0 ? (sum / count).toFixed(1) : "N/A";
+                        };
+
+                        const getMidAvgClass = () => {
+                          let sum = 0;
+                          let count = 0;
+                          previewData.rows.forEach((row: any) => {
+                            const marksObj = row.subjects[previewSubjectId] || {};
+                            const m1 = marksObj.mid1Scaled;
+                            const m2 = marksObj.mid2Scaled;
+                            const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+                            if (available.length > 0) {
+                              sum += available.reduce((a, b) => a + b, 0) / available.length;
+                              count++;
+                            }
+                          });
+                          return count > 0 ? (sum / count).toFixed(1) : "N/A";
+                        };
+
+                        const classAvgMid1 = getAvg((m) => m.mid1);
+                        const classAvgMid1Scaled = getAvg((m) => m.mid1Scaled);
+                        const classAvgMid2 = getAvg((m) => m.mid2);
+                        const classAvgMid2Scaled = getAvg((m) => m.mid2Scaled);
+                        const classAvgMidAvg = getMidAvgClass();
+                        const classAvgAssign = getAvg((m) => m.assignment);
+                        const classAvgInternal = getAvg((m) => m.internal);
+
+                        return (
+                          <>
+                            {/* Subject-Wise Report Headers */}
+                            <thead>
+                              <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
+                                <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
+                                <th className="px-4 py-3 border border-black">Student Name</th>
+                                {showAttendance && (
+                                  <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
+                                )}
+                                <th className="px-4 py-3 text-center border border-black">{isLab ? "MID-I (50M)" : "MID-I (30M)"}</th>
+                                <th className="px-4 py-3 text-center border border-black">{isLab ? "MID-I (50M)" : "MID-I (20M)"}</th>
+                                <th className="px-4 py-3 text-center border border-black">{isLab ? "MID-II (50M)" : "MID-II (30M)"}</th>
+                                <th className="px-4 py-3 text-center border border-black">{isLab ? "MID-II (50M)" : "MID-II (20M)"}</th>
+                                <th className="px-4 py-3 text-center border border-black text-amber-700 font-bold">{isLab ? "MID Avg (50M)" : "MID Avg (20M)"}</th>
+                                <th className="px-4 py-3 text-center border border-black font-bold">Assign (10M)</th>
+                                <th className="px-4 py-3 text-center border border-black font-bold">{isLab ? "Final (50M)" : "Final (30M)"}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150 text-slate-700">
+                              {previewData.rows.map((row: any, idx: number) => {
+                                const marksObj = row.subjects[previewSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
+                                
+                                const m1 = marksObj.mid1Scaled;
+                                const m2 = marksObj.mid2Scaled;
+                                const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+                                const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
+
+                                const fields = [
+                                  { val: marksObj.mid1, max: isLab ? 50 : 30, fallback: "AB" },
+                                  { val: marksObj.mid1Scaled, max: isLab ? 50 : 20, fallback: "AB" },
+                                  { val: marksObj.mid2, max: isLab ? 50 : 30, fallback: "AB" },
+                                  { val: marksObj.mid2Scaled, max: isLab ? 50 : 20, fallback: "AB" },
+                                  { val: midAvgVal, max: isLab ? 50 : 20, fallback: "AB", isMidAvg: true },
+                                  { val: marksObj.assignment, max: 10, fallback: "0" },
+                                  { val: marksObj.internal, max: isLab ? 50 : 30, fallback: "0", isBold: true }
+                                ];
+
+                                return (
+                                  <tr key={row.rollNumber} className="hover:bg-slate-50/50">
+                                    <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
+                                    <td className="px-4 py-2.5 text-center border border-black">
+                                      <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
+                                        {row.rollNumber}
+                                      </Link>
+                                    </td>
+                                    <td className="px-4 py-2.5 border border-black">
+                                      <Link href={`/faculty/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
+                                        {row.name}
+                                      </Link>
+                                    </td>
+                                    {showAttendance && (
+                                      <td className="px-4 py-2.5 text-center font-bold border border-black">
+                                        {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
+                                      </td>
+                                    )}
+                                    {fields.map((f, fIdx) => {
+                                      const displayVal = (f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback;
+                                      
+                                      let colorClass = "";
+                                      if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                        const parsedVal = parseFloat(displayVal);
+                                        if (!isNaN(parsedVal)) {
+                                          const pct = (parsedVal / f.max) * 100;
+                                          if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
+                                          else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
+                                          else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
+                                        }
+                                      } else if (displayVal === "AB") {
+                                        colorClass = "bg-slate-100 text-slate-400 border border-black";
+                                      }
+
+                                      return (
+                                        <td key={fIdx} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${f.isBold ? "font-bold" : ""} ${colorClass}`}>
+                                          {displayVal}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
+                                <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">Class Average</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">{classAvgMid1}</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">{classAvgMid1Scaled}</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">{classAvgMid2}</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">{classAvgMid2Scaled}</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-amber-800 bg-slate-50">{classAvgMidAvg}</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">{classAvgAssign}</td>
+                                <td className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">{classAvgInternal}</td>
+                              </tr>
+                            </tfoot>
+                          </>
+                        );
+                      }
+                    })()}
                   </table>
                 </div>
+
+                {/* Attendance Statistics Section below the table */}
+                {previewType !== "SUBJECT" && (() => {
+                  const attStats = getAttendanceStats();
+                  return (
+                    <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col md:flex-row justify-between items-start gap-6 print:hidden">
+                      <div className="text-xs text-slate-500 max-w-md">
+                        <p className="font-semibold text-slate-700 mb-1 text-sm">Report Insights & Statistics</p>
+                        <p className="leading-relaxed">The subject-wise columns display real-time class averages and grade distributions. Toggle the <strong className="text-slate-700">Show Attendance</strong> button to load active attendance percentages and populate the overall Attendance Statistics card.</p>
+                      </div>
+                      
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm w-72">
+                        <h5 className="text-xs font-bold text-slate-700 uppercase mb-3 text-center tracking-wider">Attendance Statistics</h5>
+                        <table className="w-full text-xs border-collapse bg-white">
+                          <tbody>
+                            <tr>
+                              <td rowSpan={5} className="px-3 py-2 border border-slate-200 font-bold text-center bg-slate-50 text-slate-700 w-24">Attendance</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(&gt;75%)</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.count75Plus}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(65 to 74%)</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.count65To74}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(65 to 50%)</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.count50To64}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(&lt;50 %)</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.countBelow50}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold font-mono bg-slate-50 text-slate-600">(=0%)</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-800">{attStats.countZero}</td>
+                            </tr>
+                            <tr className="bg-slate-50">
+                              <td colSpan={2} className="px-3 py-2 border border-slate-200 text-center font-bold text-slate-700">Total</td>
+                              <td className="px-3 py-2 border border-slate-200 text-center font-extrabold text-slate-900 bg-white">{attStats.totalCalculated}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </motion.div>

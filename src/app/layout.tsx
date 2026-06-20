@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   description: "Enterprise Student Management and ERP System for GVP",
   // Next.js automatically maps src/app/manifest.ts, do NOT hardcode absolute path!
   icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
-    apple: "/logo.png", // Safari/iOS specific touch icon
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/apple-icon.png", // Safari/iOS specific touch icon
   },
   appleWebApp: {
     capable: true,

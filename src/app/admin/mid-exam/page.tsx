@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSlidersH, FaFilePdf, FaCheckCircle, FaLock, FaUnlock, FaSpinner,
   FaPlus, FaTrash, FaPen, FaClipboardList, FaDownload, FaEye, FaLayerGroup, FaCalendarAlt, FaFileAlt,
-  FaFileExcel, FaPaperPlane
+  FaFileExcel, FaPaperPlane, FaFlask
 } from "react-icons/fa";
 import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -47,8 +47,10 @@ interface Paper {
   examType: string;
   totalMarks: number;
   isFrozen: boolean;
-  subject: { name: string; code: string; type: string; department?: { code: string } };
-  section: { name: string };
+  subjectId: string;
+  sectionId: string;
+  subject: { id: string; name: string; code: string; type: string; department?: { code: string } };
+  section: { id: string; name: string };
   academicYear: { name: string };
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
   facultyName?: string;
@@ -60,6 +62,13 @@ export default function AdminMidExamDashboard() {
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports" | "co-po-mapping" | "analysis">("dashboard");
+
+  useEffect(() => {
+    const savedTab = sessionStorage.getItem("admin_mid_exam_active_tab");
+    if (savedTab && ["dashboard", "schemes", "publish", "reports", "co-po-mapping", "analysis"].includes(savedTab)) {
+      setActiveTab(savedTab as any);
+    }
+  }, []);
 
   // Sync scrollbar refs & state
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -91,6 +100,7 @@ export default function AdminMidExamDashboard() {
   const [showAttendance, setShowAttendance] = useState<boolean>(false);
   const [fetchingAttendance, setFetchingAttendance] = useState<boolean>(false);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, number>>({});
+  const [showLabMarks, setShowLabMarks] = useState<boolean>(false);
 
   const getSubjectStats = (subId: string, subType: string) => {
     if (!previewData || !previewData.rows) {
@@ -234,6 +244,43 @@ export default function AdminMidExamDashboard() {
   const [selectedSem, setSelectedSem] = useState("1");
   const [selectedSection, setSelectedSection] = useState("");
 
+  const isRestored = useRef(false);
+
+  // Save filters to sessionStorage
+  useEffect(() => {
+    if (isRestored.current && selectedAY) {
+      sessionStorage.setItem("mid_exam_filter_ay", selectedAY);
+    }
+  }, [selectedAY]);
+
+  useEffect(() => {
+    if (isRestored.current && selectedDept) {
+      sessionStorage.setItem("mid_exam_filter_dept", selectedDept);
+    }
+  }, [selectedDept]);
+
+  useEffect(() => {
+    if (isRestored.current && selectedYear) {
+      sessionStorage.setItem("mid_exam_filter_year", selectedYear);
+    }
+  }, [selectedYear]);
+
+  useEffect(() => {
+    if (isRestored.current && selectedSem) {
+      sessionStorage.setItem("mid_exam_filter_sem", selectedSem);
+    }
+  }, [selectedSem]);
+
+  useEffect(() => {
+    if (isRestored.current && selectedSection) {
+      sessionStorage.setItem("mid_exam_filter_section", selectedSection);
+    }
+  }, [selectedSection]);
+
+  useEffect(() => {
+    sessionStorage.setItem("admin_mid_exam_active_tab", activeTab);
+  }, [activeTab]);
+
   // Analysis states
   const [analysisData, setAnalysisData] = useState<any | null>(null);
   const [fetchingAnalysis, setFetchingAnalysis] = useState(false);
@@ -244,6 +291,7 @@ export default function AdminMidExamDashboard() {
     setPreviewType(null);
     setShowAttendance(false);
     setAttendanceMap({});
+    setShowLabMarks(false);
     setAnalysisData(null);
   }, [selectedAY, selectedDept, selectedYear, selectedSem, selectedSection, selectedAnalysisExamType]);
 
@@ -324,36 +372,12 @@ export default function AdminMidExamDashboard() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Publish Confirmation Modals & Faculty selection states
+  // Publish Confirmation Modals & SMS states
   const [showPublishModal, setShowPublishModal] = useState(false);
-  const [showDemoPublishModal, setShowDemoPublishModal] = useState(false);
   const [selectedPaperForPublish, setSelectedPaperForPublish] = useState<any>(null);
-  const [sendSMSCheckbox, setSendSMSCheckbox] = useState(false);
 
-  const [facultiesList, setFacultiesList] = useState<any[]>([]);
-  const [selectedFacultyMobiles, setSelectedFacultyMobiles] = useState<string[]>([]);
-  const [facultySearchQuery, setFacultySearchQuery] = useState("");
-  const [loadingFaculties, setLoadingFaculties] = useState(false);
-
-  const openDemoPublishModal = async (paper: any) => {
-    setSelectedPaperForPublish(paper);
-    setShowDemoPublishModal(true);
-    setLoadingFaculties(true);
-    try {
-      const res = await fetch("/api/faculty");
-      if (res.ok) {
-        const data = await res.json();
-        setFacultiesList(data || []);
-        setSelectedFacultyMobiles([]); // reset selected list
-      } else {
-        showToast("Failed to fetch faculty list", "error");
-      }
-    } catch (e) {
-      showToast("Network error fetching faculty", "error");
-    } finally {
-      setLoadingFaculties(false);
-    }
-  };
+  const [smsExamType, setSmsExamType] = useState<"MID_I" | "MID_II">("MID_I");
+  const [sendingSMS, setSendingSMS] = useState(false);
 
   const executePublish = async () => {
     if (!selectedPaperForPublish) return;
@@ -367,15 +391,11 @@ export default function AdminMidExamDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paperId,
-          action: "publish",
-          sendSMS: sendSMSCheckbox
+          action: "publish"
         })
       });
       if (res.ok) {
         showToast("Marks published successfully!", "success");
-        if (sendSMSCheckbox) {
-          showToast("SMS dispatch triggered in background.", "info");
-        }
         await loadPapers();
       } else {
         const data = await res.json();
@@ -388,37 +408,59 @@ export default function AdminMidExamDashboard() {
     }
   };
 
-  const executeDemoPublish = async () => {
-    if (!selectedPaperForPublish) return;
-    if (selectedFacultyMobiles.length === 0) {
-      showToast("Please select at least one faculty member.", "error");
+  const handleSendMarksSMS = async () => {
+    if (!selectedSection) {
+      showToast("Please select a specific section to send SMS.", "error");
       return;
     }
-    const paperId = selectedPaperForPublish.id;
-    setShowDemoPublishModal(false);
-    
-    setActionLoading(prev => ({ ...prev, [paperId]: true }));
+
+    // 1. Client-side check if all theory subjects are published
+    const classTheorySubjects = reportSubjects.filter(s => s.type?.toUpperCase() !== "LAB");
+    if (classTheorySubjects.length === 0) {
+      showToast("No theory subjects found for this class.", "error");
+      return;
+    }
+
+    const unpublished = classTheorySubjects.filter(sub => {
+      const paper = papers.find(p => p.subjectId === sub.id && p.examType === smsExamType && p.sectionId === selectedSection);
+      return !paper || !paper.publishRecord?.isPublished;
+    });
+
+    if (unpublished.length > 0) {
+      const names = unpublished.map(s => `${s.code} - ${s.name}`).join(", ");
+      showToast(`Cannot send SMS. The following theory subjects have not been published yet: ${names}`, "error");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to send ${smsExamType.replace("_", " ")} marks SMS to parents for all students in this section?`)) {
+      return;
+    }
+
+    setSendingSMS(true);
     try {
-      const res = await fetch("/api/mid-exam/marks/publish", {
+      const res = await fetch("/api/mid-exam/marks/send-sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          paperId,
-          action: "demo_publish",
-          facultyMobiles: selectedFacultyMobiles
+          academicYearId: selectedAY,
+          departmentId: selectedDept,
+          year: selectedYear,
+          semester: selectedSem,
+          sectionId: selectedSection,
+          examType: smsExamType
         })
       });
+
+      const data = await res.json();
       if (res.ok) {
-        showToast("Demo publish triggered. SMS dispatch started in background.", "success");
-        await loadPapers();
+        showToast(data.message || "SMS dispatch started in background.", "success");
       } else {
-        const data = await res.json();
-        showToast(data.error || "Demo publish failed", "error");
+        showToast(data.error || "Failed to send SMS.", "error");
       }
     } catch (e) {
-      showToast("Network error", "error");
+      showToast("Network error occurred.", "error");
     } finally {
-      setActionLoading(prev => ({ ...prev, [paperId]: false }));
+      setSendingSMS(false);
     }
   };
 
@@ -433,11 +475,23 @@ export default function AdminMidExamDashboard() {
       setDepartments(dept);
       setSchemes(sch);
 
-      const currentAY = ay.find((y: any) => y.isCurrent)?.id || ay[0]?.id || "";
+      const savedAY = sessionStorage.getItem("mid_exam_filter_ay");
+      const currentAY = savedAY && ay.some((y: any) => y.id === savedAY)
+        ? savedAY
+        : (ay.find((y: any) => y.isCurrent)?.id || ay[0]?.id || "");
       setSelectedAY(currentAY);
 
-      const defaultDept = dept[0]?.id || "";
+      const savedDept = sessionStorage.getItem("mid_exam_filter_dept");
+      const defaultDept = savedDept && dept.some((d: any) => d.id === savedDept)
+        ? savedDept
+        : (dept[0]?.id || "");
       setSelectedDept(defaultDept);
+
+      const savedYear = sessionStorage.getItem("mid_exam_filter_year");
+      if (savedYear) setSelectedYear(savedYear);
+
+      const savedSem = sessionStorage.getItem("mid_exam_filter_sem");
+      if (savedSem) setSelectedSem(savedSem);
 
       setLoading(false);
     });
@@ -449,12 +503,22 @@ export default function AdminMidExamDashboard() {
         .then(res => res.json())
         .then(data => {
           setSections(data);
-          setSelectedSection(data[0]?.id || "");
+          const savedSection = sessionStorage.getItem("mid_exam_filter_section");
+          if (savedSection && data.some((s: any) => s.id === savedSection)) {
+            setSelectedSection(savedSection);
+          } else {
+            setSelectedSection(data[0]?.id || "");
+          }
+          // Enable sessionStorage updates only after initial filters are fully restored
+          setTimeout(() => {
+            isRestored.current = true;
+          }, 100);
         })
         .catch(err => console.error(err));
     } else {
       setSections([]);
       setSelectedSection("");
+      isRestored.current = true;
     }
   }, [selectedDept]);
 
@@ -755,7 +819,6 @@ export default function AdminMidExamDashboard() {
       const paper = papers.find(p => p.id === paperId);
       if (paper) {
         setSelectedPaperForPublish(paper);
-        setSendSMSCheckbox(false);
         setShowPublishModal(true);
       }
       return;
@@ -1061,8 +1124,20 @@ export default function AdminMidExamDashboard() {
       if (includeAttendance) {
         headers.push("Attendance (%)");
       }
-      previewData.subjects.forEach((sub: any) => {
-        headers.push(`${sub.shortName || sub.name} (${previewType === "MID_I" ? "MID I 30M" : previewType === "MID_II" ? "MID II 30M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M"})`);
+      const filteredSubjects = previewData.subjects.filter((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (isLab) return showLabMarks;
+        return true;
+      });
+      filteredSubjects.forEach((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        let marksSuffix = "";
+        if (isLab) {
+          marksSuffix = previewType === "MID_I" ? "MID I 50M" : previewType === "MID_II" ? "MID II 50M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 50M";
+        } else {
+          marksSuffix = previewType === "MID_I" ? "MID I 30M" : previewType === "MID_II" ? "MID II 30M" : previewType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M";
+        }
+        headers.push(`${sub.shortName || sub.name} (${marksSuffix})`);
       });
       rowsList.push(headers);
 
@@ -1071,7 +1146,7 @@ export default function AdminMidExamDashboard() {
         if (includeAttendance) {
           rowData.push(currentAttendanceMap[row.studentId] !== undefined ? `${currentAttendanceMap[row.studentId]}%` : "");
         }
-        previewData.subjects.forEach((sub: any) => {
+        filteredSubjects.forEach((sub: any) => {
           const marksObj = row.subjects[sub.id] || {};
           let val: number | null = null;
           if (previewType === "MID_I") val = marksObj.mid1;
@@ -1173,7 +1248,11 @@ export default function AdminMidExamDashboard() {
       });
 
       const meta = data.meta;
-      const subjects = data.subjects || [];
+      const subjects = (data.subjects || []).filter((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (isLab) return showLabMarks;
+        return true;
+      });
       const rows = data.rows || [];
 
       // A4 Landscape is 297mm x 210mm
@@ -1238,10 +1317,11 @@ export default function AdminMidExamDashboard() {
       const headers = [["S.No", "Roll Number", "Student Name"]];
       for (const sub of subjects) {
         let colHeader = sub.shortName || sub.code;
-        if (reportType === "MID_I") colHeader += `\nMID I (30M)`;
-        else if (reportType === "MID_II") colHeader += `\nMID II (30M)`;
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (reportType === "MID_I") colHeader += isLab ? `\nMID I (50M)` : `\nMID I (30M)`;
+        else if (reportType === "MID_II") colHeader += isLab ? `\nMID II (50M)` : `\nMID II (30M)`;
         else if (reportType === "ASSIGNMENT") colHeader += `\nASSIGN (10M)`;
-        else if (reportType === "FINAL") colHeader += `\nFINAL (30M)`;
+        else if (reportType === "FINAL") colHeader += isLab ? `\nFINAL (50M)` : `\nFINAL (30M)`;
         headers[0].push(colHeader);
       }
 
@@ -1276,7 +1356,7 @@ export default function AdminMidExamDashboard() {
         head: headers,
         body: tableRows,
         startY: tableStartY,
-        margin: { left: margin, right: margin },
+        margin: { left: margin, right: margin, bottom: 28 },
         styles: {
           fontSize: 8,
           cellPadding: 2,
@@ -1303,26 +1383,35 @@ export default function AdminMidExamDashboard() {
         theme: "grid"
       });
 
-      // Signature lines
-      const finalY = (doc as any).lastAutoTable.finalY || 160;
+      // Signature lines on every page (for FINAL) or last page (for others)
+      const totalPages = (doc as any).internal.getNumberOfPages();
       const pageHeight = doc.internal.pageSize.height;
+      const sigY = pageHeight - 18;
 
-      let sigY = finalY + 16;
-      if (sigY > pageHeight - 20) {
-        doc.addPage();
-        sigY = 30;
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+
+        if (reportType === "FINAL") {
+          doc.line(margin, sigY, margin + 45, sigY);
+          doc.text("Signature of the HOD", margin + 22.5, sigY + 5, { align: "center" });
+
+          doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
+          doc.text("Signature of the Director", 297 - margin - 22.5, sigY + 5, { align: "center" });
+        } else {
+          if (i === totalPages) {
+            doc.line(margin, sigY, margin + 45, sigY);
+            doc.text("Signature of the Faculty", margin + 22.5, sigY + 5, { align: "center" });
+
+            doc.line(148 - 30, sigY, 148 + 30, sigY);
+            doc.text("Signature of the Faculty Coordinator", 148, sigY + 5, { align: "center" });
+
+            doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
+            doc.text("Signature of the HOD", 297 - margin - 22.5, sigY + 5, { align: "center" });
+          }
+        }
       }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.line(margin, sigY, margin + 45, sigY);
-      doc.text("Signature of the Faculty", margin + 22, sigY + 5, { align: "center" });
-
-      doc.line(148 - 30, sigY, 148 + 30, sigY);
-      doc.text("Signature of the Faculty Coordinator", 148, sigY + 5, { align: "center" });
-
-      doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
-      doc.text("Signature of the HOD", 297 - margin - 22, sigY + 5, { align: "center" });
 
       let filename = "";
       if (reportType === "MID_I") filename = `MID_I_Marks_Memo_${meta.departmentCode}_Sem${selectedSem}_Sec_${meta.section}.pdf`;
@@ -1964,6 +2053,38 @@ export default function AdminMidExamDashboard() {
 
           {activeTab === "publish" && (
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              
+              {/* Send SMS to Parents Panel */}
+              <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h4 className="text-base font-bold text-slate-900">Send MID MARKS SMS TO PARENTS</h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Send a consolidated SMS alert of all theory mid exam marks to parents for the selected class/section.
+                  </p>
+                </div>
+                <div className="flex items-end gap-3 self-start md:self-auto">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase mb-1">Exam Type</span>
+                    <select
+                      value={smsExamType}
+                      onChange={e => setSmsExamType(e.target.value as any)}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="MID_I">MID I</option>
+                      <option value="MID_II">MID II</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleSendMarksSMS}
+                    disabled={sendingSMS}
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 h-[32px] justify-center"
+                  >
+                    {sendingSMS ? <FaSpinner className="animate-spin" size={12} /> : <FaPaperPlane size={12} />}
+                    Send SMS to Parents
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Bulk Secure Marks Publish Engine</h3>
                 <p className="text-sm text-slate-500">Lock faculty updates and push finalised granular assessment totals to production ERP marks matrices</p>
@@ -2040,26 +2161,15 @@ export default function AdminMidExamDashboard() {
                                 )}
 
                                 {!isPublished && (
-                                  <>
-                                    <button
-                                      onClick={() => handlePaperAction(p.id, "publish")}
-                                      disabled={loading || !p.isFrozen}
-                                      className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                      title={!p.isFrozen ? "Paper must be frozen by faculty first" : "Publish to ERP matrices"}
-                                    >
-                                      {loading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle size={10} />}
-                                      Publish Marks
-                                    </button>
-                                    <button
-                                      onClick={() => openDemoPublishModal(p)}
-                                      disabled={loading || !p.isFrozen}
-                                      className="flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
-                                      title={!p.isFrozen ? "Paper must be frozen by faculty first" : "Demo publish (send SMS to selected faculty)"}
-                                    >
-                                      {loading ? <FaSpinner className="animate-spin" /> : <FaPaperPlane size={10} />}
-                                      Demo Publish
-                                    </button>
-                                  </>
+                                  <button
+                                    onClick={() => handlePaperAction(p.id, "publish")}
+                                    disabled={loading || !p.isFrozen}
+                                    className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                    title={!p.isFrozen ? "Paper must be frozen by faculty first" : "Publish to ERP matrices"}
+                                  >
+                                    {loading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle size={10} />}
+                                    Publish Marks
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -2214,6 +2324,21 @@ export default function AdminMidExamDashboard() {
                         {showAttendance ? "Hide Attendance" : "Show Attendance"}
                       </button>
 
+                      {/* Show Lab Marks Toggle */}
+                      {previewType !== "SUBJECT" && (
+                        <button
+                          onClick={() => setShowLabMarks(prev => !prev)}
+                          className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm transition-colors ${
+                            showLabMarks
+                              ? "bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <FaFlask size={12} />
+                          {showLabMarks ? "Hide Lab Marks" : "Show Lab Marks"}
+                        </button>
+                      )}
+
                       {/* Download Excel Trigger */}
                       <button
                         onClick={downloadExcel}
@@ -2279,169 +2404,187 @@ export default function AdminMidExamDashboard() {
                     onScroll={handleTableScroll}
                     className="overflow-x-auto rounded-xl border border-slate-150"
                   >
-                    <table className="w-full text-left text-xs border-collapse">
-                      {previewType !== "SUBJECT" ? (
-                        <>
-                          {/* Class-Wise Report Headers */}
-                          <thead>
-                            <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
-                              <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
-                              <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
-                              <th className="px-4 py-3 border border-black">Student Name</th>
-                              {showAttendance && (
-                                <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
-                              )}
-                              {previewData.subjects.map((sub: any) => (
-                                <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[75px]">
-                                  {sub.shortName || sub.name}
-                                  <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
-                                    {previewType === "MID_I" && "MID I (30M)"}
-                                    {previewType === "MID_II" && "MID II (30M)"}
-                                    {previewType === "ASSIGNMENT" && "Assign (10M)"}
-                                    {previewType === "FINAL" && "Final (30M)"}
-                                  </span>
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-150 text-slate-700">
-                            {previewData.rows.map((row: any, idx: number) => (
-                              <tr key={row.rollNumber} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
-                                <td className="px-4 py-2.5 text-center border border-black">
-                                  <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
-                                    {row.rollNumber}
-                                  </Link>
-                                </td>
-                                <td className="px-4 py-2.5 border border-black">
-                                  <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
-                                    {row.name}
-                                  </Link>
-                                </td>
-                                {showAttendance && (
-                                  <td className="px-4 py-2.5 text-center font-bold border border-black">
-                                    {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
-                                  </td>
-                                )}
-                                {previewData.subjects.map((sub: any) => {
-                                  const marksObj = row.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
-                                  let val: number | null = null;
-                                  let displayVal = "";
-                                  const maxMarks = previewType === "ASSIGNMENT" ? 10 : 30;
-
-                                  if (previewType === "MID_I") {
-                                    val = marksObj.mid1;
-                                    displayVal = val !== null ? Math.round(val).toString() : "AB";
-                                  } else if (previewType === "MID_II") {
-                                    val = marksObj.mid2;
-                                    displayVal = val !== null ? Math.round(val).toString() : "AB";
-                                  } else if (previewType === "ASSIGNMENT") {
-                                    val = marksObj.assignment;
-                                    displayVal = val !== null ? Math.round(val).toString() : "0";
-                                  } else if (previewType === "FINAL") {
-                                    val = marksObj.internal;
-                                    displayVal = val !== null ? Math.round(val).toString() : "0";
-                                  }
-
-                                  // Get dynamic color class
-                                  let colorClass = "";
-                                  if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
-                                    const parsedVal = parseFloat(displayVal);
-                                    if (!isNaN(parsedVal)) {
-                                      const pct = (parsedVal / maxMarks) * 100;
-                                      if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
-                                      else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
-                                      else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
-                                    }
-                                  } else if (displayVal === "AB") {
-                                    colorClass = "bg-slate-100 text-slate-400 border border-black";
-                                  }
-
-                                  return (
-                                    <td key={sub.id} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${colorClass}`}>
-                                      {displayVal}
+                    {(() => {
+                      const filteredSubjects = previewData.subjects.filter((sub: any) => {
+                        const isLab = sub.type?.toUpperCase() === "LAB";
+                        if (isLab) return showLabMarks;
+                        return true;
+                      });
+                      return (
+                        <table className="w-full text-left text-xs border-collapse">
+                          {previewType !== "SUBJECT" ? (
+                            <>
+                              {/* Class-Wise Report Headers */}
+                              <thead>
+                                <tr className="bg-slate-50 border border-black text-slate-600 font-bold uppercase">
+                                  <th className="px-4 py-3 text-center border border-black w-12">S.No</th>
+                                  <th className="px-4 py-3 text-center border border-black w-28">Roll Number</th>
+                                  <th className="px-4 py-3 border border-black">Student Name</th>
+                                  {showAttendance && (
+                                    <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
+                                  )}
+                                  {filteredSubjects.map((sub: any) => (
+                                    <th key={sub.id} className="px-4 py-3 text-center border border-black min-w-[75px]">
+                                      {sub.shortName || sub.name}
+                                      <span className="block text-[9px] font-normal text-slate-400 normal-case mt-0.5">
+                                        {sub.type?.toUpperCase() === "LAB" ? (
+                                          <>
+                                            {previewType === "MID_I" && "MID I (50M)"}
+                                            {previewType === "MID_II" && "MID II (50M)"}
+                                            {previewType === "ASSIGNMENT" && "Assign (10M)"}
+                                            {previewType === "FINAL" && "Final (50M)"}
+                                          </>
+                                        ) : (
+                                          <>
+                                            {previewType === "MID_I" && "MID I (30M)"}
+                                            {previewType === "MID_II" && "MID II (30M)"}
+                                            {previewType === "ASSIGNMENT" && "Assign (10M)"}
+                                            {previewType === "FINAL" && "Final (30M)"}
+                                          </>
+                                        )}
+                                      </span>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-150 text-slate-700">
+                                {previewData.rows.map((row: any, idx: number) => (
+                                  <tr key={row.rollNumber} className="hover:bg-slate-50/50">
+                                    <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
+                                    <td className="px-4 py-2.5 text-center border border-black">
+                                      <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-bold transition-colors">
+                                        {row.rollNumber}
+                                      </Link>
                                     </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot className="print:hidden">
-                            {/* Column Average Row */}
-                            <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
-                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">column average</td>
-                              {previewData.subjects.map((sub: any) => {
-                                const stats = getSubjectStats(sub.id, sub.type);
-                                return (
-                                  <td key={sub.id} className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">
-                                    {stats.average}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                            {/* Above 60% Row */}
-                            <tr className="bg-white text-slate-700">
-                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Above 60% (18 and above)</td>
-                              {previewData.subjects.map((sub: any) => {
-                                const stats = getSubjectStats(sub.id, sub.type);
-                                return (
-                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                    {stats.countAbove}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                            {/* Between 60% to 40% Row */}
-                            <tr className="bg-white text-slate-700">
-                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Between 60% to 40% (17 - 12 Marks)</td>
-                              {previewData.subjects.map((sub: any) => {
-                                const stats = getSubjectStats(sub.id, sub.type);
-                                return (
-                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                    {stats.countBetween}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                            {/* Below 40% Row */}
-                            <tr className="bg-white text-slate-700">
-                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Below 40% ( &lt; 12 Marks)</td>
-                              {previewData.subjects.map((sub: any) => {
-                                const stats = getSubjectStats(sub.id, sub.type);
-                                return (
-                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                    {stats.countBelow}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                            {/* With zero Marks Row */}
-                            <tr className="bg-white text-slate-700">
-                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students With zero Marks</td>
-                              {previewData.subjects.map((sub: any) => {
-                                const stats = getSubjectStats(sub.id, sub.type);
-                                return (
-                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                    {stats.countZero}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                            {/* Total No. of Absentees Row */}
-                            <tr className="bg-white text-slate-700">
-                              <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Absentees</td>
-                              {previewData.subjects.map((sub: any) => {
-                                const stats = getSubjectStats(sub.id, sub.type);
-                                return (
-                                  <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                    {stats.countAbsent}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          </tfoot>
-                        </>
-                      ) : (() => {
+                                    <td className="px-4 py-2.5 border border-black">
+                                      <Link href={`/admin/students/${row.studentId}`} className="text-blue-600 hover:underline hover:text-blue-800 font-medium transition-colors">
+                                        {row.name}
+                                      </Link>
+                                    </td>
+                                    {showAttendance && (
+                                      <td className="px-4 py-2.5 text-center font-bold border border-black">
+                                        {attendanceMap[row.studentId] !== undefined ? `${attendanceMap[row.studentId]}%` : "0%"}
+                                      </td>
+                                    )}
+                                    {filteredSubjects.map((sub: any) => {
+                                      const marksObj = row.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+                                      let val: number | null = null;
+                                      let displayVal = "";
+                                      const maxMarks = sub.type?.toUpperCase() === "LAB" ? 50 : (previewType === "ASSIGNMENT" ? 10 : 30);
+
+                                      if (previewType === "MID_I") {
+                                        val = marksObj.mid1;
+                                        displayVal = val !== null ? Math.round(val).toString() : "AB";
+                                      } else if (previewType === "MID_II") {
+                                        val = marksObj.mid2;
+                                        displayVal = val !== null ? Math.round(val).toString() : "AB";
+                                      } else if (previewType === "ASSIGNMENT") {
+                                        val = marksObj.assignment;
+                                        displayVal = val !== null ? Math.round(val).toString() : "0";
+                                      } else if (previewType === "FINAL") {
+                                        val = marksObj.internal;
+                                        displayVal = val !== null ? Math.round(val).toString() : "0";
+                                      }
+
+                                      // Get dynamic color class
+                                      let colorClass = "";
+                                      if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                        const parsedVal = parseFloat(displayVal);
+                                        if (!isNaN(parsedVal)) {
+                                          const pct = (parsedVal / maxMarks) * 100;
+                                          if (pct < 40) colorClass = "bg-red-50 text-red-700 border border-black";
+                                          else if (pct <= 60) colorClass = "bg-amber-50 text-amber-700 border border-black";
+                                          else colorClass = "bg-emerald-50 text-emerald-700 border border-black";
+                                        }
+                                      } else if (displayVal === "AB") {
+                                        colorClass = "bg-slate-100 text-slate-400 border border-black";
+                                      }
+
+                                      return (
+                                        <td key={sub.id} className={`px-4 py-2.5 text-center text-sm font-bold border border-black ${colorClass}`}>
+                                          {displayVal}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="print:hidden">
+                                {/* Column Average Row */}
+                                <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
+                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">column average</td>
+                                  {filteredSubjects.map((sub: any) => {
+                                    const stats = getSubjectStats(sub.id, sub.type);
+                                    return (
+                                      <td key={sub.id} className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">
+                                        {stats.average}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                                {/* Above 60% Row */}
+                                <tr className="bg-white text-slate-700">
+                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Above 60% (18 and above)</td>
+                                  {filteredSubjects.map((sub: any) => {
+                                    const stats = getSubjectStats(sub.id, sub.type);
+                                    return (
+                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                        {stats.countAbove}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                                {/* Between 60% to 40% Row */}
+                                <tr className="bg-white text-slate-700">
+                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Between 60% to 40% (17 - 12 Marks)</td>
+                                  {filteredSubjects.map((sub: any) => {
+                                    const stats = getSubjectStats(sub.id, sub.type);
+                                    return (
+                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                        {stats.countBetween}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                                {/* Below 40% Row */}
+                                <tr className="bg-white text-slate-700">
+                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Below 40% ( &lt; 12 Marks)</td>
+                                  {filteredSubjects.map((sub: any) => {
+                                    const stats = getSubjectStats(sub.id, sub.type);
+                                    return (
+                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                        {stats.countBelow}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                                {/* With zero Marks Row */}
+                                <tr className="bg-white text-slate-700">
+                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students With zero Marks</td>
+                                  {filteredSubjects.map((sub: any) => {
+                                    const stats = getSubjectStats(sub.id, sub.type);
+                                    return (
+                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                        {stats.countZero}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                                {/* Total No. of Absentees Row */}
+                                <tr className="bg-white text-slate-700">
+                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Absentees</td>
+                                  {filteredSubjects.map((sub: any) => {
+                                    const stats = getSubjectStats(sub.id, sub.type);
+                                    return (
+                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                        {stats.countAbsent}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              </tfoot>
+                            </>
+                          ) : (() => {
                         const getAvg = (extractor: (marks: any) => number | null) => {
                           let sum = 0;
                           let count = 0;
@@ -2491,13 +2634,21 @@ export default function AdminMidExamDashboard() {
                                 {showAttendance && (
                                   <th className="px-4 py-3 text-center border border-black min-w-[90px]">Attendance %</th>
                                 )}
-                                <th className="px-4 py-3 text-center border border-black">MID-I (30M)</th>
-                                <th className="px-4 py-3 text-center border border-black">MID-I (20M)</th>
-                                <th className="px-4 py-3 text-center border border-black">MID-II (30M)</th>
-                                <th className="px-4 py-3 text-center border border-black">MID-II (20M)</th>
-                                <th className="px-4 py-3 text-center border border-black text-amber-700 font-bold">MID Avg (20M)</th>
-                                <th className="px-4 py-3 text-center border border-black">Assign (10M)</th>
-                                <th className="px-4 py-3 text-center border border-black font-bold">Final (30M)</th>
+                                {(() => {
+                                  const targetSubject = previewData.subjects.find((s: any) => s.id === previewSubjectId);
+                                  const isLab = targetSubject?.type?.toUpperCase() === "LAB";
+                                  return (
+                                    <>
+                                      <th className="px-4 py-3 text-center border border-black">MID-I {isLab ? "(50M)" : "(30M)"}</th>
+                                      <th className="px-4 py-3 text-center border border-black">MID-I {isLab ? "(50M)" : "(20M)"}</th>
+                                      <th className="px-4 py-3 text-center border border-black">MID-II {isLab ? "(50M)" : "(30M)"}</th>
+                                      <th className="px-4 py-3 text-center border border-black">MID-II {isLab ? "(50M)" : "(20M)"}</th>
+                                      <th className="px-4 py-3 text-center border border-black text-amber-700 font-bold">MID Avg {isLab ? "(50M)" : "(20M)"}</th>
+                                      <th className="px-4 py-3 text-center border border-black">Assign (10M)</th>
+                                      <th className="px-4 py-3 text-center border border-black font-bold">Final {isLab ? "(50M)" : "(30M)"}</th>
+                                    </>
+                                  );
+                                })()}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150 text-slate-700">
@@ -2509,14 +2660,16 @@ export default function AdminMidExamDashboard() {
                                 const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
                                 const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
 
+                                const targetSubject = previewData.subjects.find((s: any) => s.id === previewSubjectId);
+                                const isLab = targetSubject?.type?.toUpperCase() === "LAB";
                                 const fields = [
-                                  { val: marksObj.mid1, max: 30, fallback: "AB" },
-                                  { val: marksObj.mid1Scaled, max: 20, fallback: "AB" },
-                                  { val: marksObj.mid2, max: 30, fallback: "AB" },
-                                  { val: marksObj.mid2Scaled, max: 20, fallback: "AB" },
-                                  { val: midAvgVal, max: 20, fallback: "AB", isMidAvg: true },
+                                  { val: marksObj.mid1, max: isLab ? 50 : 30, fallback: "AB" },
+                                  { val: marksObj.mid1Scaled, max: isLab ? 50 : 20, fallback: "AB" },
+                                  { val: marksObj.mid2, max: isLab ? 50 : 30, fallback: "AB" },
+                                  { val: marksObj.mid2Scaled, max: isLab ? 50 : 20, fallback: "AB" },
+                                  { val: midAvgVal, max: isLab ? 50 : 20, fallback: "AB", isMidAvg: true },
                                   { val: marksObj.assignment, max: 10, fallback: "0" },
-                                  { val: marksObj.internal, max: 30, fallback: "0", isBold: true }
+                                  { val: marksObj.internal, max: isLab ? 50 : 30, fallback: "0", isBold: true }
                                 ];
 
                                 return (
@@ -2582,7 +2735,9 @@ export default function AdminMidExamDashboard() {
                         );
                       })()}
                     </table>
-                  </div>
+                  );
+                })()}
+              </div>
 
                   {/* Attendance Statistics Section below the table */}
                   {previewType !== "SUBJECT" && (() => {
@@ -3115,24 +3270,6 @@ export default function AdminMidExamDashboard() {
             <p className="mb-1"><span className="font-semibold text-slate-700">Exam:</span> {selectedPaperForPublish?.examType?.replace("_", " ")}</p>
           </div>
 
-          <div className="border-t border-slate-100 pt-4 flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="sendSMSCheckbox"
-              checked={sendSMSCheckbox}
-              onChange={e => setSendSMSCheckbox(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            <div>
-              <label htmlFor="sendSMSCheckbox" className="text-sm font-semibold text-slate-800 cursor-pointer">
-                Send Marks SMS to Parents
-              </label>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Sends a DLT template-compliant SMS to the parents' registered mobile numbers in the background.
-              </p>
-            </div>
-          </div>
-
           <div className="flex gap-3 pt-4 border-t border-slate-100">
             <button
               onClick={() => setShowPublishModal(false)}
@@ -3145,119 +3282,6 @@ export default function AdminMidExamDashboard() {
               className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
             >
               Publish Marks
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Demo Publish Modal */}
-      <Modal isOpen={showDemoPublishModal} onClose={() => setShowDemoPublishModal(false)} title="Demo Publish — Send Test SMS to Faculty" maxWidth="max-w-lg">
-        <div className="space-y-4 p-6">
-          <div className="text-slate-600 text-sm">
-            <p className="font-semibold text-slate-800 mb-2">Test SMS for ward marks will be sent to the selected faculty mobile numbers.</p>
-            <p className="mb-1"><span className="font-semibold text-slate-700">Subject:</span> {selectedPaperForPublish?.subject?.name}</p>
-            <p className="mb-1"><span className="font-semibold text-slate-700">Section:</span> Sec {selectedPaperForPublish?.section?.name}</p>
-          </div>
-
-          {/* Search and Selection Tools */}
-          <div className="space-y-3 pt-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={facultySearchQuery}
-                onChange={e => setFacultySearchQuery(e.target.value)}
-                placeholder="Search faculty by name..."
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={() => {
-                  const filtered = facultiesList
-                    .filter(f => f.empName.toLowerCase().includes(facultySearchQuery.toLowerCase()))
-                    .map(f => f.mobile);
-                  
-                  const allSelected = filtered.every(m => selectedFacultyMobiles.includes(m));
-                  if (allSelected) {
-                    // Deselect only the filtered ones
-                    setSelectedFacultyMobiles(prev => prev.filter(m => !filtered.includes(m)));
-                  } else {
-                    // Select all filtered ones
-                    setSelectedFacultyMobiles(prev => Array.from(new Set([...prev, ...filtered])));
-                  }
-                }}
-                className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Toggle Page
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
-              <span>Selected: {selectedFacultyMobiles.length} / {facultiesList.length}</span>
-              <button
-                onClick={() => {
-                  if (selectedFacultyMobiles.length === facultiesList.length) {
-                    setSelectedFacultyMobiles([]);
-                  } else {
-                    setSelectedFacultyMobiles(facultiesList.map(f => f.mobile));
-                  }
-                }}
-                className="text-blue-600 hover:underline"
-              >
-                {selectedFacultyMobiles.length === facultiesList.length ? "Deselect All" : "Select All"}
-              </button>
-            </div>
-
-            {/* Faculty List Box */}
-            <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-2 divide-y divide-slate-50 scrollbar-thin">
-              {loadingFaculties ? (
-                <div className="flex items-center justify-center py-6 text-slate-400 gap-2">
-                  <FaSpinner className="animate-spin" /> Fetching faculties...
-                </div>
-              ) : facultiesList.filter(f => f.empName.toLowerCase().includes(facultySearchQuery.toLowerCase())).length === 0 ? (
-                <div className="text-center py-6 text-slate-400 text-sm">No faculty members found.</div>
-              ) : (
-                facultiesList
-                  .filter(f => f.empName.toLowerCase().includes(facultySearchQuery.toLowerCase()))
-                  .map(f => {
-                    const isChecked = selectedFacultyMobiles.includes(f.mobile);
-                    return (
-                      <label key={f.id} className="flex items-center gap-3 py-2 px-1 hover:bg-slate-50 rounded cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            if (isChecked) {
-                              setSelectedFacultyMobiles(prev => prev.filter(m => m !== f.mobile));
-                            } else {
-                              setSelectedFacultyMobiles(prev => [...prev, f.mobile]);
-                            }
-                          }}
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="text-sm">
-                          <p className="font-semibold text-slate-800">{f.empName}</p>
-                          <p className="text-xs text-slate-500">{f.designation} • {f.mobile}</p>
-                        </div>
-                      </label>
-                    );
-                  })
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4 border-t border-slate-100">
-            <button
-              onClick={() => setShowDemoPublishModal(false)}
-              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={executeDemoPublish}
-              disabled={selectedFacultyMobiles.length === 0}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-purple-600 py-2.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
-            >
-              <FaPaperPlane size={12} />
-              Send Test SMS ({selectedFacultyMobiles.length})
             </button>
           </div>
         </div>
