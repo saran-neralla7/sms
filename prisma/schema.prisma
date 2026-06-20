@@ -619,6 +619,11 @@ model MidExamPaper {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // New fields for Common Papers
+  isCommon         Boolean  @default(false)
+  commonText       String?  // e.g., "Common for CSE, CSM, CIVIL"
+  masterPaperId    String?
+
   academicYear     AcademicYear         @relation(fields: [academicYearId], references: [id])
   subject          Subject              @relation(fields: [subjectId], references: [id])
   section          Section              @relation(fields: [sectionId], references: [id])
@@ -626,6 +631,9 @@ model MidExamPaper {
   questions        MidExamQuestion[]
   marksEntries     MidExamMarksEntry[]
   publishRecord    MidExamPublish?
+
+  masterPaper      MidExamPaper?        @relation("CommonPaperRelation", fields: [masterPaperId], references: [id])
+  childPapers      MidExamPaper[]       @relation("CommonPaperRelation")
 
   @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, examType])
   @@index([academicYearId, departmentId, year, semester, sectionId])

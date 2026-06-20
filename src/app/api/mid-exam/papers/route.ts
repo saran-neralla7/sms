@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
       }
     }
   }
-
   try {
     const papers = await prisma.midExamPaper.findMany({
       where,
@@ -66,6 +65,17 @@ export async function GET(req: NextRequest) {
         academicYear: { select: { id: true, name: true } },
         scheme: true,
         publishRecord: true,
+        masterPaper: {
+          include: {
+            questions: {
+              orderBy: { questionNo: "asc" },
+              include: {
+                subQuestions: { orderBy: { order: "asc" } },
+                choiceGroup: true,
+              }
+            }
+          }
+        },
         questions: {
           orderBy: { questionNo: "asc" },
           include: {
@@ -87,10 +97,14 @@ export async function GET(req: NextRequest) {
         },
         include: { faculty: { select: { empName: true } } }
       });
-      return {
+      const paperObj = {
         ...paper,
         facultyName: mapping?.faculty?.empName || "Not Assigned",
       };
+      if (paper.masterPaperId && paper.masterPaper) {
+        paperObj.questions = paper.masterPaper.questions;
+      }
+      return paperObj;
     }));
 
     return NextResponse.json(papersWithFaculty);
@@ -107,7 +121,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { academicYearId, departmentId, year, semester, sectionId, subjectId, examType, schemeId, totalMarks, sourcePaperId, examDate } = body;
+    const {
+      academicYearId, departmentId, year, semester, sectionId, subjectId, examType, schemeId, totalMarks,
+      sourcePaperId, examDate, isCommon = false, commonText = null, masterPaperId = null
+    } = body;
 
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !subjectId || !examType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -134,6 +151,9 @@ export async function POST(req: NextRequest) {
         totalMarks: totalMarks ?? 30,
         examDate: examDate ?? null,
         createdById: session.user.id,
+        isCommon,
+        commonText,
+        masterPaperId,
       },
       include: {
         subject: { select: { id: true, name: true, code: true } },
@@ -142,8 +162,8 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // If sourcePaperId is provided, deep-clone questions & subquestions & choicegroups
-    if (sourcePaperId) {
+    // If sourcePaperId is provided and masterPaperId is not provided, deep-clone questions & subquestions & choicegroups
+    if (sourcePaperId && !masterPaperId) {
       const sourceChoiceGroups = await prisma.midExamChoiceGroup.findMany({
         where: { paperId: sourcePaperId }
       });

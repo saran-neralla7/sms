@@ -43,9 +43,13 @@ interface Paper {
   totalMarks: number;
   subjectId: string;
   sectionId: string;
+  subject: { id: string; name: string; code: string; type: string; department?: { code: string } };
   section?: { id: string; name: string };
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
   _count?: { marksEntries: number };
+  isCommon?: boolean;
+  commonText?: string | null;
+  masterPaperId?: string | null;
 }
 
 export default function FacultyMidExamPage() {
@@ -65,12 +69,20 @@ export default function FacultyMidExamPage() {
     mappingId: string;
     examType: string;
     totalMarks: number;
+    createMode: "independent" | "linked";
     sourcePaperId?: string;
+    masterPaperId?: string;
+    isCommon: boolean;
+    commonText: string;
   }>({
     mappingId: "",
     examType: "MID_I",
     totalMarks: 30,
+    createMode: "independent",
     sourcePaperId: "",
+    masterPaperId: "",
+    isCommon: false,
+    commonText: "",
   });
   const [createError, setCreateError] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -1225,20 +1237,31 @@ export default function FacultyMidExamPage() {
     setCreating(true);
     setCreateError("");
     try {
+      const payload: any = {
+        academicYearId: mapping.academicYear.id,
+        departmentId: mapping.subject.departmentId,
+        year: mapping.subject.year,
+        semester: mapping.subject.semester,
+        sectionId: mapping.section.id,
+        subjectId: mapping.subject.id,
+        examType: createForm.examType,
+        totalMarks: createForm.totalMarks,
+      };
+
+      if (createForm.createMode === "linked") {
+        payload.masterPaperId = createForm.masterPaperId || undefined;
+        payload.commonText = createForm.commonText || undefined;
+        payload.isCommon = true;
+      } else {
+        payload.sourcePaperId = createForm.sourcePaperId || undefined;
+        payload.isCommon = createForm.isCommon;
+        payload.commonText = createForm.isCommon ? createForm.commonText : undefined;
+      }
+
       const res = await fetch("/api/mid-exam/papers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          academicYearId: mapping.academicYear.id,
-          departmentId: mapping.subject.departmentId,
-          year: mapping.subject.year,
-          semester: mapping.subject.semester,
-          sectionId: mapping.section.id,
-          subjectId: mapping.subject.id,
-          examType: createForm.examType,
-          totalMarks: createForm.totalMarks,
-          sourcePaperId: createForm.sourcePaperId || undefined,
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1291,7 +1314,19 @@ export default function FacultyMidExamPage() {
               ))}
             </select>
             <button
-              onClick={() => { setCreateForm({ mappingId: mappings.filter(m => m.subject.type?.toUpperCase() !== "LAB")[0]?.id || "", examType: "MID_I", totalMarks: 30, sourcePaperId: "" }); setShowCreateModal(true); }}
+              onClick={() => {
+                setCreateForm({
+                  mappingId: mappings.filter(m => m.subject.type?.toUpperCase() !== "LAB")[0]?.id || "",
+                  examType: "MID_I",
+                  totalMarks: 30,
+                  createMode: "independent",
+                  sourcePaperId: "",
+                  masterPaperId: "",
+                  isCommon: false,
+                  commonText: ""
+                });
+                setShowCreateModal(true);
+              }}
               className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
             >
               <FaPlus size={12} /> New Paper
@@ -1517,7 +1552,16 @@ export default function FacultyMidExamPage() {
                                     <p className="mb-2 text-xs text-slate-500">No paper created yet</p>
                                     <button
                                       onClick={() => {
-                                        setCreateForm({ mappingId: mapping.id, examType, totalMarks: 30, sourcePaperId: "" });
+                                        setCreateForm({
+                                          mappingId: mapping.id,
+                                          examType,
+                                          totalMarks: 30,
+                                          createMode: "independent",
+                                          sourcePaperId: "",
+                                          masterPaperId: "",
+                                          isCommon: false,
+                                          commonText: ""
+                                        });
                                         setShowCreateModal(true);
                                       }}
                                       className="flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition-colors"
@@ -2487,45 +2531,190 @@ export default function FacultyMidExamPage() {
             </div>
           </div>
 
-          {(() => {
-            const selectedMapping = mappings.find(m => m.id === createForm.mappingId);
-            const eligibleClonePapers = selectedMapping
-              ? papers.filter(p => p.subjectId === selectedMapping.subject.id && p.examType === createForm.examType && p.sectionId !== selectedMapping.section.id)
-              : [];
-
-            if (eligibleClonePapers.length === 0) return null;
-
-            return (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Copy Paper layout from Another Section? (Optional)</label>
-                <select
-                  value={createForm.sourcePaperId || ""}
-                  onChange={e => setCreateForm(f => ({ ...f, sourcePaperId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Create Blank Question Paper</option>
-                  {eligibleClonePapers.map(p => (
-                    <option key={p.id} value={p.id}>
-                      Copy from Section {p.section?.name} (Max: {p.totalMarks}m)
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[11px] text-slate-500">Clones all questions, subquestions, and CO mappings instantly from that section.</p>
-              </div>
-            );
-          })()}
-
+          {/* Create Mode Toggle */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Total Marks</label>
-            <input
-              type="number"
-              value={createForm.totalMarks}
-              onChange={e => setCreateForm(f => ({ ...f, totalMarks: Number(e.target.value) }))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              min={1}
-              max={100}
-            />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Create Mode</label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCreateForm(f => ({ ...f, createMode: "independent" }))}
+                className={`flex-1 rounded-lg py-2 text-xs font-semibold border transition-all ${
+                  createForm.createMode === "independent"
+                    ? "bg-blue-50 border-blue-200 text-blue-700"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                Independent / Clone
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateForm(f => ({ ...f, createMode: "linked" }))}
+                className={`flex-1 rounded-lg py-2 text-xs font-semibold border transition-all ${
+                  createForm.createMode === "linked"
+                    ? "bg-blue-50 border-blue-200 text-blue-700"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                Link to Common Paper
+              </button>
+            </div>
           </div>
+
+          {createForm.createMode === "independent" ? (
+            <>
+              {/* Loosened Cloning Field */}
+              {(() => {
+                const selectedMapping = mappings.find(m => m.id === createForm.mappingId);
+                if (!selectedMapping) return null;
+
+                const sameSubPapers = papers.filter(
+                  p => p.subject.name.toLowerCase() === selectedMapping.subject.name.toLowerCase() &&
+                  p.examType === createForm.examType
+                );
+
+                const otherSubPapers = papers.filter(
+                  p => p.subject.name.toLowerCase() !== selectedMapping.subject.name.toLowerCase() &&
+                  p.examType === createForm.examType
+                );
+
+                if (sameSubPapers.length === 0 && otherSubPapers.length === 0) return null;
+
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Copy Paper layout from (Optional)</label>
+                    <select
+                      value={createForm.sourcePaperId || ""}
+                      onChange={e => setCreateForm(f => ({ ...f, sourcePaperId: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Create Blank Question Paper</option>
+                      {sameSubPapers.length > 0 && (
+                        <optgroup label="Same Subject / Sections">
+                          {sameSubPapers.map(p => (
+                            <option key={p.id} value={p.id}>
+                              Copy from Sec {p.section?.name || "?"} ({p.subject.code} - {p.totalMarks}m)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {otherSubPapers.length > 0 && (
+                        <optgroup label="Other Subjects">
+                          {otherSubPapers.map(p => (
+                            <option key={p.id} value={p.id}>
+                              Copy from {p.subject.code} - Sec {p.section?.name || "?"} ({p.totalMarks}m)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                    <p className="mt-1 text-[10px] text-slate-500">Clones questions, subquestions, and CO mappings instantly.</p>
+                  </div>
+                );
+              })()}
+
+              {/* Make Common Option */}
+              <div className="pt-1">
+                <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={createForm.isCommon}
+                    onChange={e => setCreateForm(f => ({ ...f, isCommon: e.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Make this a Common Question Paper</span>
+                </label>
+              </div>
+
+              {/* Common Header Text */}
+              {createForm.isCommon && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Common Header Text</label>
+                  <input
+                    type="text"
+                    value={createForm.commonText}
+                    onChange={e => setCreateForm(f => ({ ...f, commonText: e.target.value }))}
+                    placeholder="e.g., Common for CSE, CSM, CIVIL"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              {/* Total Marks */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Total Marks</label>
+                <input
+                  type="number"
+                  value={createForm.totalMarks}
+                  onChange={e => setCreateForm(f => ({ ...f, totalMarks: Number(e.target.value) }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={1}
+                  max={100}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Link Master Paper Dropdown */}
+              {(() => {
+                const selectedMapping = mappings.find(m => m.id === createForm.mappingId);
+                if (!selectedMapping) return null;
+
+                const eligibleMasters = papers.filter(
+                  p => p.examType === createForm.examType && !p.masterPaperId
+                );
+
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Select Master Common Paper *</label>
+                    <select
+                      value={createForm.masterPaperId || ""}
+                      onChange={e => {
+                        const target = e.target.value;
+                        const matchedPaper = papers.find(p => p.id === target);
+                        setCreateForm(f => ({
+                          ...f,
+                          masterPaperId: target,
+                          totalMarks: matchedPaper ? matchedPaper.totalMarks : f.totalMarks,
+                          commonText: matchedPaper?.commonText || f.commonText || ""
+                        }));
+                      }}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Select a master paper...</option>
+                      {eligibleMasters.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.subject.code} - {p.subject.name} (Sec {p.section?.name}, {p.totalMarks}m)
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[10px] text-slate-500">Linked papers dynamically reflect all questions and changes from the master paper.</p>
+                  </div>
+                );
+              })()}
+
+              {/* Common Header Text */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Common Header Text</label>
+                <input
+                  type="text"
+                  value={createForm.commonText}
+                  onChange={e => setCreateForm(f => ({ ...f, commonText: e.target.value }))}
+                  placeholder="e.g., Common for CSE, CSM, CIVIL"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Total Marks Info (ReadOnly) */}
+              {createForm.masterPaperId && (
+                <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
+                  <p className="text-xs text-slate-600">
+                    Total Marks: <strong className="text-slate-800">{createForm.totalMarks}</strong>
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Inherited automatically from the selected master paper.</p>
+                </div>
+              )}
+            </>
+          )}
 
           {createError && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{createError}</p>

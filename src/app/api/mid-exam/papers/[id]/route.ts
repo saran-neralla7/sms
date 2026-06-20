@@ -29,6 +29,17 @@ export async function GET(req: NextRequest, { params }: Params) {
         academicYear: { select: { id: true, name: true } },
         scheme: true,
         publishRecord: true,
+        masterPaper: {
+          include: {
+            questions: {
+              orderBy: { questionNo: "asc" },
+              include: {
+                choiceGroup: true,
+                subQuestions: { orderBy: { order: "asc" } }
+              }
+            }
+          }
+        },
         questions: {
           orderBy: { questionNo: "asc" },
           include: {
@@ -39,7 +50,13 @@ export async function GET(req: NextRequest, { params }: Params) {
       }
     });
     if (!paper) return NextResponse.json({ error: "Paper not found" }, { status: 404 });
-    return NextResponse.json(paper);
+
+    const paperObj = { ...paper };
+    if (paper.masterPaperId && paper.masterPaper) {
+      paperObj.questions = paper.masterPaper.questions;
+    }
+
+    return NextResponse.json(paperObj);
   } catch (e) {
     return NextResponse.json({ error: "Failed to fetch paper" }, { status: 500 });
   }
@@ -67,6 +84,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // If questions are included, do full structure upsert
     if (body.questions) {
+      if (paper.masterPaperId) {
+        return NextResponse.json({ error: "Linked common papers cannot be edited directly. Edit the master paper instead." }, { status: 403 });
+      }
       // Delete all existing questions (cascade deletes subquestions)
       await prisma.midExamQuestion.deleteMany({ where: { paperId: id } });
       await prisma.midExamChoiceGroup.deleteMany({ where: { paperId: id } });
@@ -120,6 +140,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           totalMarks: body.totalMarks ?? paper.totalMarks,
           schemeId: body.schemeId ?? paper.schemeId,
           examDate: body.examDate !== undefined ? body.examDate : paper.examDate,
+          isCommon: body.isCommon !== undefined ? body.isCommon : paper.isCommon,
+          commonText: body.commonText !== undefined ? body.commonText : paper.commonText,
         },
         include: {
           questions: {
@@ -140,6 +162,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         totalMarks: body.totalMarks ?? paper.totalMarks,
         schemeId: body.schemeId ?? paper.schemeId,
         examDate: body.examDate !== undefined ? body.examDate : paper.examDate,
+        isCommon: body.isCommon !== undefined ? body.isCommon : paper.isCommon,
+        commonText: body.commonText !== undefined ? body.commonText : paper.commonText,
       }
     });
     return NextResponse.json(updated);

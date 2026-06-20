@@ -18,6 +18,17 @@ export async function GET(req: NextRequest) {
       include: {
         subject: true,
         section: true,
+        masterPaper: {
+          include: {
+            questions: {
+              orderBy: { questionNo: "asc" },
+              include: {
+                subQuestions: { orderBy: { order: "asc" } },
+                choiceGroup: true,
+              }
+            }
+          }
+        },
         questions: {
           orderBy: { questionNo: "asc" },
           include: {
@@ -29,6 +40,10 @@ export async function GET(req: NextRequest) {
       }
     });
     if (!paper) return NextResponse.json({ error: "Paper not found" }, { status: 404 });
+
+    if (paper.masterPaperId && paper.masterPaper) {
+      (paper as any).questions = paper.masterPaper.questions;
+    }
 
     // Get students for this academic class
     const students = await prisma.student.findMany({
@@ -147,8 +162,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate marks don't exceed max
+    const targetPaperId = paper.masterPaperId || paperId;
     const subQMap = await prisma.midExamSubQuestion.findMany({
-      where: { question: { paperId } },
+      where: { question: { paperId: targetPaperId } },
       select: { id: true, maxMarks: true }
     });
     const maxMap: Record<string, number> = {};

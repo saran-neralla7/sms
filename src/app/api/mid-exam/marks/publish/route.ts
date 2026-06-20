@@ -26,6 +26,16 @@ export async function POST(req: NextRequest) {
       include: {
         subject: true,
         scheme: true,
+        masterPaper: {
+          include: {
+            questions: {
+              include: {
+                subQuestions: true,
+                choiceGroup: true,
+              }
+            }
+          }
+        },
         questions: {
           include: {
             subQuestions: true,
@@ -37,6 +47,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!paper) return NextResponse.json({ error: "Paper not found" }, { status: 404 });
+
+    if (paper.masterPaperId && paper.masterPaper) {
+      (paper as any).questions = paper.masterPaper.questions;
+    }
 
     if (action === "lock" || action === "unlock") {
       await prisma.midExamPublish.upsert({
@@ -85,8 +99,9 @@ export async function POST(req: NextRequest) {
       });
 
       // Get choice groups
+      const targetPaperId = paper.masterPaperId || paperId;
       const choiceGroups = await prisma.midExamChoiceGroup.findMany({
-        where: { paperId },
+        where: { paperId: targetPaperId },
         include: {
           questions: {
             include: { subQuestions: true }

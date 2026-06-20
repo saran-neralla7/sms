@@ -54,6 +54,9 @@ interface Paper {
   questions: any[];
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
   examDate?: string | null;
+  isCommon?: boolean;
+  commonText?: string | null;
+  masterPaperId?: string | null;
 }
 
 const formatDate = (dateStr?: string | null) => {
@@ -96,6 +99,8 @@ export default function QuestionPaperBuilderPage() {
   const role = (session?.user as any)?.role;
   const isAdmin = ["ADMIN", "HOD", "DIRECTOR", "PRINCIPAL"].includes(role);
   const canEdit = !paper?.isFrozen || isAdmin;
+  const isLinked = !!paper?.masterPaperId;
+  const canEditQuestions = canEdit && !isLinked;
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -234,15 +239,26 @@ export default function QuestionPaperBuilderPage() {
   };
 
   const handleSave = async () => {
-    const errors = validate();
-    if (errors.length > 0) { setValidationErrors(errors); return; }
+    if (!isLinked) {
+      const errors = validate();
+      if (errors.length > 0) { setValidationErrors(errors); return; }
+    }
     setValidationErrors([]);
     setSaving(true);
     try {
+      const payload: any = {
+        totalMarks: paper?.totalMarks,
+        examDate: paper?.examDate,
+        isCommon: paper?.isCommon,
+        commonText: paper?.commonText
+      };
+      if (!isLinked) {
+        payload.questions = questions;
+      }
       const res = await fetch(`/api/mid-exam/papers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questions, totalMarks: paper?.totalMarks, examDate: paper?.examDate })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         showToast("Paper saved successfully!", "success");
@@ -258,16 +274,27 @@ export default function QuestionPaperBuilderPage() {
 
   const handleFreeze = async (action: "freeze" | "unfreeze") => {
     if (action === "freeze") {
-      const errors = validate();
-      if (errors.length > 0) { setValidationErrors(errors); setShowFreezeModal(false); return; }
+      if (!isLinked) {
+        const errors = validate();
+        if (errors.length > 0) { setValidationErrors(errors); setShowFreezeModal(false); return; }
+      }
 
       // Auto-save draft changes first
       setSaving(true);
       try {
+        const payload: any = {
+          totalMarks: paper?.totalMarks,
+          examDate: paper?.examDate,
+          isCommon: paper?.isCommon,
+          commonText: paper?.commonText
+        };
+        if (!isLinked) {
+          payload.questions = questions;
+        }
         const res = await fetch(`/api/mid-exam/papers/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questions, totalMarks: paper?.totalMarks, examDate: paper?.examDate })
+          body: JSON.stringify(payload)
         });
         if (!res.ok) {
           const data = await res.json();
@@ -406,6 +433,25 @@ export default function QuestionPaperBuilderPage() {
         </div>
 
         <div className="mx-auto max-w-5xl px-4 py-8">
+          {/* Linked paper notice */}
+          {isLinked && (
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-xl bg-blue-50 p-4 ring-1 ring-blue-100">
+              <div className="flex items-start gap-2.5">
+                <FaInfoCircle className="mt-0.5 text-blue-500 shrink-0" size={16} />
+                <div>
+                  <p className="font-semibold text-blue-800 text-sm">Linked Question Paper</p>
+                  <p className="text-xs text-blue-700 mt-0.5">This paper is linked to a common master paper. Questions can only be updated on the master paper.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => router.push(`/faculty/mid-exam/paper/${paper?.masterPaperId}`)}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-all shadow-sm shrink-0 w-fit self-start sm:self-center"
+              >
+                Go to Master Paper
+              </button>
+            </div>
+          )}
+
           {/* Validation errors */}
           <AnimatePresence>
             {validationErrors.length > 0 && (
@@ -439,25 +485,68 @@ export default function QuestionPaperBuilderPage() {
             </div>
           )}
 
-          {/* Exam Details Settings Card */}
-          <div className="mb-6 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800">Exam Date</h3>
-              <p className="text-xs text-slate-500">Specify the date of the exam for printing on the question paper.</p>
+          {/* Paper Settings (Common/Text) Card */}
+          <div className="mb-6 rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200/50 space-y-4">
+            <h3 className="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Paper Settings</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Exam Date */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="exam-date-input" className="text-xs font-semibold text-slate-600">Exam Date</label>
+                <input
+                  id="exam-date-input"
+                  type="date"
+                  value={paper.examDate || ""}
+                  onChange={(e) => {
+                    setPaper(prev => prev ? { ...prev, examDate: e.target.value } : null);
+                  }}
+                  disabled={paper.isFrozen && !isAdmin}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </div>
+
+              {/* Common Paper Option (Only editable if NOT linked child paper) */}
+              {!isLinked && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-semibold text-slate-600">Common Question Paper Options</span>
+                  <div className="flex items-center gap-4 mt-1.5">
+                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={paper.isCommon}
+                        onChange={(e) => {
+                          setPaper(prev => prev ? { ...prev, isCommon: e.target.checked } : null);
+                        }}
+                        disabled={paper.isFrozen && !isAdmin}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Make this a Common Question Paper
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="exam-date-input" className="text-xs font-semibold text-slate-600 shrink-0">Select Date:</label>
-              <input
-                id="exam-date-input"
-                type="date"
-                value={paper.examDate || ""}
-                onChange={(e) => {
-                  setPaper(prev => prev ? { ...prev, examDate: e.target.value } : null);
-                }}
-                disabled={!canEdit}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
-              />
-            </div>
+
+            {/* Common Text Input (if isCommon or isLinked) */}
+            {(paper.isCommon || isLinked) && (
+              <div className="flex flex-col gap-1.5 pt-2">
+                <label htmlFor="common-text-input" className="text-xs font-semibold text-slate-600">
+                  Common Header Text (Printed on PDF)
+                </label>
+                <input
+                  id="common-text-input"
+                  type="text"
+                  value={paper.commonText || ""}
+                  onChange={(e) => {
+                    setPaper(prev => prev ? { ...prev, commonText: e.target.value } : null);
+                  }}
+                  disabled={paper.isFrozen && !isAdmin}
+                  placeholder="e.g., Common for CSE, CSM, CIVIL"
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-500 w-full"
+                />
+                <p className="text-[11px] text-slate-500">This text will be printed prominently on the question paper PDF (e.g., "COMMON FOR CSE, CSM, CIVIL").</p>
+              </div>
+            )}
           </div>
 
           {/* Info card */}
@@ -510,7 +599,7 @@ export default function QuestionPaperBuilderPage() {
                     </div>
                   </div>
 
-                  {canEdit && (
+                  {canEditQuestions && (
                     <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                       {/* Compulsory/Choice toggle */}
                       <select
@@ -563,7 +652,7 @@ export default function QuestionPaperBuilderPage() {
                                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-sm font-bold text-slate-700">
                                   {sq.subLabel}
                                 </span>
-                                {canEdit && q.subQuestions.length > 1 && (
+                                {canEditQuestions && q.subQuestions.length > 1 && (
                                   <button
                                     onClick={() => removeSubQuestion(qIdx, sqIdx)}
                                     className="text-red-400 hover:text-red-600 transition-colors"
@@ -578,7 +667,7 @@ export default function QuestionPaperBuilderPage() {
                                   <div>
                                     <div className="flex items-center justify-between mb-1.5">
                                       <label className="block text-xs font-medium text-slate-600">Question Text *</label>
-                                      {canEdit && (
+                                      {canEditQuestions && (
                                         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
                                           <button
                                             type="button"
@@ -631,7 +720,7 @@ export default function QuestionPaperBuilderPage() {
                                     ) : (
                                       /* Traditional Text Mode with LaTeX helper toolbar */
                                       <>
-                                        {canEdit && (
+                                        {canEditQuestions && (
                                           <MathToolbar
                                             onInsert={(latex) => {
                                               const textarea = document.getElementById(`textarea-${qIdx}-${sqIdx}`) as HTMLTextAreaElement;
@@ -686,7 +775,7 @@ export default function QuestionPaperBuilderPage() {
                                           alt={`Q${q.questionNo}(${sq.subLabel}) Figure`}
                                           className="max-h-24 object-contain rounded-md"
                                         />
-                                        {canEdit && (
+                                        {canEditQuestions && (
                                           <button
                                             type="button"
                                             onClick={() => updateSubQuestion(qIdx, sqIdx, "imageUrl", null)}
@@ -698,7 +787,7 @@ export default function QuestionPaperBuilderPage() {
                                         )}
                                       </div>
                                     ) : (
-                                      canEdit ? (
+                                      canEditQuestions ? (
                                         <div className="flex items-center justify-center w-full">
                                           <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 hover:border-blue-400 transition-all">
                                             <div className="flex flex-col items-center justify-center pt-2 pb-2">
@@ -748,7 +837,7 @@ export default function QuestionPaperBuilderPage() {
                                           const val = parseFloat(e.target.value);
                                           updateSubQuestion(qIdx, sqIdx, "maxMarks", isNaN(val) ? 0 : val);
                                         }}
-                                        disabled={!canEdit}
+                                        disabled={!canEditQuestions}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 bg-white"
                                       />
                                     </div>
@@ -757,7 +846,7 @@ export default function QuestionPaperBuilderPage() {
                                       <select
                                         value={sq.coMapping}
                                         onChange={e => updateSubQuestion(qIdx, sqIdx, "coMapping", e.target.value)}
-                                        disabled={!canEdit}
+                                        disabled={!canEditQuestions}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                                       >
                                         {getCoOptions().map(co => <option key={co} value={co}>{co}</option>)}
@@ -768,7 +857,7 @@ export default function QuestionPaperBuilderPage() {
                                       <select
                                         value={sq.btLevel}
                                         onChange={e => updateSubQuestion(qIdx, sqIdx, "btLevel", e.target.value)}
-                                        disabled={!canEdit}
+                                        disabled={!canEditQuestions}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-slate-100"
                                       >
                                         {BT_LEVEL_OPTIONS.map(bt => <option key={bt.value} value={bt.value}>{bt.label}</option>)}
@@ -781,7 +870,7 @@ export default function QuestionPaperBuilderPage() {
                           ))}
                         </div>
 
-                        {canEdit && (
+                        {canEditQuestions && (
                           <button
                             onClick={() => addSubQuestion(qIdx)}
                             className="mt-3 flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
@@ -798,7 +887,7 @@ export default function QuestionPaperBuilderPage() {
           </div>
 
           {/* Add Question */}
-          {canEdit && (
+          {canEditQuestions && (
             <button
               onClick={addQuestion}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 py-4 text-slate-500 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
@@ -816,7 +905,7 @@ export default function QuestionPaperBuilderPage() {
                 className="flex items-center gap-2 rounded-xl bg-slate-800 px-6 py-3 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-50"
               >
                 {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
-                Save Draft
+                {isLinked ? "Save Details" : "Save Draft"}
               </button>
               {!paper.isFrozen && (
                 <button
@@ -840,9 +929,11 @@ export default function QuestionPaperBuilderPage() {
                 <p className="text-sm text-amber-700">After freezing, no further edits are allowed without admin override. Faculty can then enter student marks.</p>
               </div>
             </div>
-            <p className="mb-6 text-sm text-slate-600">
-              Total marks: <strong>{totalFromQuestions()}</strong> (Paper total: {paper.totalMarks})
-            </p>
+            {!isLinked && (
+              <p className="mb-6 text-sm text-slate-600">
+                Total marks: <strong>{totalFromQuestions()}</strong> (Paper total: {paper.totalMarks})
+              </p>
+            )}
             <div className="flex gap-3">
               <button onClick={() => setShowFreezeModal(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-700">
                 Cancel
@@ -956,6 +1047,10 @@ export default function QuestionPaperBuilderPage() {
                   <h2 className="text-[11px] font-bold leading-normal">Gayatri Vidya Parishad College for Degree and P G Courses (A)</h2>
                   <h3 className="text-[10.5px] font-bold leading-normal">Engineering and Technology Program</h3>
                   <p className="text-[9px] font-semibold tracking-wide text-gray-700">Rushikonda, Visakhapatnam-530 045</p>
+                  
+                  {paper.commonText && (
+                    <p className="text-[9.5px] font-bold tracking-wider mt-0.5 uppercase border-y border-black py-0.5">{paper.commonText}</p>
+                  )}
                   
                   <div className="flex justify-between items-center text-[10px] font-bold px-2 mt-1">
                     <span>{paper.year === "I" ? "I" : paper.year === "II" ? "II" : paper.year === "III" ? "III" : paper.year === "IV" ? "IV" : paper.year} B. Tech</span>
