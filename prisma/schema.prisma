@@ -8,21 +8,22 @@ datasource db {
 }
 
 model Department {
-  id         String              @id @default(uuid())
-  name       String              @unique
-  code       String              @unique
-  isAcademic Boolean             @default(true)
-  createdAt  DateTime            @default(now())
-  alumni     Alumni[]
-  history    AttendanceHistory[]
-  faculty    Faculty[]
-  labBatches LabBatch[]
-  students   Student[]
-  subjects   Subject[]
-  timetables Timetable[]
-  users      User[]
-  sections   Section[]           @relation("DepartmentToSection")
+  id            String              @id @default(uuid())
+  name          String              @unique
+  code          String              @unique
+  isAcademic    Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  alumni        Alumni[]
+  history       AttendanceHistory[]
+  faculty       Faculty[]
+  labBatches    LabBatch[]
+  students      Student[]
+  subjects      Subject[]
+  timetables    Timetable[]
+  users         User[]
+  sections      Section[]           @relation("DepartmentToSection")
   feedbackForms FeedbackForm[]
+  CourseFile    CourseFile[]
 }
 
 model Section {
@@ -38,6 +39,7 @@ model Section {
   feedbackForms         FeedbackForm[]          @relation("FeedbackFormSections")
   midExamPapers         MidExamPaper[]
   FeedbackResponse      FeedbackResponse[]
+  CourseFile            CourseFile[]
 }
 
 model User {
@@ -86,6 +88,7 @@ model Faculty {
   user                  User?
   FacultySubjectMapping FacultySubjectMapping[]
   FeedbackResponse      FeedbackResponse[]
+  CourseFile            CourseFile[]
 }
 
 model Student {
@@ -102,7 +105,7 @@ model Student {
   batchId               String?
   isDetained            Boolean              @default(false)
   isAlumni              Boolean              @default(false)
-  alumniId              String?              // links to Alumni.id after graduation
+  alumniId              String? // links to Alumni.id after graduation
   originalBatchId       String?
   labBatchId            String?
   photoUrl              String?
@@ -199,6 +202,7 @@ model Subject {
   assignmentMarks       AssignmentMark[]
   coPoMappings          SubjectCoPoMapping[]
   coPsoMappings         SubjectCoPsoMapping[]
+  CourseFile            CourseFile[]
 }
 
 model Period {
@@ -239,25 +243,25 @@ model AttendanceHistory {
 }
 
 model Alumni {
-  id              String       @id @default(uuid())
-  rollNumber      String       @unique
+  id              String        @id @default(uuid())
+  rollNumber      String        @unique
   name            String
   mobile          String
-  passingYear     String       // e.g. "2026" — derived from graduation year
-  graduationDate  DateTime?    // actual date student left the institution
-  dateOfReporting DateTime?    // original join date
+  passingYear     String // e.g. "2026" — derived from graduation year
+  graduationDate  DateTime? // actual date student left the institution
+  dateOfReporting DateTime? // original join date
   dateOfBirth     DateTime?
   fatherName      String?
   nationality     String?
   religion        String?
   category        String?
   casteName       String?
-  batchId         String?      // which batch they graduated from
-  academicYearId  String?      // which academic year they graduated in
+  batchId         String? // which batch they graduated from
+  academicYearId  String? // which academic year they graduated in
   departmentId    String?
-  createdAt       DateTime     @default(now())
-  department      Department?  @relation(fields: [departmentId], references: [id])
-  batch           Batch?       @relation(fields: [batchId], references: [id])
+  createdAt       DateTime      @default(now())
+  department      Department?   @relation(fields: [departmentId], references: [id])
+  batch           Batch?        @relation(fields: [batchId], references: [id])
   academicYear    AcademicYear? @relation(fields: [academicYearId], references: [id])
 }
 
@@ -270,32 +274,33 @@ model ElectiveSlot {
 }
 
 model AcademicYear {
-  id                      String                    @id @default(uuid())
-  name                    String                    @unique
-  startDate               DateTime
-  endDate                 DateTime
-  isCurrent               Boolean                   @default(false)
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
-  attendanceHistory       AttendanceHistory[]
-  internalMarks           InternalMark[]
-  FacultySubjectMapping   FacultySubjectMapping[]
-  FeedbackForm            FeedbackForm[]
-  alumni                  Alumni[]
-  examSettings            ExamApplicationSetting[]
-  midExamPapers           MidExamPaper[]
-  assignmentMarks         AssignmentMark[]
+  id                    String                   @id @default(uuid())
+  name                  String                   @unique
+  startDate             DateTime
+  endDate               DateTime
+  isCurrent             Boolean                  @default(false)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  attendanceHistory     AttendanceHistory[]
+  internalMarks         InternalMark[]
+  FacultySubjectMapping FacultySubjectMapping[]
+  FeedbackForm          FeedbackForm[]
+  alumni                Alumni[]
+  examSettings          ExamApplicationSetting[]
+  midExamPapers         MidExamPaper[]
+  assignmentMarks       AssignmentMark[]
+  CourseFile            CourseFile[]
 }
 
 model Batch {
-  id               String    @id @default(uuid())
-  name             String    @unique
+  id               String         @id @default(uuid())
+  name             String         @unique
   startYear        Int
   endYear          Int
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  students         Student[] @relation("CurrentBatch")
-  detainedStudents Student[] @relation("OriginalBatch")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  students         Student[]      @relation("CurrentBatch")
+  detainedStudents Student[]      @relation("OriginalBatch")
   feedbackForms    FeedbackForm[]
   alumni           Alumni[]
 }
@@ -399,7 +404,7 @@ model ExamApplication {
   submittedAt        DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
   amountPaid         Float?
-  payments           Json?                    // Array of { utrNumber: string, amountPaid: number, paymentDate: string }
+  payments           Json? // Array of { utrNumber: string, amountPaid: number, paymentDate: string }
   student            Student                  @relation(fields: [studentId], references: [id])
   subjects           ExamApplicationSubject[]
   editRequested      Boolean                  @default(false)
@@ -418,23 +423,23 @@ model ExamApplicationSubject {
 }
 
 model ExamApplicationSetting {
-  id             String            @id @default(uuid())
-  name           String?           // e.g. "April 2026 Exams"
-  type           String            @default("REGULAR") // REGULAR or SUPPLY
-  year           String
-  semester       String
-  startDate      DateTime
-  endDate        DateTime
-  lateFeeEndDate DateTime?
-  isActive       Boolean           @default(true)
-  academicYearId String?           // links to academic year
-  regularFee     String?           // Fee for regular semesters
-  circularFileUrl String?          // Uploaded circular PDF or Image
+  id              String    @id @default(uuid())
+  name            String? // e.g. "April 2026 Exams"
+  type            String    @default("REGULAR") // REGULAR or SUPPLY
+  year            String
+  semester        String
+  startDate       DateTime
+  endDate         DateTime
+  lateFeeEndDate  DateTime?
+  isActive        Boolean   @default(true)
+  academicYearId  String? // links to academic year
+  regularFee      String? // Fee for regular semesters
+  circularFileUrl String? // Uploaded circular PDF or Image
 
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  applications   ExamApplication[]
-  academicYear   AcademicYear?     @relation(fields: [academicYearId], references: [id])
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  applications ExamApplication[]
+  academicYear AcademicYear?     @relation(fields: [academicYearId], references: [id])
 }
 
 model InternalMark {
@@ -482,46 +487,46 @@ model FeedbackTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  questions   FeedbackQuestion[]
-  forms       FeedbackForm[]
+  questions FeedbackQuestion[]
+  forms     FeedbackForm[]
 }
 
 model FeedbackQuestion {
-  id          String   @id @default(uuid())
-  templateId  String
-  text        String
-  type        String   @default("SCALE_1_5") // SCALE_1_5 or TEXT
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  templateId String
+  text       String
+  type       String   @default("SCALE_1_5") // SCALE_1_5 or TEXT
+  order      Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  template    FeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template FeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
 model FeedbackForm {
-  id             String   @id @default(uuid())
-  templateId     String
-  title          String
-  description    String?
-  academicYearId String
-  targetYear     Int?
-  targetSemester Int?
+  id                 String   @id @default(uuid())
+  templateId         String
+  title              String
+  description        String?
+  academicYearId     String
+  targetYear         Int?
+  targetSemester     Int?
   targetDepartmentId String?
-  targetBatchId  String?
-  startDate      DateTime
-  endDate        DateTime
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  targetBatchId      String?
+  startDate          DateTime
+  endDate            DateTime
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  template     FeedbackTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  academicYear AcademicYear         @relation(fields: [academicYearId], references: [id])
-  targetDepartment Department?      @relation(fields: [targetDepartmentId], references: [id])
-  targetBatch  Batch?               @relation(fields: [targetBatchId], references: [id])
-  submissions  FeedbackSubmission[]
-  responses    FeedbackResponse[]
-  targetSections Section[]            @relation("FeedbackFormSections")
+  template         FeedbackTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  academicYear     AcademicYear         @relation(fields: [academicYearId], references: [id])
+  targetDepartment Department?          @relation(fields: [targetDepartmentId], references: [id])
+  targetBatch      Batch?               @relation(fields: [targetBatchId], references: [id])
+  submissions      FeedbackSubmission[]
+  responses        FeedbackResponse[]
+  targetSections   Section[]            @relation("FeedbackFormSections")
 }
 
 model FeedbackSubmission {
@@ -570,8 +575,8 @@ model Certificate {
   issuedAt        DateTime @default(now())
   fileUrl         String
 
-  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  issuedBy        User     @relation(fields: [issuedById], references: [id])
+  student  Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  issuedBy User    @relation(fields: [issuedById], references: [id])
 
   @@unique([certificateType, certificateNo], name: "unique_certificate_number")
 }
@@ -582,58 +587,58 @@ model Certificate {
 
 // Configurable evaluation scheme (theory vs lab, scaling rules)
 model EvaluationScheme {
-  id             String   @id @default(uuid())
-  name           String   // e.g. "Theory", "Lab", "Open Elective"
-  subjectType    String   // THEORY | LAB | OPEN_ELECTIVE | PE_LAB
-  mid1MaxMarks   Float    @default(30)
-  mid2MaxMarks   Float    @default(30)
-  mid1ScaledTo   Float    @default(20)
-  mid2ScaledTo   Float    @default(20)
-  assignmentMax  Float    @default(10)
-  internalMax    Float    @default(30)  // final internal total
-  isDefault      Boolean  @default(false)
-  departmentId   String?  // null = global
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(uuid())
+  name          String // e.g. "Theory", "Lab", "Open Elective"
+  subjectType   String // THEORY | LAB | OPEN_ELECTIVE | PE_LAB
+  mid1MaxMarks  Float    @default(30)
+  mid2MaxMarks  Float    @default(30)
+  mid1ScaledTo  Float    @default(20)
+  mid2ScaledTo  Float    @default(20)
+  assignmentMax Float    @default(10)
+  internalMax   Float    @default(30) // final internal total
+  isDefault     Boolean  @default(false)
+  departmentId  String? // null = global
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  papers         MidExamPaper[]
+  papers MidExamPaper[]
 }
 
 // Question paper per subject/section/examType
 model MidExamPaper {
-  id               String   @id @default(uuid())
-  academicYearId   String
-  departmentId     String
-  year             String
-  semester         String
-  sectionId        String
-  subjectId        String
-  examType         String   // MID_I | MID_II
-  schemeId         String?
-  totalMarks       Float    @default(30)
-  examDate         String?
-  isFrozen         Boolean  @default(false)
-  frozenAt         DateTime?
-  frozenById       String?
-  createdById      String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String    @id @default(uuid())
+  academicYearId String
+  departmentId   String
+  year           String
+  semester       String
+  sectionId      String
+  subjectId      String
+  examType       String // MID_I | MID_II
+  schemeId       String?
+  totalMarks     Float     @default(30)
+  examDate       String?
+  isFrozen       Boolean   @default(false)
+  frozenAt       DateTime?
+  frozenById     String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   // New fields for Common Papers
-  isCommon         Boolean  @default(false)
-  commonText       String?  // e.g., "Common for CSE, CSM, CIVIL"
-  masterPaperId    String?
+  isCommon      Boolean @default(false)
+  commonText    String? // e.g., "Common for CSE, CSM, CIVIL"
+  masterPaperId String?
 
-  academicYear     AcademicYear         @relation(fields: [academicYearId], references: [id])
-  subject          Subject              @relation(fields: [subjectId], references: [id])
-  section          Section              @relation(fields: [sectionId], references: [id])
-  scheme           EvaluationScheme?    @relation(fields: [schemeId], references: [id])
-  questions        MidExamQuestion[]
-  marksEntries     MidExamMarksEntry[]
-  publishRecord    MidExamPublish?
+  academicYear  AcademicYear        @relation(fields: [academicYearId], references: [id])
+  subject       Subject             @relation(fields: [subjectId], references: [id])
+  section       Section             @relation(fields: [sectionId], references: [id])
+  scheme        EvaluationScheme?   @relation(fields: [schemeId], references: [id])
+  questions     MidExamQuestion[]
+  marksEntries  MidExamMarksEntry[]
+  publishRecord MidExamPublish?
 
-  masterPaper      MidExamPaper?        @relation("CommonPaperRelation", fields: [masterPaperId], references: [id])
-  childPapers      MidExamPaper[]       @relation("CommonPaperRelation")
+  masterPaper MidExamPaper?  @relation("CommonPaperRelation", fields: [masterPaperId], references: [id])
+  childPapers MidExamPaper[] @relation("CommonPaperRelation")
 
   @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, examType])
   @@index([academicYearId, departmentId, year, semester, sectionId])
@@ -641,16 +646,16 @@ model MidExamPaper {
 
 // Top-level questions (Q1, Q2, Q3...)
 model MidExamQuestion {
-  id          String   @id @default(uuid())
-  paperId     String
-  questionNo  Int      // 1, 2, 3...
-  isCompulsory Boolean @default(true)
+  id            String   @id @default(uuid())
+  paperId       String
+  questionNo    Int // 1, 2, 3...
+  isCompulsory  Boolean  @default(true)
   choiceGroupId String? // groups questions for OR logic
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  paper        MidExamPaper       @relation(fields: [paperId], references: [id], onDelete: Cascade)
-  choiceGroup  MidExamChoiceGroup? @relation(fields: [choiceGroupId], references: [id])
+  paper        MidExamPaper         @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  choiceGroup  MidExamChoiceGroup?  @relation(fields: [choiceGroupId], references: [id])
   subQuestions MidExamSubQuestion[]
 
   @@unique([paperId, questionNo])
@@ -660,7 +665,7 @@ model MidExamQuestion {
 model MidExamChoiceGroup {
   id        String   @id @default(uuid())
   paperId   String
-  groupNo   Int      // 1, 2... (group 1 = Q2 OR Q3, group 2 = Q4 OR Q5)
+  groupNo   Int // 1, 2... (group 1 = Q2 OR Q3, group 2 = Q4 OR Q5)
   createdAt DateTime @default(now())
 
   questions MidExamQuestion[]
@@ -670,17 +675,17 @@ model MidExamChoiceGroup {
 model MidExamSubQuestion {
   id           String   @id @default(uuid())
   questionId   String
-  subLabel     String   // "a", "b", "c"
+  subLabel     String // "a", "b", "c"
   questionText String
   imageUrl     String?  @db.Text
   maxMarks     Float
   coMapping    String   @default("CO1") // CO1–CO10
-  btLevel      String   @default("L1")  // L1–L6 Bloom's Taxonomy
+  btLevel      String   @default("L1") // L1–L6 Bloom's Taxonomy
   order        Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  question     MidExamQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question     MidExamQuestion     @relation(fields: [questionId], references: [id], onDelete: Cascade)
   marksEntries MidExamMarksEntry[]
 
   @@unique([questionId, subLabel])
@@ -692,7 +697,7 @@ model MidExamMarksEntry {
   paperId       String
   studentId     String
   subQuestionId String
-  marksObtained Float?   // null = not entered yet
+  marksObtained Float? // null = not entered yet
   isAbsent      Boolean  @default(false)
   isDraft       Boolean  @default(true)
   enteredById   String
@@ -724,8 +729,8 @@ model AssignmentMark {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject     Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
 
   @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, studentId])
@@ -734,30 +739,30 @@ model AssignmentMark {
 
 // Lock/publish state per paper — controls when data writes to InternalMark
 model MidExamPublish {
-  id             String    @id @default(uuid())
-  paperId        String    @unique
-  isLocked       Boolean   @default(false)
-  lockedAt       DateTime?
-  lockedById     String?
-  isPublished    Boolean   @default(false)
-  publishedAt    DateTime?
-  publishedById  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  paperId       String    @unique
+  isLocked      Boolean   @default(false)
+  lockedAt      DateTime?
+  lockedById    String?
+  isPublished   Boolean   @default(false)
+  publishedAt   DateTime?
+  publishedById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  paper          MidExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paper MidExamPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 }
 
 model SubjectCoPoMapping {
   id        String   @id @default(uuid())
   subjectId String
-  co        String   // e.g. "CO1", "CO2", "CO3", "CO4", "CO5"
-  po        String   // e.g. "PO1", "PO2", ..., "PO12"
-  weight    Int?     // null/blank or 1, 2, 3
+  co        String // e.g. "CO1", "CO2", "CO3", "CO4", "CO5"
+  po        String // e.g. "PO1", "PO2", ..., "PO12"
+  weight    Int? // null/blank or 1, 2, 3
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@unique([subjectId, co, po])
 }
@@ -765,14 +770,48 @@ model SubjectCoPoMapping {
 model SubjectCoPsoMapping {
   id        String   @id @default(uuid())
   subjectId String
-  co        String   // e.g. "CO1", "CO2", ...
-  pso       String   // e.g. "PSO1", "PSO2", ...
-  weight    Int?     // null/blank or 1, 2, 3
+  co        String // e.g. "CO1", "CO2", ...
+  pso       String // e.g. "PSO1", "PSO2", ...
+  weight    Int? // null/blank or 1, 2, 3
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@unique([subjectId, co, pso])
 }
 
+model CourseFile {
+  id             String @id @default(uuid())
+  academicYearId String
+  departmentId   String
+  year           String
+  semester       String
+  sectionId      String
+  subjectId      String
+  facultyId      String
+
+  // Rich Text / Text Inputs
+  teachingSupportText String? @db.Text
+  assignmentQuestions Json? // Array of { unit: string, questions: string[] }
+  lecturePlan         Json? // Array of { unit: string, topic: string, plannedPeriods: number, actualDate: string, aid: string }
+  remedialClasses     Json? // Array of { date: string, topics: string, studentRolls: string[] }
+
+  // Uploaded PDF Files (Paths / URLs)
+  academicCalendarPath String?
+  mid1SchemePath       String?
+  mid2SchemePath       String?
+  prevPapersPaths      Json? // Array of string paths
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  department   Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  section      Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  faculty      Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId])
+}

@@ -88,19 +88,23 @@ export default function QuestionPaperBuilderPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingText, setSavingText] = useState(false);
   const [freezing, setFreezing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [showFreezeModal, setShowFreezeModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [expandedQ, setExpandedQ] = useState<Set<number>>(new Set([0]));
-  // Track which sub-question fields are in "math mode" (visual equation editor) vs "text mode" (textarea)
   const [mathModeFields, setMathModeFields] = useState<Set<string>>(new Set());
+  // Edit Text Only mode — active only on frozen papers
+  const [editTextMode, setEditTextMode] = useState(false);
 
   const role = (session?.user as any)?.role;
   const isAdmin = ["ADMIN", "HOD", "DIRECTOR", "PRINCIPAL"].includes(role);
   const canEdit = !paper?.isFrozen || isAdmin;
   const isLinked = !!paper?.masterPaperId;
   const canEditQuestions = canEdit && !isLinked;
+  // In Edit Text Only mode: question text is editable, everything else locked
+  const isEditingTextOnly = editTextMode && !!paper?.isFrozen;
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -272,6 +276,38 @@ export default function QuestionPaperBuilderPage() {
     }
   };
 
+  // Safe text-only save — calls /text endpoint which never deletes or recreates questions
+  const handleSaveTextOnly = async () => {
+    setSavingText(true);
+    try {
+      // Build payload: only subQuestionId + questionText + imageUrl
+      const payload = questions.flatMap(q =>
+        q.subQuestions
+          .filter(sq => !!sq.id) // only existing DB sub-questions
+          .map(sq => ({
+            id: sq.id as string,
+            questionText: sq.questionText,
+            imageUrl: sq.imageUrl ?? null,
+          }))
+      );
+      const res = await fetch(`/api/mid-exam/papers/${id}/text`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subQuestions: payload }),
+      });
+      if (res.ok) {
+        showToast("Question text saved successfully!", "success");
+        setEditTextMode(false);
+        await loadPaper();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to save text", "error");
+      }
+    } finally {
+      setSavingText(false);
+    }
+  };
+
   const handleFreeze = async (action: "freeze" | "unfreeze") => {
     if (action === "freeze") {
       if (!isLinked) {
@@ -380,7 +416,7 @@ export default function QuestionPaperBuilderPage() {
                   {totalFromQuestions()} / {paper.totalMarks} marks
                 </div>
 
-                {paper.isFrozen ? (
+                 {paper.isFrozen ? (
                   <>
                     <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700">
                       <FaLock size={11} /> Frozen
@@ -390,6 +426,18 @@ export default function QuestionPaperBuilderPage() {
                         Unfreeze
                       </button>
                     )}
+                    {/* Edit Text Only button — shown on all frozen papers */}
+                    <button
+                      onClick={() => setEditTextMode(prev => !prev)}
+                      className={`flex items-center gap-2 rounded-xl px-4 py-1.5 text-sm font-medium transition-all ${
+                        isEditingTextOnly
+                          ? "bg-orange-500 text-white hover:bg-orange-600 shadow-md"
+                          : "border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                      }`}
+                    >
+                      <FaPen size={10} />
+                      {isEditingTextOnly ? "Exit Text Edit" : "Edit Text Only"}
+                    </button>
                     <button
                       onClick={() => window.print()}
                       className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm"
@@ -474,15 +522,46 @@ export default function QuestionPaperBuilderPage() {
             )}
           </AnimatePresence>
 
-          {/* Frozen notice */}
+          {/* Frozen notice or Edit Text Only active banner */}
           {paper.isFrozen && (
-            <div className="mb-6 flex items-center gap-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
-              <FaLock className="text-amber-600" />
-              <div>
-                <p className="font-medium text-amber-800">Paper is frozen</p>
-                <p className="text-sm text-amber-700">This paper is locked for editing. You can now enter student marks.</p>
+            isEditingTextOnly ? (
+              <div className="mb-6 flex items-start justify-between gap-3 rounded-xl bg-orange-50 p-4 ring-1 ring-orange-300">
+                <div className="flex items-start gap-3">
+                  <FaPen className="mt-0.5 text-orange-500 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-orange-800">✏️ Edit Text Only Mode — Active</p>
+                    <p className="text-sm text-orange-700 mt-0.5">
+                      Only question text can be changed. Marks, CO mapping, BT level and question structure are fully locked.
+                      Existing marks data is completely safe.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setEditTextMode(false)}
+                    className="rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveTextOnly}
+                    disabled={savingText}
+                    className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                  >
+                    {savingText ? <FaSpinner className="animate-spin" /> : <FaSave />}
+                    Save Text Changes
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mb-6 flex items-center gap-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
+                <FaLock className="text-amber-600" />
+                <div>
+                  <p className="font-medium text-amber-800">Paper is frozen</p>
+                  <p className="text-sm text-amber-700">This paper is locked for editing. Use <strong>Edit Text Only</strong> to update question wording without touching marks or COs.</p>
+                </div>
+              </div>
+            )
           )}
 
           {/* Paper Settings (Common/Text) Card */}
@@ -667,7 +746,7 @@ export default function QuestionPaperBuilderPage() {
                                   <div>
                                     <div className="flex items-center justify-between mb-1.5">
                                       <label className="block text-xs font-medium text-slate-600">Question Text *</label>
-                                      {canEditQuestions && (
+                                      {(canEditQuestions || isEditingTextOnly) && (
                                         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
                                           <button
                                             type="button"
@@ -712,7 +791,7 @@ export default function QuestionPaperBuilderPage() {
                                           id={`mathfield-${qIdx}-${sqIdx}`}
                                           value={sq.questionText}
                                           onChange={(latex) => updateSubQuestion(qIdx, sqIdx, "questionText", latex)}
-                                          disabled={!canEdit}
+                                          disabled={!canEdit && !isEditingTextOnly}
                                           placeholder="Click here and type a math equation visually..."
                                         />
                                         <p className="text-[10px] text-slate-400 italic">Type fractions, integrals, greek letters and more visually. Use the virtual keyboard or type LaTeX directly.</p>
@@ -720,7 +799,7 @@ export default function QuestionPaperBuilderPage() {
                                     ) : (
                                       /* Traditional Text Mode with LaTeX helper toolbar */
                                       <>
-                                        {canEditQuestions && (
+                                        {(canEditQuestions || isEditingTextOnly) && (
                                           <MathToolbar
                                             onInsert={(latex) => {
                                               const textarea = document.getElementById(`textarea-${qIdx}-${sqIdx}`) as HTMLTextAreaElement;
@@ -746,9 +825,9 @@ export default function QuestionPaperBuilderPage() {
                                           id={`textarea-${qIdx}-${sqIdx}`}
                                           value={sq.questionText}
                                           onChange={e => updateSubQuestion(qIdx, sqIdx, "questionText", e.target.value)}
-                                          disabled={!canEdit}
+                                          disabled={!canEdit && !isEditingTextOnly}
                                           rows={3}
-                                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 font-sans"
+                                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-slate-100 disabled:text-slate-500 font-sans"
                                           placeholder="Enter question text... (Use $...$ for inline math and $$...$$ for block equations)"
                                         />
                                       </>
@@ -775,7 +854,7 @@ export default function QuestionPaperBuilderPage() {
                                           alt={`Q${q.questionNo}(${sq.subLabel}) Figure`}
                                           className="max-h-24 object-contain rounded-md"
                                         />
-                                        {canEditQuestions && (
+                                        {(canEditQuestions || isEditingTextOnly) && (
                                           <button
                                             type="button"
                                             onClick={() => updateSubQuestion(qIdx, sqIdx, "imageUrl", null)}
@@ -787,7 +866,7 @@ export default function QuestionPaperBuilderPage() {
                                         )}
                                       </div>
                                     ) : (
-                                      canEditQuestions ? (
+                                      (canEditQuestions || isEditingTextOnly) ? (
                                         <div className="flex items-center justify-center w-full">
                                           <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 hover:border-blue-400 transition-all">
                                             <div className="flex flex-col items-center justify-center pt-2 pb-2">
@@ -837,7 +916,7 @@ export default function QuestionPaperBuilderPage() {
                                           const val = parseFloat(e.target.value);
                                           updateSubQuestion(qIdx, sqIdx, "maxMarks", isNaN(val) ? 0 : val);
                                         }}
-                                        disabled={!canEditQuestions}
+                                        disabled={!canEditQuestions || isEditingTextOnly}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 bg-white"
                                       />
                                     </div>
@@ -846,7 +925,7 @@ export default function QuestionPaperBuilderPage() {
                                       <select
                                         value={sq.coMapping}
                                         onChange={e => updateSubQuestion(qIdx, sqIdx, "coMapping", e.target.value)}
-                                        disabled={!canEditQuestions}
+                                        disabled={!canEditQuestions || isEditingTextOnly}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                                       >
                                         {getCoOptions().map(co => <option key={co} value={co}>{co}</option>)}
@@ -857,7 +936,7 @@ export default function QuestionPaperBuilderPage() {
                                       <select
                                         value={sq.btLevel}
                                         onChange={e => updateSubQuestion(qIdx, sqIdx, "btLevel", e.target.value)}
-                                        disabled={!canEditQuestions}
+                                        disabled={!canEditQuestions || isEditingTextOnly}
                                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-slate-100"
                                       >
                                         {BT_LEVEL_OPTIONS.map(bt => <option key={bt.value} value={bt.value}>{bt.label}</option>)}

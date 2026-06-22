@@ -12,7 +12,12 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const paper = await prisma.midExamPaper.findUnique({
     where: { id },
-    include: { questions: { include: { subQuestions: true } } }
+    include: {
+      questions: { include: { subQuestions: true } },
+      masterPaper: {
+        include: { questions: { include: { subQuestions: true } } }
+      }
+    }
   });
   if (!paper) return NextResponse.json({ error: "Paper not found" }, { status: 404 });
 
@@ -26,11 +31,21 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   if (action === "freeze") {
-    // Validate: paper must have at least one question with subquestions
-    if (paper.questions.length === 0) {
-      return NextResponse.json({ error: "Cannot freeze empty paper. Add questions first." }, { status: 400 });
+    // For linked child papers, validate using the master paper's questions
+    // (child papers have no questions of their own — they display the master's)
+    const isLinked = !!paper.masterPaperId;
+    const questionsToCheck = isLinked && paper.masterPaper
+      ? paper.masterPaper.questions
+      : paper.questions;
+
+    if (questionsToCheck.length === 0) {
+      return NextResponse.json({
+        error: isLinked
+          ? "Cannot freeze: the master paper has no questions. Add questions to the master paper first."
+          : "Cannot freeze empty paper. Add questions first."
+      }, { status: 400 });
     }
-    const hasSubQ = paper.questions.some(q => q.subQuestions.length > 0);
+    const hasSubQ = questionsToCheck.some(q => q.subQuestions.length > 0);
     if (!hasSubQ) {
       return NextResponse.json({ error: "Questions must have at least one subquestion each." }, { status: 400 });
     }

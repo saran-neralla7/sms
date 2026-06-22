@@ -112,6 +112,13 @@ export default function DashboardPage() {
         color: "bg-teal-50 text-teal-600"
       },
       {
+        title: "Course Files",
+        icon: <FaClipboardList className="h-6 w-6" />,
+        description: "Monitor and verify faculty course files submissions.",
+        href: "/admin/course-files",
+        color: "bg-teal-50 text-teal-600"
+      },
+      {
         title: "Administration",
         icon: <FaCogs className="h-6 w-6" />,
         description: "System configuration, user management, and settings.",
