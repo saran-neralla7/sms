@@ -119,6 +119,21 @@ export default function DashboardPage() {
         color: "bg-teal-50 text-teal-600"
       },
       {
+        title: role === "ADMIN" ? "Leaves Administration" : "Leaves Approval",
+        icon: <FaCalendarAlt className="h-6 w-6" />,
+        description: role === "ADMIN"
+          ? "Manage quotas, override balances, and edit all faculty leaves."
+          : role === "HOD"
+          ? "Review and recommend department-level faculty leave applications."
+          : "Review and approve/reject college-wide faculty leave applications.",
+        href: role === "ADMIN"
+          ? "/admin/leaves"
+          : role === "HOD"
+          ? "/faculty/leaves"
+          : "/director/leaves",
+        color: "bg-indigo-50 text-indigo-600"
+      },
+      {
         title: "Administration",
         icon: <FaCogs className="h-6 w-6" />,
         description: "System configuration, user management, and settings.",

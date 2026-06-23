@@ -132,16 +132,36 @@ export async function GET(req: Request) {
               subQuestions: true
             }
           },
+          masterPaper: {
+            include: {
+              questions: {
+                include: {
+                  subQuestions: true
+                }
+              }
+            }
+          },
           publishRecord: true
         }
       });
+
+      for (const paper of papers) {
+        if (paper.masterPaperId && paper.masterPaper) {
+          (paper as any).questions = paper.masterPaper.questions;
+        }
+      }
 
       const publishedPapers = papers.filter(p => p.publishRecord?.isPublished === true);
       const publishedPaperIds = publishedPapers.map(p => p.id);
 
       const paperIds = papers.map(p => p.id);
+      const allPaperIdsForCg = [
+        ...paperIds,
+        ...papers.map(p => p.masterPaperId).filter(Boolean) as string[]
+      ];
+
       const choiceGroups = await prisma.midExamChoiceGroup.findMany({
-        where: { paperId: { in: paperIds } },
+        where: { paperId: { in: allPaperIdsForCg } },
         include: {
           questions: {
             include: {
@@ -195,7 +215,7 @@ export async function GET(req: Request) {
           marksMap[pm.subQuestionId] = pm.marksObtained;
         }
 
-        const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === paper.id);
+        const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
         const { total } = calculateStudentTotal(paper.questions, paperChoiceGroups, marksMap, isAbsent);
 
         return isAbsent ? "AB" : `${total} / ${paper.totalMarks}`;
@@ -220,7 +240,7 @@ export async function GET(req: Request) {
             marksMap[pm.subQuestionId] = pm.marksObtained;
           }
 
-          const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === paper.id);
+          const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
           const { total } = calculateStudentTotal(paper.questions, paperChoiceGroups, marksMap, isAbsent);
           return { total, isAbsent };
         };

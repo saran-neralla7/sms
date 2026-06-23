@@ -36,3 +36,42 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Print styles to cleanly format PDF reports and leave slip prints */
+@media print {
+  /* Hide navigation bar, layout footers, and interactive buttons */
+  nav, 
+  header, 
+  footer, 
+  .print-hidden, 
+  .print\:hidden,
+  #print-btn,
+  button,
+  a {
+    display: none !important;
+  }
+
+  /* Reset background and padding for the print canvas */
+  body, 
+  main, 
+  html {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Reset layout wrapper top padding during print */
+  .pt-16 {
+    padding-top: 0 !important;
+  }
+
+  /* Ensure printed content matches page size and limits margins */
+  .mx-auto {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-shadow: none !important;
+  }
+}

@@ -118,6 +118,15 @@ export async function GET(req: NextRequest) {
             subQuestions: true
           }
         },
+        masterPaper: {
+          include: {
+            questions: {
+              include: {
+                subQuestions: true
+              }
+            }
+          }
+        },
         publishRecord: true
       }
     });
@@ -130,18 +139,39 @@ export async function GET(req: NextRequest) {
             subQuestions: true
           }
         },
+        masterPaper: {
+          include: {
+            questions: {
+              include: {
+                subQuestions: true
+              }
+            }
+          }
+        },
         publishRecord: true
       }
     });
 
+    if (mid1PaperRaw) {
+      if (mid1PaperRaw.masterPaperId && mid1PaperRaw.masterPaper) {
+        (mid1PaperRaw as any).questions = mid1PaperRaw.masterPaper.questions;
+      }
+    }
+
+    if (mid2PaperRaw) {
+      if (mid2PaperRaw.masterPaperId && mid2PaperRaw.masterPaper) {
+        (mid2PaperRaw as any).questions = mid2PaperRaw.masterPaper.questions;
+      }
+    }
+
     // Fetch Choice Groups
     const choiceGroups1 = mid1PaperRaw ? await prisma.midExamChoiceGroup.findMany({
-      where: { paperId: mid1PaperRaw.id },
+      where: { paperId: mid1PaperRaw.masterPaperId || mid1PaperRaw.id },
       include: { questions: { include: { subQuestions: true } } }
     }) : [];
 
     const choiceGroups2 = mid2PaperRaw ? await prisma.midExamChoiceGroup.findMany({
-      where: { paperId: mid2PaperRaw.id },
+      where: { paperId: mid2PaperRaw.masterPaperId || mid2PaperRaw.id },
       include: { questions: { include: { subQuestions: true } } }
     }) : [];
 
@@ -284,3 +314,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message || "Failed to save course file" }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    let { academicYearId, departmentId, year, semester, sectionId, subjectId, facultyId,
+          benchmarkPct, surveyRating, attainmentDecimal } = body;
+
+    if (!academicYearId || !departmentId || !year || !semester || !sectionId || !subjectId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    year = normalizeYear(year);
+    semester = normalizeSemester(semester);
+
+    const updateData: any = {};
+    if (benchmarkPct !== undefined) updateData.benchmarkPct = parseFloat(benchmarkPct);
+    if (surveyRating !== undefined) updateData.surveyRating = surveyRating === null ? null : parseFloat(surveyRating);
+    if (attainmentDecimal !== undefined) updateData.attainmentDecimal = parseInt(attainmentDecimal);
+
+    const courseFile = await prisma.courseFile.upsert({
+      where: {
+        academicYearId_departmentId_year_semester_sectionId_subjectId: {
+          academicYearId, departmentId, year, semester, sectionId, subjectId
+        }
+      },
+      update: updateData,
+      create: {
+        academicYearId, departmentId, year, semester, sectionId, subjectId,
+        facultyId: facultyId || session.user.id,
+        ...updateData
+      }
+    });
+
+    return NextResponse.json({ success: true, courseFile });
+  } catch (error: any) {
+    console.error("Error in PATCH /api/course-files:", error);
+    return NextResponse.json({ error: error.message || "Failed to update attainment settings" }, { status: 500 });
+  }
+}
+

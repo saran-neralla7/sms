@@ -1487,6 +1487,16 @@ export default function FacultyMidExamPage() {
                             >
                               <FaFileAlt size={10} /> Syllabus
                             </button>
+                            <button
+                              onClick={() => {
+                                const m = mapping;
+                                const url = `/faculty/mid-exam/attainments?academicYearId=${selectedAY}&departmentId=${m.subject.departmentId}&year=${m.subject.year}&semester=${m.subject.semester}&sectionId=${m.section.id}&subjectId=${m.subject.id}`;
+                                router.push(url);
+                              }}
+                              className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-700 transition-colors"
+                            >
+                              <FaClipboardList size={10} /> CO Attainment
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1603,6 +1613,17 @@ export default function FacultyMidExamPage() {
                             className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800 transition-colors"
                           >
                             <FaFileAlt size={12} /> Syllabus
+                            <FaChevronRight size={10} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const m = mapping;
+                              const url = `/faculty/mid-exam/attainments?academicYearId=${selectedAY}&departmentId=${m.subject.departmentId}&year=${m.subject.year}&semester=${m.subject.semester}&sectionId=${m.section.id}&subjectId=${m.subject.id}`;
+                              router.push(url);
+                            }}
+                            className="flex items-center gap-2 text-sm text-teal-600 font-semibold hover:text-teal-800 transition-colors"
+                          >
+                            <FaClipboardList size={12} /> CO Attainment
                             <FaChevronRight size={10} />
                           </button>
                         </div>

@@ -6,6 +6,8 @@ import { FaPrint, FaSpinner } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import { calculateStudentTotal, scaleMidMarks, aggregateCOMarks, calculateInternalMarks } from "@/lib/mid-exam-calc";
 import MathRenderer from "@/components/MathRenderer";
+import { computeAttainments } from "@/lib/attainments";
+
 
 export default function CourseFilePrintPage() {
   const searchParams = useSearchParams();
@@ -101,6 +103,48 @@ export default function CourseFilePrintPage() {
     assignmentMarks = [],
     semesterResults = [],
   } = data;
+
+  // ── Attainment settings from courseFile ──────────────────────
+  const benchmarkPct: number = (courseFile as any)?.benchmarkPct ?? 50;
+  const surveyRating: number = (courseFile as any)?.surveyRating ?? 2;
+  const attainmentDecimal: number = (courseFile as any)?.attainmentDecimal ?? 2;
+
+  // ── CO list from syllabus ────────────────────────────────────
+  const syllabus = subject?.syllabus as any;
+  const coList: string[] =
+    syllabus && Array.isArray(syllabus.outcomes) && syllabus.outcomes.length > 0
+      ? syllabus.outcomes.map((o: any) => o.code as string)
+      : ["CO1","CO2","CO3","CO4","CO5"];
+
+  // ── Flatten subquestions from paper ─────────────────────────
+  function flattenSQs(paper: any) {
+    if (!paper) return [] as {id:string; coMapping:string; maxMarks:number}[];
+    const out: {id:string; coMapping:string; maxMarks:number}[] = [];
+    for (const q of (paper.questions || [])) {
+      for (const sq of (q.subQuestions || [])) {
+        out.push({ id: sq.id, coMapping: sq.coMapping, maxMarks: sq.maxMarks });
+      }
+    }
+    return out;
+  }
+
+  // ── Compute attainments ──────────────────────────────────────
+  const allMarks = [...(mid1Marks as any[]), ...(mid2Marks as any[])];
+  const attainmentResult = computeAttainments({
+    coList,
+    mid1SubQuestions: flattenSQs(mid1Paper),
+    mid2SubQuestions: flattenSQs(mid2Paper),
+    allMarks,
+    benchmarkPct,
+    surveyRating,
+    coPoMappings: coPoMappings as any[],
+    coPsoMappings: coPsoMappings as any[],
+    decimalPlaces: attainmentDecimal,
+    students: students as any[],
+    semesterResults: semesterResults as any[],
+    subjectCode: (subject as any)?.code || "",
+  });
+
 
   // Mid Exam Marks Map
   const mid1MarksMap: Record<string, number> = {};
@@ -479,6 +523,43 @@ export default function CourseFilePrintPage() {
     </div>
   );
 
+  // Reusable print section with repeating header layout
+  const PrintSection = ({
+    title,
+    children
+  }: {
+    title: string;
+    children: React.ReactNode;
+  }) => {
+    return (
+      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
+        <table className="w-full text-xs text-left border-collapse font-semibold print-section-table">
+          <thead>
+            <tr className="no-border-row">
+              <td className="p-0 border-none">
+                {renderHeader()}
+              </td>
+            </tr>
+            <tr className="no-border-row">
+              <td className="p-0 pb-4 border-none">
+                <h2 className="font-bold text-lg text-slate-800 border-b border-black pb-1">
+                  {title}
+                </h2>
+              </td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="no-border-row">
+              <td className="p-0 pt-4 border-none">
+                {children}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-white p-4 md:p-8 max-w-5xl mx-auto printable-area text-slate-900">
       {/* Missing Data Warning Modal */}
@@ -597,11 +678,7 @@ export default function CourseFilePrintPage() {
       {/* ========================================================================= */}
       {/* 1. SYLLABUS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          1. Course Syllabus
-        </h2>
+      <PrintSection title="1. Course Syllabus">
         {subject?.syllabus ? (
           <div className="text-xs space-y-4 font-medium leading-relaxed">
             {subject.syllabus.description && (
@@ -638,16 +715,12 @@ export default function CourseFilePrintPage() {
         ) : (
           <p className="text-xs text-slate-500 italic">No syllabus details found for this subject in the database.</p>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 2. OBJECTIVES & OUTCOMES */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          2. Course Objectives & Outcomes
-        </h2>
+      <PrintSection title="2. Course Objectives & Outcomes">
         <div className="text-xs space-y-6 font-medium">
           {subject?.syllabus?.objectives && (
             <div>
@@ -703,28 +776,24 @@ export default function CourseFilePrintPage() {
             </div>
           )}
         </div>
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 3. CO-PO MAPPING TABLE */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          3. CO-PO & CO-PSO Mapping Correlation Matrix
-        </h2>
+      <PrintSection title="3. CO-PO & CO-PSO Mapping Correlation Matrix">
         <p className="text-[10px] text-slate-500 mb-4 font-medium">
           Correlation level: 3 (High), 2 (Medium), 1 (Low), "-" / Blank (No Correlation).
         </p>
 
         {/* PO Mapping */}
         <h3 className="font-bold text-xs text-slate-700 mb-2 uppercase">Program Outcomes (POs)</h3>
-        <table className="w-full text-xs text-center border-collapse border border-black mb-6">
+        <table className="print-table w-full text-xs text-center border-collapse mb-6">
           <thead>
             <tr className="bg-slate-50 font-bold">
-              <th className="border border-black p-1.5">CO / PO</th>
+              <th className="p-1.5 text-center">CO / PO</th>
               {Array.from({ length: 12 }).map((_, i) => (
-                <th key={i} className="border border-black p-1.5">PO{i + 1}</th>
+                <th key={i} className="p-1.5 text-center">PO{i + 1}</th>
               ))}
             </tr>
           </thead>
@@ -733,12 +802,12 @@ export default function CourseFilePrintPage() {
               const coLabel = `CO${coIdx + 1}`;
               return (
                 <tr key={coIdx}>
-                  <td className="border border-black p-1.5 font-bold bg-slate-50">{coLabel}</td>
+                  <td className="p-1.5 font-bold bg-slate-50 text-center">{coLabel}</td>
                   {Array.from({ length: 12 }).map((_, poIdx) => {
                     const poLabel = `PO${poIdx + 1}`;
                     const mapping = coPoMappings.find((m: any) => m.co === coLabel && m.po === poLabel);
                     return (
-                      <td key={poIdx} className="border border-black p-1.5 font-semibold">
+                      <td key={poIdx} className="p-1.5 font-semibold text-center">
                         {mapping ? mapping.level : "-"}
                       </td>
                     );
@@ -751,13 +820,13 @@ export default function CourseFilePrintPage() {
 
         {/* PSO Mapping */}
         <h3 className="font-bold text-xs text-slate-700 mb-2 uppercase mt-6">Program Specific Outcomes (PSOs)</h3>
-        <table className="w-full text-xs text-center border-collapse border border-black">
+        <table className="print-table w-full text-xs text-center border-collapse">
           <thead>
             <tr className="bg-slate-50 font-bold">
-              <th className="border border-black p-1.5">CO / PSO</th>
-              <th className="border border-black p-1.5">PSO1</th>
-              <th className="border border-black p-1.5">PSO2</th>
-              <th className="border border-black p-1.5">PSO3</th>
+              <th className="p-1.5 text-center">CO / PSO</th>
+              <th className="p-1.5 text-center">PSO1</th>
+              <th className="p-1.5 text-center">PSO2</th>
+              <th className="p-1.5 text-center">PSO3</th>
             </tr>
           </thead>
           <tbody>
@@ -765,11 +834,11 @@ export default function CourseFilePrintPage() {
               const coLabel = `CO${coIdx + 1}`;
               return (
                 <tr key={coIdx}>
-                  <td className="border border-black p-1.5 font-bold bg-slate-50">{coLabel}</td>
+                  <td className="p-1.5 font-bold bg-slate-50 text-center">{coLabel}</td>
                   {["PSO1", "PSO2", "PSO3"].map((psoLabel) => {
                     const mapping = coPsoMappings.find((m: any) => m.co === coLabel && m.pso === psoLabel);
                     return (
-                      <td key={psoLabel} className="border border-black p-1.5 font-semibold">
+                      <td key={psoLabel} className="p-1.5 font-semibold text-center">
                         {mapping ? mapping.level : "-"}
                       </td>
                     );
@@ -779,16 +848,12 @@ export default function CourseFilePrintPage() {
             })}
           </tbody>
         </table>
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 4. ACADEMIC CALENDAR */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          4. Academic Calendar
-        </h2>
+      <PrintSection title="4. Academic Calendar">
         {courseFile?.academicCalendarPath ? (
           <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
             <div>
@@ -804,17 +869,12 @@ export default function CourseFilePrintPage() {
             </span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 5. LECTURE PLAN & TEXT BOOKS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          5. Lecture Plan & Reference Textbooks
-        </h2>
-
+      <PrintSection title="5. Lecture Plan & Reference Textbooks">
         {/* Textbooks list */}
         {subject?.syllabus?.textbooks && (
           <div className="text-xs mb-6 font-semibold bg-slate-50/50 p-4 rounded-xl border border-slate-100">
@@ -842,106 +902,98 @@ export default function CourseFilePrintPage() {
         {/* Lecture Plan Table */}
         <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">Unit-wise Lecture Plan & Topics List</h4>
         {courseFile?.lecturePlan && Array.isArray(courseFile.lecturePlan) && courseFile.lecturePlan.length > 0 ? (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold border-b border-black text-slate-700">
-                <th className="border border-black p-2 w-16">Unit</th>
-                <th className="border border-black p-2">Topics & Syllabus covered</th>
-                <th className="border border-black p-2 w-20 text-center">Periods</th>
-                <th className="border border-black p-2 w-28 text-center">Actual Date</th>
-                <th className="border border-black p-2 w-36">Teaching Aid</th>
+                <th className="p-2 w-16 text-center">Unit</th>
+                <th className="p-2">Topics & Syllabus covered</th>
+                <th className="p-2 w-20 text-center">Periods</th>
+                <th className="p-2 w-28 text-center">Actual Date</th>
+                <th className="p-2 w-36">Teaching Aid</th>
               </tr>
             </thead>
             <tbody>
               {courseFile.lecturePlan.map((row: any, idx: number) => (
                 <tr key={idx} className="hover:bg-slate-50/50">
-                  <td className="border border-black p-2 font-bold bg-slate-50/30 text-center">{row.unit}</td>
-                  <td className="border border-black p-2">{row.topic}</td>
-                  <td className="border border-black p-2 text-center">{row.plannedPeriods}</td>
-                  <td className="border border-black p-2 text-center">{row.actualDate || "-"}</td>
-                  <td className="border border-black p-2">{row.aid || "Chalk & Board"}</td>
+                  <td className="p-2 font-bold bg-slate-50/30 text-center">{row.unit}</td>
+                  <td className="p-2">{row.topic}</td>
+                  <td className="p-2 text-center">{row.plannedPeriods}</td>
+                  <td className="p-2 text-center">{row.actualDate || "-"}</td>
+                  <td className="p-2">{row.aid || "Chalk & Board"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold border-b border-black text-slate-700">
-                <th className="border border-black p-2 w-16 text-center">Unit</th>
-                <th className="border border-black p-2">Topics & Syllabus covered</th>
-                <th className="border border-black p-2 w-20 text-center">Periods</th>
-                <th className="border border-black p-2 w-28 text-center">Actual Date</th>
-                <th className="border border-black p-2 w-36">Teaching Aid</th>
+                <th className="p-2 w-16 text-center">Unit</th>
+                <th className="p-2">Topics & Syllabus covered</th>
+                <th className="p-2 w-20 text-center">Periods</th>
+                <th className="p-2 w-28 text-center">Actual Date</th>
+                <th className="p-2 w-36">Teaching Aid</th>
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: 8 }).map((_, idx) => (
                 <tr key={idx}>
-                  <td className="border border-black p-4 text-center"></td>
-                  <td className="border border-black p-4"></td>
-                  <td className="border border-black p-4 text-center"></td>
-                  <td className="border border-black p-4 text-center"></td>
-                  <td className="border border-black p-4"></td>
+                  <td className="p-4 text-center"></td>
+                  <td className="p-4"></td>
+                  <td className="p-4 text-center"></td>
+                  <td className="p-4 text-center"></td>
+                  <td className="p-4"></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 6. STUDENT LIST */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          6. Student Roster (Registered Students Ranks)
-        </h2>
+      <PrintSection title="6. Student Roster (Registered Students Ranks)">
         <p className="text-xs text-slate-500 mb-4 font-semibold">Total Registered: {students.length} students</p>
-        <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+        <table className="print-table w-full text-xs text-left border-collapse font-semibold">
           <thead>
             <tr className="bg-slate-50 font-bold text-slate-700">
-              <th className="border border-black p-1.5 w-16 text-center">S.No</th>
-              <th className="border border-black p-1.5 w-40">Roll Number</th>
-              <th className="border border-black p-1.5">Student Full Name</th>
+              <th className="p-1.5 w-16 text-center">S.No</th>
+              <th className="p-1.5 w-40 text-center">Roll Number</th>
+              <th className="p-1.5 px-4">Student Full Name</th>
             </tr>
           </thead>
           <tbody>
             {students.map((student: any, idx: number) => (
               <tr key={student.id}>
-                <td className="border border-black p-1.5 text-center">{idx + 1}</td>
-                <td className="border border-black p-1.5 font-bold uppercase">{student.rollNumber}</td>
-                <td className="border border-black p-1.5 uppercase">{student.name}</td>
+                <td className="p-1.5 text-center">{idx + 1}</td>
+                <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
+                <td className="p-1.5 uppercase px-4">{student.name}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 7. CLASS TIMETABLE */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          7. Mapped Class Timetable
-        </h2>
+      <PrintSection title="7. Mapped Class Timetable">
         {timetable.length > 0 ? (
-          <table className="w-full text-xs text-center border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-center border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-2">Day of Week</th>
-                <th className="border border-black p-2">Period Name</th>
-                <th className="border border-black p-2">Class Timing Slot</th>
+                <th className="p-2 text-center">Day of Week</th>
+                <th className="p-2 text-center">Period Name</th>
+                <th className="p-2 text-center">Class Timing Slot</th>
               </tr>
             </thead>
             <tbody>
               {timetable.map((t: any, idx: number) => (
                 <tr key={t.id || idx}>
-                  <td className="border border-black p-2 font-bold uppercase bg-slate-50/20">{t.dayOfWeek}</td>
-                  <td className="border border-black p-2">{t.period?.name || `Period ${t.periodId}`}</td>
-                  <td className="border border-black p-2 text-slate-500 font-medium">
+                  <td className="p-2 font-bold uppercase bg-slate-50/20 text-center">{t.dayOfWeek}</td>
+                  <td className="p-2 text-center">{t.period?.name || `Period ${t.periodId}`}</td>
+                  <td className="p-2 text-slate-500 font-medium text-center">
                     {t.period?.startTime && t.period?.endTime ? `${t.period.startTime} - ${t.period.endTime}` : "N/A"}
                   </td>
                 </tr>
@@ -951,16 +1003,12 @@ export default function CourseFilePrintPage() {
         ) : (
           <p className="text-xs text-slate-500 italic">No class timetable mapping assigned for this subject-section.</p>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 8. TEACHING SUPPORT MATERIALS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          8. Teaching Support Materials
-        </h2>
+      <PrintSection title="8. Teaching Support Materials">
         {courseFile?.teachingSupportText ? (
           <div className="text-xs font-semibold whitespace-pre-wrap leading-relaxed text-slate-700 border border-slate-200 p-6 bg-slate-50/20 rounded-xl">
             {courseFile.teachingSupportText}
@@ -971,16 +1019,12 @@ export default function CourseFilePrintPage() {
             <span className="text-xs text-slate-400">No content entered by faculty. This space is left blank for physical attachments or reference notes.</span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 9. ASSIGNMENTS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          9. Unit-Wise Assignment Questions (I-V)
-        </h2>
+      <PrintSection title="9. Unit-Wise Assignment Questions (I-V)">
         {courseFile?.assignmentQuestions && Array.isArray(courseFile.assignmentQuestions) && courseFile.assignmentQuestions.length > 0 ? (
           <div className="space-y-6 font-semibold">
             {courseFile.assignmentQuestions.map((unitQ: any, idx: number) => (
@@ -1012,16 +1056,12 @@ export default function CourseFilePrintPage() {
             ))}
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 10. MID-I EXAM QUESTION PAPER */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          10. MID-I Exam Question Paper
-        </h2>
+      <PrintSection title="10. MID-I Exam Question Paper">
         {mid1Paper ? (
           renderQuestionPaper(mid1Paper, "MID_I")
         ) : (
@@ -1032,16 +1072,12 @@ export default function CourseFilePrintPage() {
             </span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 11. MID-I EVALUATION SCHEME */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          11. MID-I Scheme of Evaluation
-        </h2>
+      <PrintSection title="11. MID-I Scheme of Evaluation">
         {courseFile?.mid1SchemePath ? (
           <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
             <div>
@@ -1057,25 +1093,21 @@ export default function CourseFilePrintPage() {
             </span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 12. MID-I EXAM MARKS LIST */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          12. MID-I Exam Marks List
-        </h2>
+      <PrintSection title="12. MID-I Exam Marks List">
         {mid1Paper ? (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-1.5 w-16 text-center">S.No</th>
-                <th className="border border-black p-1.5 w-36">Roll Number</th>
-                <th className="border border-black p-1.5">Student Full Name</th>
-                <th className="border border-black p-1.5 w-28 text-center">Marks Obtained</th>
-                <th className="border border-black p-1.5 w-28 text-center">Percentage</th>
+                <th className="p-1.5 w-16 text-center">S.No</th>
+                <th className="p-1.5 w-36 text-center">Roll Number</th>
+                <th className="p-1.5 px-4">Student Full Name</th>
+                <th className="p-1.5 w-28 text-center">Marks Obtained</th>
+                <th className="p-1.5 w-28 text-center">Percentage</th>
               </tr>
             </thead>
             <tbody>
@@ -1085,13 +1117,13 @@ export default function CourseFilePrintPage() {
                 const pct = ((total / mid1Paper.totalMarks) * 100).toFixed(1);
                 return (
                   <tr key={student.id} className={isAbs ? "bg-red-50/20" : ""}>
-                    <td className="border border-black p-1.5 text-center">{idx + 1}</td>
-                    <td className="border border-black p-1.5 font-bold uppercase">{student.rollNumber}</td>
-                    <td className="border border-black p-1.5 uppercase">{student.name}</td>
-                    <td className="border border-black p-1.5 text-center font-bold">
+                    <td className="p-1.5 text-center">{idx + 1}</td>
+                    <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
+                    <td className="p-1.5 uppercase px-4">{student.name}</td>
+                    <td className="p-1.5 text-center font-bold">
                       {isAbs ? "Absent" : total}
                     </td>
-                    <td className="border border-black p-1.5 text-center text-slate-500 font-medium">
+                    <td className="p-1.5 text-center text-slate-500 font-medium">
                       {isAbs ? "-" : `${pct}%`}
                     </td>
                   </tr>
@@ -1102,30 +1134,26 @@ export default function CourseFilePrintPage() {
         ) : (
           <p className="text-xs text-slate-500 italic">No marks entries recorded for MID-I exam.</p>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 13. DYNAMIC LIST OF SLOW LEARNERS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          13. List of Slow Learners (Scored below {threshold}%)
-        </h2>
+      <PrintSection title={`13. List of Slow Learners (Scored below ${threshold}%)`}>
         {mid1Paper ? (
           slowLearnersMid1.length === 0 ? (
             <div className="text-center py-6 border border-dashed rounded-xl bg-emerald-50/10 border-emerald-300 text-emerald-800 font-bold text-xs">
               🎉 Outstanding! No students scored below the {threshold}% threshold in MID-I.
             </div>
           ) : (
-            <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+            <table className="print-table w-full text-xs text-left border-collapse font-semibold">
               <thead>
                 <tr className="bg-slate-50 font-bold text-slate-700">
-                  <th className="border border-black p-2 w-16 text-center">S.No</th>
-                  <th className="border border-black p-2 w-40">Roll Number</th>
-                  <th className="border border-black p-2">Student Full Name</th>
-                  <th className="border border-black p-2 w-32 text-center">MID-I Marks</th>
-                  <th className="border border-black p-2 w-32 text-center">Percentage</th>
+                  <th className="p-2 w-16 text-center">S.No</th>
+                  <th className="p-2 w-40 text-center">Roll Number</th>
+                  <th className="p-2 px-4">Student Full Name</th>
+                  <th className="p-2 w-32 text-center">MID-I Marks</th>
+                  <th className="p-2 w-32 text-center">Percentage</th>
                 </tr>
               </thead>
               <tbody>
@@ -1134,11 +1162,11 @@ export default function CourseFilePrintPage() {
                   const pct = ((total / mid1Paper.totalMarks) * 100).toFixed(1);
                   return (
                     <tr key={student.id} className="bg-orange-50/10">
-                      <td className="border border-black p-2 text-center">{idx + 1}</td>
-                      <td className="border border-black p-2 font-bold uppercase">{student.rollNumber}</td>
-                      <td className="border border-black p-2 uppercase">{student.name}</td>
-                      <td className="border border-black p-2 text-center font-bold text-red-600">{total}</td>
-                      <td className="border border-black p-2 text-center text-slate-500 font-medium">{pct}%</td>
+                      <td className="p-2 text-center">{idx + 1}</td>
+                      <td className="p-2 font-bold uppercase text-center">{student.rollNumber}</td>
+                      <td className="p-2 uppercase px-4">{student.name}</td>
+                      <td className="p-2 text-center font-bold text-red-600">{total}</td>
+                      <td className="p-2 text-center text-slate-500 font-medium">{pct}%</td>
                     </tr>
                   );
                 })}
@@ -1148,31 +1176,27 @@ export default function CourseFilePrintPage() {
         ) : (
           <p className="text-xs text-slate-500 italic">No MID-I exam record exists to evaluate slow learners.</p>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 14. REMEDIAL CLASSES & LOGS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          14. Remedial Classes Attendance & Progression Logs
-        </h2>
+      <PrintSection title="14. Remedial Classes Attendance & Progression Logs">
         {courseFile?.remedialClasses && Array.isArray(courseFile.remedialClasses) && courseFile.remedialClasses.length > 0 ? (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-2 w-32 text-center border-b">Date</th>
-                <th className="border border-black p-2 border-b">Topics Coached</th>
-                <th className="border border-black p-2 border-b">Attending Student Roll Numbers</th>
+                <th className="p-2 w-32 text-center">Date</th>
+                <th className="p-2">Topics Coached</th>
+                <th className="p-2 text-center">Attending Student Roll Numbers</th>
               </tr>
             </thead>
             <tbody>
               {courseFile.remedialClasses.map((row: any, idx: number) => (
                 <tr key={idx}>
-                  <td className="border border-black p-2 text-center font-bold bg-slate-50/20">{row.date}</td>
-                  <td className="border border-black p-2 font-medium">{row.topics}</td>
-                  <td className="border border-black p-2 text-teal-700 font-bold uppercase">
+                  <td className="p-2 text-center font-bold bg-slate-50/20">{row.date}</td>
+                  <td className="p-2 font-medium">{row.topics}</td>
+                  <td className="p-2 text-teal-700 font-bold uppercase text-center">
                     {Array.isArray(row.studentRolls) ? row.studentRolls.join(", ") : row.studentRolls || "-"}
                   </td>
                 </tr>
@@ -1180,35 +1204,31 @@ export default function CourseFilePrintPage() {
             </tbody>
           </table>
         ) : (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-2 w-32 text-center border-b">Date</th>
-                <th className="border border-black p-2 border-b">Topics Coached</th>
-                <th className="border border-black p-2 border-b">Attending Student Roll Numbers</th>
+                <th className="p-2 w-32 text-center">Date</th>
+                <th className="p-2">Topics Coached</th>
+                <th className="p-2 text-center">Attending Student Roll Numbers</th>
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: 5 }).map((_, idx) => (
                 <tr key={idx}>
-                  <td className="border border-black p-6 text-center font-bold bg-slate-50/20"></td>
-                  <td className="border border-black p-6 font-medium"></td>
-                  <td className="border border-black p-6 text-teal-700 font-bold uppercase"></td>
+                  <td className="p-6 text-center font-bold bg-slate-50/20"></td>
+                  <td className="p-6 font-medium"></td>
+                  <td className="p-6 text-teal-700 font-bold uppercase text-center"></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 15. MID-II EXAM QUESTION PAPER */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          15. MID-II Exam Question Paper
-        </h2>
+      <PrintSection title="15. MID-II Exam Question Paper">
         {mid2Paper ? (
           renderQuestionPaper(mid2Paper, "MID_II")
         ) : (
@@ -1219,16 +1239,12 @@ export default function CourseFilePrintPage() {
             </span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 16. MID-II EVALUATION SCHEME */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          16. MID-II Scheme of Evaluation
-        </h2>
+      <PrintSection title="16. MID-II Scheme of Evaluation">
         {courseFile?.mid2SchemePath ? (
           <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
             <div>
@@ -1244,25 +1260,21 @@ export default function CourseFilePrintPage() {
             </span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 17. MID-II EXAM MARKS LIST */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          17. MID-II Exam Marks List
-        </h2>
+      <PrintSection title="17. MID-II Exam Marks List">
         {mid2Paper ? (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-1.5 w-16 text-center">S.No</th>
-                <th className="border border-black p-1.5 w-36">Roll Number</th>
-                <th className="border border-black p-1.5">Student Full Name</th>
-                <th className="border border-black p-1.5 w-28 text-center">Marks Obtained</th>
-                <th className="border border-black p-1.5 w-28 text-center">Percentage</th>
+                <th className="p-1.5 w-16 text-center">S.No</th>
+                <th className="p-1.5 w-36 text-center">Roll Number</th>
+                <th className="p-1.5 px-4">Student Full Name</th>
+                <th className="p-1.5 w-28 text-center">Marks Obtained</th>
+                <th className="p-1.5 w-28 text-center">Percentage</th>
               </tr>
             </thead>
             <tbody>
@@ -1272,13 +1284,13 @@ export default function CourseFilePrintPage() {
                 const pct = ((total / mid2Paper.totalMarks) * 100).toFixed(1);
                 return (
                   <tr key={student.id} className={isAbs ? "bg-red-50/20" : ""}>
-                    <td className="border border-black p-1.5 text-center">{idx + 1}</td>
-                    <td className="border border-black p-1.5 font-bold uppercase">{student.rollNumber}</td>
-                    <td className="border border-black p-1.5 uppercase">{student.name}</td>
-                    <td className="border border-black p-1.5 text-center font-bold">
+                    <td className="p-1.5 text-center">{idx + 1}</td>
+                    <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
+                    <td className="p-1.5 uppercase px-4">{student.name}</td>
+                    <td className="p-1.5 text-center font-bold">
                       {isAbs ? "Absent" : total}
                     </td>
-                    <td className="border border-black p-1.5 text-center text-slate-500 font-medium">
+                    <td className="p-1.5 text-center text-slate-500 font-medium">
                       {isAbs ? "-" : `${pct}%`}
                     </td>
                   </tr>
@@ -1289,16 +1301,12 @@ export default function CourseFilePrintPage() {
         ) : (
           <p className="text-xs text-slate-500 italic">No marks entries recorded for MID-II exam.</p>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 18. SLOW LEARNERS PROGRESS STATUS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          18. Slow Learners Progress Status (Improved in MID-II)
-        </h2>
+      <PrintSection title="18. Slow Learners Progress Status (Improved in MID-II)">
         <p className="text-xs text-slate-500 mb-4 font-semibold">
           Lists students who were slow learners in MID-I (scored &lt; {threshold}%) but successfully scored above or equal to {threshold}% in MID-II.
         </p>
@@ -1308,15 +1316,15 @@ export default function CourseFilePrintPage() {
             No slow learners matched the criteria for improvement / progress comparison.
           </div>
         ) : (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-2 w-16 text-center">S.No</th>
-                <th className="border border-black p-2 w-40">Roll Number</th>
-                <th className="border border-black p-2">Student Name</th>
-                <th className="border border-black p-2 text-center w-28">MID-I Marks</th>
-                <th className="border border-black p-2 text-center w-28 text-emerald-700">MID-II Marks</th>
-                <th className="border border-black p-2 text-center w-28 text-teal-700">% Improvement</th>
+                <th className="p-2 w-16 text-center">S.No</th>
+                <th className="p-2 w-40 text-center">Roll Number</th>
+                <th className="p-2 px-4">Student Name</th>
+                <th className="p-2 text-center w-28">MID-I Marks</th>
+                <th className="p-2 text-center w-28 text-emerald-700">MID-II Marks</th>
+                <th className="p-2 text-center w-28 text-teal-700">% Improvement</th>
               </tr>
             </thead>
             <tbody>
@@ -1330,16 +1338,16 @@ export default function CourseFilePrintPage() {
                 const improvement = (pct2 - pct1).toFixed(1);
                 return (
                   <tr key={student.id}>
-                    <td className="border border-black p-2 text-center">{idx + 1}</td>
-                    <td className="border border-black p-2 font-bold uppercase">{student.rollNumber}</td>
-                    <td className="border border-black p-2 uppercase">{student.name}</td>
-                    <td className="border border-black p-2 text-center text-red-600">
+                    <td className="p-2 text-center">{idx + 1}</td>
+                    <td className="p-2 font-bold uppercase text-center">{student.rollNumber}</td>
+                    <td className="p-2 uppercase px-4">{student.name}</td>
+                    <td className="p-2 text-center text-red-600">
                       {score1} / {totalMarks1}
                     </td>
-                    <td className="border border-black p-2 text-center text-emerald-600 font-bold">
+                    <td className="p-2 text-center text-emerald-600 font-bold">
                       {score2} / {totalMarks2}
                     </td>
-                    <td className="border border-black p-2 text-center text-teal-600 font-bold">
+                    <td className="p-2 text-center text-teal-600 font-bold text-center">
                       +{improvement}%
                     </td>
                   </tr>
@@ -1348,148 +1356,113 @@ export default function CourseFilePrintPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 19. MID MARKS MAPPING WITH COs */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          19. Mid Exam Marks Mapping with COs
-        </h2>
+      <PrintSection title="19. Mid Exam Marks Mapping with COs">
         <p className="text-xs text-slate-500 mb-4 font-semibold">
-          Aggregate question score attainment grouped by Course Outcomes.
+          Aggregate question score attainment grouped by Course Outcomes (Benchmark: {benchmarkPct}%).
         </p>
 
         {mid1Paper || mid2Paper ? (
           <div className="space-y-6">
-            {mid1Paper && (
-              <div>
-                <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">MID-I CO-wise Attainment Summary</h4>
-                <table className="w-full text-xs text-center border-collapse border border-black font-semibold">
-                  <thead>
-                    <tr className="bg-slate-50 font-bold text-slate-700">
-                      <th className="border border-black p-2">Course Outcome (CO)</th>
-                      <th className="border border-black p-2">Max Marks allocated in Paper</th>
-                      <th className="border border-black p-2 text-emerald-700">Average Student Score</th>
-                      <th className="border border-black p-2 text-teal-700">Attainment %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {["CO1", "CO2", "CO3"].map((co) => {
-                      // Sum max marks for this CO in Mid 1
-                      let maxAllocated = 0;
-                      let totalObtained = 0;
-                      let attemptCount = 0;
+            {/* Per-paper CO summary tables */}
+            {[
+              { paper: mid1Paper, marks: mid1Marks as any[], label: "MID-I" },
+              { paper: mid2Paper, marks: mid2Marks as any[], label: "MID-II" },
+            ].map(({ paper, marks, label }) => {
+              if (!paper) return null;
+              // Only include COs that appear in this paper
+              const paperCOs = ([...new Set(
+                (paper.questions || []).flatMap((q: any) =>
+                  (q.subQuestions || []).map((sq: any) => sq.coMapping as string)
+                )
+              )] as string[]).filter(co => coList.includes(co)).sort();
 
-                      mid1Paper.questions.forEach((q: any) => {
-                        q.subQuestions.forEach((sq: any) => {
-                          if (sq.coMapping === co) {
-                            maxAllocated += sq.maxMarks;
-                            // Add student scores
-                            mid1Marks.forEach((m: any) => {
-                              if (m.subQuestionId === sq.id && !m.isAbsent) {
-                                totalObtained += m.marksObtained || 0;
-                                attemptCount++;
-                              }
+              if (paperCOs.length === 0) return null;
+
+              return (
+                <div key={label}>
+                  <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">{label} CO-wise Pass % Summary</h4>
+                  <table className="print-table w-full text-xs text-center border-collapse font-semibold">
+                    <thead>
+                      <tr className="bg-slate-50 font-bold text-slate-700">
+                        <th className="p-2 text-center">Course Outcome</th>
+                        <th className="p-2 text-center">Max Marks in Paper</th>
+                        <th className="p-2 text-center">Benchmark Mark ({benchmarkPct}%)</th>
+                        <th className="p-2 text-emerald-700 text-center">Avg Student Score</th>
+                        <th className="p-2 text-amber-700 text-center">Students ≥ Benchmark</th>
+                        <th className="p-2 text-teal-700 text-center">Pass %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paperCOs.map((co) => {
+                        let totalMaxMarks = 0;
+                        let totalObtained = 0;
+                        let studentsAbove = 0;
+                        const studentSet = new Set<string>();
+
+                        (paper.questions || []).forEach((q: any) => {
+                          (q.subQuestions || []).forEach((sq: any) => {
+                            if (sq.coMapping !== co) return;
+                            const sqBenchmark = sq.maxMarks * (benchmarkPct / 100);
+                            totalMaxMarks += sq.maxMarks;
+                            marks.filter((m: any) => m.subQuestionId === sq.id && !m.isAbsent).forEach((m: any) => {
+                              studentSet.add(m.studentId || m.subQuestionId + "_" + m.id);
+                              totalObtained += m.marksObtained || 0;
+                              if ((m.marksObtained || 0) >= sqBenchmark) studentsAbove++;
                             });
-                          }
+                          });
                         });
-                      });
 
-                      const avgScore = attemptCount > 0 ? (totalObtained / (attemptCount / maxAllocated)) : 0;
-                      const pct = maxAllocated > 0 ? ((avgScore / maxAllocated) * 100).toFixed(1) : "0";
+                        const studentCount = (marks.filter((m: any) => !m.isAbsent)
+                          .reduce((acc: Set<string>, m: any) => { acc.add(m.studentId); return acc; }, new Set<string>())).size;
+                        const avgScore = studentCount > 0 ? totalObtained / studentCount : 0;
+                        const passPct = studentCount > 0 ? (studentsAbove / studentCount * 100).toFixed(1) : "0";
+                        const benchmarkMark = totalMaxMarks * benchmarkPct / 100;
 
-                      return (
-                        <tr key={co}>
-                          <td className="border border-black p-2 font-bold bg-slate-50/20">{co}</td>
-                          <td className="border border-black p-2">{maxAllocated}</td>
-                          <td className="border border-black p-2 text-emerald-600">{avgScore.toFixed(1)}</td>
-                          <td className="border border-black p-2 text-teal-600 font-bold">{pct}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {mid2Paper && (
-              <div>
-                <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">MID-II CO-wise Attainment Summary</h4>
-                <table className="w-full text-xs text-center border-collapse border border-black font-semibold">
-                  <thead>
-                    <tr className="bg-slate-50 font-bold text-slate-700">
-                      <th className="border border-black p-2">Course Outcome (CO)</th>
-                      <th className="border border-black p-2">Max Marks allocated in Paper</th>
-                      <th className="border border-black p-2 text-emerald-700">Average Student Score</th>
-                      <th className="border border-black p-2 text-teal-700">Attainment %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {["CO3", "CO4", "CO5"].map((co) => {
-                      let maxAllocated = 0;
-                      let totalObtained = 0;
-                      let attemptCount = 0;
-
-                      mid2Paper.questions.forEach((q: any) => {
-                        q.subQuestions.forEach((sq: any) => {
-                          if (sq.coMapping === co) {
-                            maxAllocated += sq.maxMarks;
-                            mid2Marks.forEach((m: any) => {
-                              if (m.subQuestionId === sq.id && !m.isAbsent) {
-                                totalObtained += m.marksObtained || 0;
-                                attemptCount++;
-                              }
-                            });
-                          }
-                        });
-                      });
-
-                      const avgScore = attemptCount > 0 ? (totalObtained / (attemptCount / maxAllocated)) : 0;
-                      const pct = maxAllocated > 0 ? ((avgScore / maxAllocated) * 100).toFixed(1) : "0";
-
-                      return (
-                        <tr key={co}>
-                          <td className="border border-black p-2 font-bold bg-slate-50/20">{co}</td>
-                          <td className="border border-black p-2">{maxAllocated}</td>
-                          <td className="border border-black p-2 text-emerald-600">{avgScore.toFixed(1)}</td>
-                          <td className="border border-black p-2 text-teal-600 font-bold">{pct}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                        return (
+                          <tr key={co}>
+                            <td className="p-2 font-bold bg-slate-50/20 text-center">{co}</td>
+                            <td className="p-2 text-center">{totalMaxMarks}</td>
+                            <td className="p-2 text-center text-amber-700">{benchmarkMark.toFixed(1)}</td>
+                            <td className="p-2 text-emerald-600 text-center">{avgScore.toFixed(1)}</td>
+                            <td className="p-2 text-center">{studentsAbove}</td>
+                            <td className="p-2 text-teal-600 font-bold text-center">{passPct}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="text-xs text-slate-500 italic">No Mid exams question paper exists to evaluate CO-wise mapping.</p>
         )}
-      </div>
+      </PrintSection>
+
 
       {/* ========================================================================= */}
       {/* 20. FINAL SESSIONAL MARKS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          20. Final Sessional Marks (OBE Internals)
-        </h2>
-        <table className="w-full text-[10px] text-left border-collapse border border-black font-semibold">
+      <PrintSection title="20. Final Sessional Marks (OBE Internals)">
+        <table className="print-table w-full text-[10px] text-left border-collapse font-semibold">
           <thead>
             <tr className="bg-slate-50 font-bold text-slate-700">
-              <th className="border border-black p-1 text-center w-10">S.No</th>
-              <th className="border border-black p-1 w-24">Roll Number</th>
-              <th className="border border-black p-1">Student Full Name</th>
-              <th className="border border-black p-1 w-14 text-center">Mid-I (30M)</th>
-              <th className="border border-black p-1 w-14 text-center">Mid-I (20M)</th>
-              <th className="border border-black p-1 w-14 text-center">Mid-II (30M)</th>
-              <th className="border border-black p-1 w-14 text-center">Mid-II (20M)</th>
-              <th className="border border-black p-1 w-14 text-center bg-slate-100">Mid Final (20M)</th>
-              <th className="border border-black p-1 w-14 text-center">Assignment (10M)</th>
-              <th className="border border-black p-1 w-16 text-center bg-teal-50">Final Internals (30M)</th>
+              <th className="p-1 text-center w-10">S.No</th>
+              <th className="p-1 w-24 text-center">Roll Number</th>
+              <th className="p-1 px-4">Student Full Name</th>
+              <th className="p-1 w-14 text-center">Mid-I (30M)</th>
+              <th className="p-1 w-14 text-center">Mid-I (20M)</th>
+              <th className="p-1 w-14 text-center">Mid-II (30M)</th>
+              <th className="p-1 w-14 text-center">Mid-II (20M)</th>
+              <th className="p-1 w-14 text-center bg-slate-100">Mid Final (20M)</th>
+              <th className="p-1 w-14 text-center">Assignment (10M)</th>
+              <th className="p-1 w-16 text-center bg-teal-50">Final Internals (30M)</th>
             </tr>
           </thead>
           <tbody>
@@ -1555,16 +1528,16 @@ export default function CourseFilePrintPage() {
 
               return (
                 <tr key={student.id}>
-                  <td className="border border-black p-1 text-center">{idx + 1}</td>
-                  <td className="border border-black p-1 font-bold uppercase">{student.rollNumber}</td>
-                  <td className="border border-black p-1 uppercase">{student.name}</td>
-                  <td className="border border-black p-1 text-center">{m1Val}</td>
-                  <td className="border border-black p-1 text-center">{s1Display}</td>
-                  <td className="border border-black p-1 text-center">{m2Val}</td>
-                  <td className="border border-black p-1 text-center">{s2Display}</td>
-                  <td className="border border-black p-1 text-center font-bold bg-slate-100">{avgMidDisplay}</td>
-                  <td className="border border-black p-1 text-center">{assDisplay}</td>
-                  <td className="border border-black p-1 text-center font-bold bg-teal-50/20 text-teal-800">
+                  <td className="p-1 text-center">{idx + 1}</td>
+                  <td className="p-1 font-bold uppercase text-center">{student.rollNumber}</td>
+                  <td className="p-1 uppercase px-4">{student.name}</td>
+                  <td className="p-1 text-center">{m1Val}</td>
+                  <td className="p-1 text-center">{s1Display}</td>
+                  <td className="p-1 text-center">{m2Val}</td>
+                  <td className="p-1 text-center">{s2Display}</td>
+                  <td className="p-1 text-center font-bold bg-slate-100">{avgMidDisplay}</td>
+                  <td className="p-1 text-center">{assDisplay}</td>
+                  <td className="p-1 text-center font-bold bg-teal-50/20 text-teal-800">
                     {finalInternalVal}
                   </td>
                 </tr>
@@ -1572,16 +1545,12 @@ export default function CourseFilePrintPage() {
             })}
           </tbody>
         </table>
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 21. PREVIOUS QUESTION PAPERS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          21. Previous Question Papers
-        </h2>
+      <PrintSection title="21. Previous Question Papers">
         {courseFile?.prevPapersPaths && Array.isArray(courseFile.prevPapersPaths) && courseFile.prevPapersPaths.length > 0 ? (
           <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
             <div>
@@ -1603,24 +1572,20 @@ export default function CourseFilePrintPage() {
             </span>
           </div>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
       {/* 22. SEMESTER-END RESULTS */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          22. Semester-End Examination Results Summary
-        </h2>
+      <PrintSection title="22. Semester-End Examination Results Summary">
         {semesterResults && semesterResults.length > 0 ? (
-          <table className="w-full text-xs text-left border-collapse border border-black font-semibold">
+          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
             <thead>
               <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="border border-black p-1.5 w-16 text-center">S.No</th>
-                <th className="border border-black p-1.5 w-36">Roll Number</th>
-                <th className="border border-black p-1.5">Student Full Name</th>
-                <th className="border border-black p-1.5 w-32 text-center bg-teal-50">Grade Secured</th>
+                <th className="p-1.5 w-16 text-center">S.No</th>
+                <th className="p-1.5 w-36 text-center">Roll Number</th>
+                <th className="p-1.5 px-4">Student Full Name</th>
+                <th className="p-1.5 w-32 text-center bg-teal-50">Grade Secured</th>
               </tr>
             </thead>
             <tbody>
@@ -1636,10 +1601,10 @@ export default function CourseFilePrintPage() {
 
                 return (
                   <tr key={student.id}>
-                    <td className="border border-black p-1.5 text-center">{idx + 1}</td>
-                    <td className="border border-black p-1.5 font-bold uppercase">{student.rollNumber}</td>
-                    <td className="border border-black p-1.5 uppercase">{student.name}</td>
-                    <td className="border border-black p-1.5 text-center font-extrabold bg-teal-50/20 text-teal-900">
+                    <td className="p-1.5 text-center">{idx + 1}</td>
+                    <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
+                    <td className="p-1.5 uppercase px-4">{student.name}</td>
+                    <td className="p-1.5 text-center font-extrabold bg-teal-50/20 text-teal-900">
                       {grade}
                     </td>
                   </tr>
@@ -1650,63 +1615,159 @@ export default function CourseFilePrintPage() {
         ) : (
           <p className="text-xs text-slate-500 italic">Semester-end results grades not published/posted yet for this batch.</p>
         )}
-      </div>
+      </PrintSection>
 
       {/* ========================================================================= */}
-      {/* 23. CO PO MAPPING ATTAINMENT */}
+      {/* 23. CO-PO / CO-PSO ATTAINMENT */}
       {/* ========================================================================= */}
-      <div className="report-page bg-white p-6 border border-slate-200 rounded-xl shadow-sm mb-12">
-        {renderHeader()}
-        <h2 className="font-bold text-lg text-slate-800 mb-4 border-b border-black pb-1">
-          23. CO-PO Attainment & Achieved Levels
-        </h2>
+      <PrintSection title="23. CO-PO & CO-PSO Attainment">
         <p className="text-xs text-slate-500 mb-4 font-semibold">
-          Final attainment statistics mapping based on sessional evaluations.
+          Benchmark: {benchmarkPct}% &nbsp;|&nbsp; Survey Rating: {surveyRating}/3 &nbsp;|&nbsp;
+          Rounding: {attainmentDecimal} decimal{attainmentDecimal !== 1 ? "s" : ""}
+          {(semesterResults as any[]).length > 0 ? " | University results included" : " | University results: pending"}
         </p>
 
-        <table className="w-full text-xs text-center border-collapse border border-black font-semibold">
+        {/* CO Attainment Summary */}
+        <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">CO Attainment Summary</h4>
+        <table className="print-table w-full text-xs text-center border-collapse font-semibold mb-6">
           <thead>
             <tr className="bg-slate-50 font-bold text-slate-700">
-              <th className="border border-black p-2">Course Outcome (CO)</th>
-              <th className="border border-black p-2">Direct Attainment Level (1-3)</th>
-              <th className="border border-black p-2">Indirect Attainment (Feedback)</th>
-              <th className="border border-black p-2 bg-teal-50">Final Attainment Achieved</th>
+              <th className="p-2 text-center">CO</th>
+              <th className="p-2 text-center">Combined Pass %</th>
+              <th className="p-2 text-center">Internal Score</th>
+              <th className="p-2 text-center">Internal Level</th>
+              <th className="p-2 text-center">Uni Pass %</th>
+              <th className="p-2 text-center">Uni Level</th>
+              <th className="p-2 bg-teal-50 text-center text-teal-800">Final CO Attainment</th>
             </tr>
           </thead>
           <tbody>
-            {["CO1", "CO2", "CO3", "CO4", "CO5"].map((co) => {
-              // Calculate rough attainment level based on sessional marks entries
-              // High (3) if average >= 70%, Medium (2) if >= 50%, Low (1) if < 50%
-              let totalScore = 0;
-              let count = 0;
-              internalMarks.forEach((i: any) => {
-                if (i.marksObtained !== null && i.marksObtained !== undefined) {
-                  totalScore += i.marksObtained;
-                  count++;
-                }
-              });
-
-              const avgSessional = count > 0 ? (totalScore / count) : 0;
-              const pct = (avgSessional / 40) * 100; // Assuming max internal is 40
-
-              let directLevel = 1;
-              if (pct >= 70) directLevel = 3;
-              else if (pct >= 50) directLevel = 2;
-
-              return (
-                <tr key={co}>
-                  <td className="border border-black p-2 font-bold bg-slate-50/20">{co}</td>
-                  <td className="border border-black p-2">{directLevel} / 3</td>
-                  <td className="border border-black p-2">2.5 / 3</td>
-                  <td className="border border-black p-2 font-bold bg-teal-50/20 text-teal-800">
-                    {((directLevel * 0.8) + (2.5 * 0.2)).toFixed(2)}
-                  </td>
-                </tr>
-              );
-            })}
+            {attainmentResult.coResults.map(cr => (
+              <tr key={cr.co}>
+                <td className="p-2 font-bold bg-slate-50/20">{cr.co}</td>
+                <td className="p-2">{cr.combinedPassPct.toFixed(1)}%</td>
+                <td className="p-2">{cr.internalScore.toFixed(1)}%</td>
+                <td className="p-2">{cr.internalLevel} / 3</td>
+                <td className="p-2">{cr.universityPassPct !== null ? `${cr.universityPassPct.toFixed(1)}%` : "–"}</td>
+                <td className="p-2">{cr.universityLevel !== null ? `${cr.universityLevel} / 3` : "–"}</td>
+                <td className="p-2 font-extrabold bg-teal-50/30 text-teal-800">{cr.finalAttainment.toFixed(attainmentDecimal)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </div>
+
+        {/* CO-PO Matrix */}
+        {(coPoMappings as any[]).length > 0 && (() => {
+          const pos = [...new Set((coPoMappings as any[]).map((m: any) => m.po))].sort();
+          return (
+            <div className="mb-6">
+              <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">CO-PO Mapping & PO Attainment</h4>
+              <div className="overflow-x-auto">
+                <table className="print-table w-full text-[10px] text-center border-collapse font-semibold">
+                  <thead>
+                    <tr className="bg-slate-50 font-bold text-slate-700">
+                      <th className="p-1.5 text-left">CO</th>
+                      <th className="p-1.5 text-center bg-teal-50">Attainment</th>
+                      {pos.map(po => <th key={po} className="p-1.5 text-center min-w-[42px]">{po}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coList.map(co => {
+                      const coAtt = attainmentResult.coResults.find(r => r.co === co)?.finalAttainment ?? 0;
+                      return (
+                        <tr key={co}>
+                          <td className="p-1.5 font-bold text-left">{co}</td>
+                          <td className="p-1.5 text-center bg-teal-50 font-extrabold text-teal-800">{coAtt.toFixed(attainmentDecimal)}</td>
+                          {pos.map(po => {
+                            const m = (coPoMappings as any[]).find((x: any) => x.co === co && x.po === po);
+                            const w = m?.weight;
+                            if (!w) return <td key={po} className="p-1.5 text-slate-200">–</td>;
+                            const cell = ((w / 3) * coAtt).toFixed(attainmentDecimal);
+                            return (
+                              <td key={po} className="p-1.5">
+                                <div className="text-[9px] text-slate-400">{w}</div>
+                                <div className="font-bold text-teal-700">{cell}</div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-teal-50 font-extrabold text-teal-800">
+                      <td className="p-1.5 text-left text-[10px] uppercase">PO Attainment</td>
+                      <td className="p-1.5" />
+                      {pos.map(po => (
+                        <td key={po} className="p-1.5 text-center text-sm">
+                          {attainmentResult.poAttainments[po] !== undefined
+                            ? attainmentResult.poAttainments[po].toFixed(attainmentDecimal)
+                            : "–"}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* CO-PSO Matrix */}
+        {(coPsoMappings as any[]).length > 0 && (() => {
+          const psos = [...new Set((coPsoMappings as any[]).map((m: any) => m.pso))].sort();
+          return (
+            <div>
+              <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">CO-PSO Mapping & PSO Attainment</h4>
+              <div className="overflow-x-auto">
+                <table className="print-table w-full text-[10px] text-center border-collapse font-semibold">
+                  <thead>
+                    <tr className="bg-slate-50 font-bold text-slate-700">
+                      <th className="p-1.5 text-left">CO</th>
+                      <th className="p-1.5 text-center bg-indigo-50">Attainment</th>
+                      {psos.map(pso => <th key={pso} className="p-1.5 text-center min-w-[56px]">{pso}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coList.map(co => {
+                      const coAtt = attainmentResult.coResults.find(r => r.co === co)?.finalAttainment ?? 0;
+                      return (
+                        <tr key={co}>
+                          <td className="p-1.5 font-bold text-left">{co}</td>
+                          <td className="p-1.5 text-center bg-indigo-50 font-extrabold text-indigo-800">{coAtt.toFixed(attainmentDecimal)}</td>
+                          {psos.map(pso => {
+                            const m = (coPsoMappings as any[]).find((x: any) => x.co === co && x.pso === pso);
+                            const w = m?.weight;
+                            if (!w) return <td key={pso} className="p-1.5 text-slate-200">–</td>;
+                            const cell = ((w / 3) * coAtt).toFixed(attainmentDecimal);
+                            return (
+                              <td key={pso} className="p-1.5">
+                                <div className="text-[9px] text-slate-400">{w}</div>
+                                <div className="font-bold text-indigo-700">{cell}</div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-indigo-50 font-extrabold text-indigo-800">
+                      <td className="p-1.5 text-left text-[10px] uppercase">PSO Attainment</td>
+                      <td className="p-1.5" />
+                      {psos.map(pso => (
+                        <td key={pso} className="p-1.5 text-center text-sm">
+                          {attainmentResult.psoAttainments[pso] !== undefined
+                            ? attainmentResult.psoAttainments[pso].toFixed(attainmentDecimal)
+                            : "–"}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+      </PrintSection>
+
+
 
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -1760,6 +1821,33 @@ export default function CourseFilePrintPage() {
 
           thead {
             display: table-header-group !important;
+          }
+
+          table.print-section-table,
+          table.print-section-table tr,
+          table.print-section-table td,
+          table.print-section-table th {
+            border: none !important;
+            background: none !important;
+            padding: 0 !important;
+          }
+          table.print-table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin-top: 10px !important;
+            border: 1px solid #000000 !important;
+          }
+          table.print-table th, table.print-table td {
+            border: 1px solid #000000 !important;
+            padding: 6px 8px !important;
+            text-align: left !important;
+            font-size: 10px !important;
+            color: #000000 !important;
+          }
+          table.print-table th {
+            background-color: #f1f5f9 !important;
+            font-weight: bold !important;
+            text-transform: uppercase !important;
           }
         }
       `}} />

@@ -89,6 +89,9 @@ model Faculty {
   FacultySubjectMapping FacultySubjectMapping[]
   FeedbackResponse      FeedbackResponse[]
   CourseFile            CourseFile[]
+  leaveRequests         LeaveRequest[]          @relation("FacultyLeaveRequests")
+  substituteLeaves      LeaveRequest[]          @relation("SubstituteFacultyLeaves")
+  leaveQuotas           FacultyLeaveQuota[]
 }
 
 model Student {
@@ -803,8 +806,14 @@ model CourseFile {
   mid2SchemePath       String?
   prevPapersPaths      Json? // Array of string paths
 
+  // CO Attainment Settings (per subject per academic year)
+  benchmarkPct      Float   @default(50)  // Benchmark % threshold for attainment (e.g. 50 or 60)
+  surveyRating      Float?               // Faculty-entered course exit survey rating (1–3 scale)
+  attainmentDecimal Int     @default(2)  // Rounding decimal places for PO/PSO attainment output
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
 
   // Relationships
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
@@ -814,4 +823,56 @@ model CourseFile {
   faculty      Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
 
   @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId])
+}
+
+enum LeaveType {
+  CL   // Casual Leave
+  AL   // Academic / Annual Leave
+  ML   // Medical / Maternity Leave
+  OD   // On Duty (Invigilation, external work, etc.)
+}
+
+enum LeaveStatus {
+  PENDING_HOD         // Submitted by faculty; waiting for HOD recommendation/approval
+  PENDING_DIRECTOR    // Approved/Recommended by HOD; waiting for Director final approval
+  APPROVED            // Approved by Director
+  REJECTED            // Rejected by HOD or Director
+}
+
+model LeaveRequest {
+  id                 String       @id @default(uuid())
+  facultyId          String
+  leaveType          LeaveType
+  startDate          DateTime
+  endDate            DateTime
+  numberOfDays       Float        // Calculated number of days (e.g. 1.0, 0.5 for half-days)
+  reason             String       @db.Text // Purpose / Details of leave
+  substituteId       String?      // Reference to designated substitute Faculty
+  status             LeaveStatus  @default(PENDING_HOD)
+  hodRemarks         String?      @db.Text
+  directorRemarks    String?      @db.Text
+  hodApprovedAt      DateTime?
+  directorApprovedAt DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  
+  faculty            Faculty      @relation("FacultyLeaveRequests", fields: [facultyId], references: [id], onDelete: Cascade)
+  substitute         Faculty?     @relation("SubstituteFacultyLeaves", fields: [substituteId], references: [id])
+}
+
+model FacultyLeaveQuota {
+  id                 String       @id @default(uuid())
+  facultyId          String
+  clQuota            Float        @default(15) // Admin-assignable casual leaves quota
+  clConsumed         Float        @default(0)  // Approved casual leaves consumed in current cycle
+  odConsumed         Float        @default(0)  // Total On Duty leaves consumed in current cycle
+  alConsumed         Float        @default(0)  // Total Academic leaves consumed in current cycle
+  mlConsumed         Float        @default(0)  // Total Medical leaves consumed in current cycle
+  calendarYear       String       // e.g. "2026"
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  faculty            Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@unique([facultyId, calendarYear])
 }

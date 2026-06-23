@@ -86,15 +86,35 @@ export async function GET(req: NextRequest) {
           include: {
             subQuestions: true
           }
+        },
+        masterPaper: {
+          include: {
+            questions: {
+              include: {
+                subQuestions: true
+              }
+            }
+          }
         }
       }
     });
 
-    const paperIds = papers.map(p => p.id);
+    // Handle common papers questions mapping
+    for (const paper of papers) {
+      if (paper.masterPaperId && paper.masterPaper) {
+        (paper as any).questions = paper.masterPaper.questions;
+      }
+    }
 
-    // 3. Fetch choice groups for these papers
+    const paperIds = papers.map(p => p.id);
+    const allPaperIdsForCg = [
+      ...paperIds,
+      ...papers.map(p => p.masterPaperId).filter(Boolean) as string[]
+    ];
+
+    // 3. Fetch choice groups for these papers (and their master papers)
     const choiceGroups = await prisma.midExamChoiceGroup.findMany({
-      where: { paperId: { in: paperIds } },
+      where: { paperId: { in: allPaperIdsForCg } },
       include: {
         questions: {
           include: {
@@ -163,7 +183,7 @@ export async function GET(req: NextRequest) {
 
     papers.forEach(paper => {
       paperStudentTotals[paper.id] = {};
-      const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === paper.id);
+      const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
 
       students.forEach(student => {
         const studentEntries = marksEntries.filter(e => e.paperId === paper.id && e.studentId === student.id);

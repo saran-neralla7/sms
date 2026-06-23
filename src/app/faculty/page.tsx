@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList, FaFileAlt } from "react-icons/fa";
+import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
 
@@ -81,6 +81,16 @@ export default function FacultyIndexPage() {
                             description="Manage, compile, and print official Course Files containing syllabus, plans, and results."
                             href="/faculty/course-files"
                             colorClass="bg-teal-50 text-teal-600"
+                        />
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+                        <DashboardCard
+                            title="Leaves Management"
+                            icon={<FaCalendarAlt className="h-6 w-6" />}
+                            description="Apply for CL/OD/AL/ML leaves, check balance quotas, and print approved leave slips."
+                            href="/faculty/leaves"
+                            colorClass="bg-indigo-50 text-indigo-600"
                         />
                     </motion.div>
                 </div>
