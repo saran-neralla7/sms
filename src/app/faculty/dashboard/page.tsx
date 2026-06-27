@@ -17,6 +17,7 @@ export default function FacultyDashboard() {
     const [activeTab, setActiveTab] = useState<"overview" | "personal-timetable" | "section-timetable">("overview");
     const [expandedMappings, setExpandedMappings] = useState<Record<string, boolean>>({});
     const [studentSearch, setStudentSearch] = useState<Record<string, string>>({});
+    const [semFilter, setSemFilter] = useState<string>("ALL");
 
     const toggleMapping = (id: string) => {
         setExpandedMappings(prev => ({ ...prev, [id]: !prev[id] }));
@@ -207,80 +208,123 @@ export default function FacultyDashboard() {
                         {/* Left Column: Subjects */}
                         <div className="lg:col-span-2 space-y-8">
                             <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="rounded-lg bg-blue-100 p-2 text-blue-600"><FaBookOpen /></div>
-                                    <h2 className="text-xl font-bold text-slate-900">Assigned Subjects</h2>
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="rounded-lg bg-blue-100 p-2 text-blue-600"><FaBookOpen /></div>
+                                        <h2 className="text-xl font-bold text-slate-900">Assigned Subjects</h2>
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg self-start sm:self-auto">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSemFilter("ALL")}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${semFilter === "ALL" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-600 hover:text-slate-800"}`}
+                                        >
+                                            All
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSemFilter("1")}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${semFilter === "1" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-600 hover:text-slate-800"}`}
+                                        >
+                                            Sem I
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSemFilter("2")}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${semFilter === "2" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-600 hover:text-slate-800"}`}
+                                        >
+                                            Sem II
+                                        </button>
+                                    </div>
                                 </div>
                                 
                                 {subjects.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {subjects.map((mapping: any) => (
-                                            <div key={mapping.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4 hover:shadow-md transition-shadow">
-                                                <div className="flex justify-between items-start">
-                                                    <div>
-                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                                                                {mapping.academicYear?.name}
-                                                            </span>
-                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
-                                                                {mapping.subject?.department?.code || "DEPT"} - Year {mapping.subject?.year} Sem {mapping.subject?.semester}
+                                    (() => {
+                                        const filtered = subjects.filter((mapping: any) => {
+                                            if (semFilter === "ALL") return true;
+                                            return String(mapping.subject?.semester) === semFilter;
+                                        });
+
+                                        if (filtered.length === 0) {
+                                            return (
+                                                <div className="text-center py-12 text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50 w-full col-span-2">
+                                                    <p className="italic">No assigned subjects found for Semester {semFilter === "1" ? "I" : "II"}.</p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {filtered.map((mapping: any) => (
+                                                    <div key={mapping.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4 hover:shadow-md transition-shadow">
+                                                        <div className="flex justify-between items-start">
+                                                            <div>
+                                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                                                        {mapping.academicYear?.name}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
+                                                                        {mapping.subject?.department?.code || "DEPT"} - Year {mapping.subject?.year} Sem {mapping.subject?.semester}
+                                                                    </span>
+                                                                </div>
+                                                                <h4 className="font-bold text-slate-900 text-lg leading-tight">{mapping.subject?.name}</h4>
+                                                                <p className="text-sm font-mono text-slate-500 mt-1">{mapping.subject?.code}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
+                                                            <span className="text-sm font-medium text-slate-600 flex items-center gap-2">
+                                                                <FaChalkboard className="text-slate-400" />
+                                                                Section {mapping.section?.name}
                                                             </span>
                                                         </div>
-                                                        <h4 className="font-bold text-slate-900 text-lg leading-tight">{mapping.subject?.name}</h4>
-                                                        <p className="text-sm font-mono text-slate-500 mt-1">{mapping.subject?.code}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
-                                                    <span className="text-sm font-medium text-slate-600 flex items-center gap-2">
-                                                        <FaChalkboard className="text-slate-400" />
-                                                        Section {mapping.section?.name}
-                                                    </span>
-                                                </div>
 
-                                                <button 
-                                                    onClick={() => toggleMapping(mapping.id)}
-                                                    className="mt-4 flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-                                                >
-                                                    <span>{mapping.students?.length || 0} Students Assigned</span>
-                                                    <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
-                                                        {expandedMappings[mapping.id] ? "Hide ▲" : "View ▼"}
-                                                    </span>
-                                                </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => toggleMapping(mapping.id)}
+                                                            className="mt-4 flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                                                        >
+                                                            <span>{mapping.students?.length || 0} Students Assigned</span>
+                                                            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                                                                {expandedMappings[mapping.id] ? "Hide ▲" : "View ▼"}
+                                                            </span>
+                                                        </button>
 
-                                                {expandedMappings[mapping.id] && (
-                                                    <div className="mt-3 p-3 bg-white border border-slate-100 rounded-lg space-y-3">
-                                                        <input 
-                                                            type="text"
-                                                            placeholder="Search students..."
-                                                            value={studentSearch[mapping.id] || ""}
-                                                            onChange={(e) => handleSearchChange(mapping.id, e.target.value)}
-                                                            className="w-full p-2 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none text-slate-700"
-                                                        />
-                                                        <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
-                                                            {(() => {
-                                                                const query = (studentSearch[mapping.id] || "").toLowerCase();
-                                                                const filtered = (mapping.students || []).filter((s: any) => 
-                                                                    s.name.toLowerCase().includes(query) || 
-                                                                    s.rollNumber.toLowerCase().includes(query)
-                                                                );
-                                                                if (filtered.length === 0) {
-                                                                    return <p className="text-slate-400 text-center py-4 italic text-[11px]">No matching students</p>;
-                                                                }
-                                                                return filtered.map((student: any) => (
-                                                                    <div key={student.id} className="flex justify-between items-center py-2 hover:bg-slate-50 px-1 rounded transition-colors">
-                                                                        <span className="font-semibold text-slate-700">{student.name}</span>
-                                                                        <span className="font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
-                                                                            {student.rollNumber}
-                                                                        </span>
-                                                                    </div>
-                                                                ));
-                                                            })()}
-                                                        </div>
+                                                        {expandedMappings[mapping.id] && (
+                                                            <div className="mt-3 p-3 bg-white border border-slate-100 rounded-lg space-y-3">
+                                                                <input 
+                                                                    type="text"
+                                                                    placeholder="Search students..."
+                                                                    value={studentSearch[mapping.id] || ""}
+                                                                    onChange={(e) => handleSearchChange(mapping.id, e.target.value)}
+                                                                    className="w-full p-2 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none text-slate-700"
+                                                                />
+                                                                <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
+                                                                    {(() => {
+                                                                        const query = (studentSearch[mapping.id] || "").toLowerCase();
+                                                                        const filteredStudents = (mapping.students || []).filter((s: any) => 
+                                                                            s.name.toLowerCase().includes(query) || 
+                                                                            s.rollNumber.toLowerCase().includes(query)
+                                                                        );
+                                                                        if (filteredStudents.length === 0) {
+                                                                            return <p className="text-slate-400 text-center py-4 italic text-[11px]">No matching students</p>;
+                                                                        }
+                                                                        return filteredStudents.map((student: any) => (
+                                                                            <div key={student.id} className="flex justify-between items-center py-2 hover:bg-slate-50 px-1 rounded transition-colors">
+                                                                                <span className="font-semibold text-slate-700">{student.name}</span>
+                                                                                <span className="font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                                                                                    {student.rollNumber}
+                                                                                </span>
+                                                                            </div>
+                                                                        ));
+                                                                    })()}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
+                                        );
+                                    })()
                                 ) : (
                                     <div className="text-center py-12 text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50">
                                         <p>No subjects assigned currently.</p>

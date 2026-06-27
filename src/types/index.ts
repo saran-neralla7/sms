@@ -102,6 +102,7 @@ export interface AttendanceHistory {
     };
     subject?: Subject;
     period?: Period;
+    topicsTaught?: string | null;
 }
 
 export interface Period {

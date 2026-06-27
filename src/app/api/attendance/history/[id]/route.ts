@@ -35,14 +35,20 @@ export async function PUT(
 
     try {
         const body = await request.json();
-        const { details, status } = body;
+        const { details, status, topicsTaught } = body;
+
+        const updateData: any = {
+            details: JSON.stringify(details), // Ensure it's stringified
+            status: status, // Update status label if needed, or keep original
+        };
+
+        if (topicsTaught !== undefined) {
+            updateData.topicsTaught = topicsTaught;
+        }
 
         const updated = await prisma.attendanceHistory.update({
             where: { id: params.id },
-            data: {
-                details: JSON.stringify(details), // Ensure it's stringified
-                status: status, // Update status label if needed, or keep original
-            }
+            data: updateData
         });
 
         return NextResponse.json(updated);

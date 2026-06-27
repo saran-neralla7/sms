@@ -76,7 +76,23 @@ export default function SMSTestPage() {
             const payload = selectedTemplate === "marks" ? {
                 testCases: validCases.map(tc => ({
                     mobile: tc.mobile,
-                    message: `Dear Parent, Your ward ${marksFields.studentName}, ${marksFields.rollNumber} Year ${marksFields.year} sem ${marksFields.semester} Mid Examination marks are as follows: subject 1: ${marksFields.subject1 || "N/A"} Marks: ${marksFields.marks1 || "-"} subject 2: ${marksFields.subject2 || "N/A"} Marks: ${marksFields.marks2 || "-"} subject 3: ${marksFields.subject3 || "N/A"} Marks: ${marksFields.marks3 || "-"} subject 4: ${marksFields.subject4 || "N/A"} Marks: ${marksFields.marks4 || "-"} subject 5: ${marksFields.subject5 || "N/A"} Marks: ${marksFields.marks5 || "-"} Please Contact HOD for any queries. Gayatri Vidya Parishad`
+                    message: `Dear Parent,
+Your ward ${marksFields.studentName || "Var1"},
+${marksFields.year || "Var2"} Year ${marksFields.semester || "Var3"} sem ${marksFields.rollNumber || "Var4"} Mid
+Examination marks are as
+follows:
+subject 1:${marksFields.subject1 || "Var5"} Marks:
+${marksFields.marks1 || "Var6"}
+subject 2:${marksFields.subject2 || "Var7"}
+Marks: ${marksFields.marks2 || "Var8"}
+subject 3:${marksFields.subject3 || "Var9"} Marks:
+${marksFields.marks3 || "Var10"}
+subject 4:${marksFields.subject4 || "Var11"} Marks:
+${marksFields.marks4 || "Var12"}
+subject 5:${marksFields.subject5 || "Var13"} Marks: ${marksFields.marks5 || "Var14"}
+Please Contact HOD for any
+queries.
+Gayatri Vidya Parishad`
                 })),
                 templateId: templateId.trim()
             } : {
@@ -169,8 +185,24 @@ export default function SMSTestPage() {
                         ) : (
                             <div className="space-y-4">
                                 <div className="bg-white rounded-lg p-4 border border-blue-100 shadow-inner">
-                                    <p className="text-xs text-slate-700 italic">
-                                        "Dear Parent, Your ward <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.studentName || "Var1"}</span>, <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.rollNumber || "Var2"}</span> Year <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.year || "Var3"}</span> sem <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.semester || "Var4"}</span> Mid Examination marks are as follows: subject 1: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject1 || "Var5"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks1 || "Var6"}</span> subject 2: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject2 || "Var7"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks2 || "Var8"}</span> subject 3: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject3 || "Var9"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks3 || "Var10"}</span> subject 4: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject4 || "Var11"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks4 || "Var12"}</span> subject 5: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject5 || "Var13"}</span> Marks: <span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks5 || "Var14"}</span> Please Contact HOD for any queries. Gayatri Vidya Parishad"
+                                    <p className="text-xs text-slate-700 italic whitespace-pre-wrap">
+{`Dear Parent,
+Your ward `}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.studentName || "Var1"}</span>{`,
+`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.year || "Var2"}</span>{` Year `}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.semester || "Var3"}</span>{` sem `}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.rollNumber || "Var4"}</span>{` Mid
+Examination marks are as
+follows:
+subject 1:`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject1 || "Var5"}</span>{` Marks:
+`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks1 || "Var6"}</span>{`
+subject 2:`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject2 || "Var7"}</span>{`
+Marks: `}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks2 || "Var8"}</span>{`
+subject 3:`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject3 || "Var9"}</span>{` Marks:
+`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks3 || "Var10"}</span>{`
+subject 4:`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject4 || "Var11"}</span>{` Marks:
+`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks4 || "Var12"}</span>{`
+subject 5:`}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.subject5 || "Var13"}</span>{` Marks: `}<span className="font-semibold text-blue-600 bg-blue-50 px-1 rounded">{marksFields.marks5 || "Var14"}</span>{`
+Please Contact HOD for any
+queries.
+Gayatri Vidya Parishad`}
                                     </p>
                                 </div>
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaSave, FaSearch, FaUserCheck, FaUserTimes, FaFileDownload, FaFileUpload, FaTrash, FaFilter, FaDownload } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import Modal from "@/components/Modal";
+import RichTextEditor from "@/components/RichTextEditor";
 import * as XLSX from "xlsx";
 import { formatISTDate } from "@/lib/dateUtils";
 
@@ -70,6 +71,7 @@ export default function AttendancePage() {
     const [showSummary, setShowSummary] = useState(false);
     const [summaryData, setSummaryData] = useState<any>(null);
     const [submissionStep, setSubmissionStep] = useState<"confirm" | "success">("confirm");
+    const [topicsTaught, setTopicsTaught] = useState("");
 
     // Initialize Selections
     useEffect(() => {
@@ -312,7 +314,8 @@ export default function AttendancePage() {
             total,
             present,
             absent,
-            students
+            students,
+            topicsTaught
         });
 
         setSubmissionStep("confirm");
@@ -339,6 +342,7 @@ export default function AttendancePage() {
                 subjectId: selectedSubject || null,
                 periodIds: selectedPeriods,
                 labBatchId: selectedLabBatch || null,
+                topicsTaught: summaryData.topicsTaught || null,
                 students: students.map(s => ({
                     rollNumber: s.rollNumber,
                     name: s.name,
@@ -375,6 +379,7 @@ export default function AttendancePage() {
         setShowSummary(false);
         setSummaryData(null);
         setStudents([]); // Clear data
+        setTopicsTaught(""); // Clear editor state
         setSubmissionStep("confirm"); // Reset for next time
         router.push("/attendance/history");
     };
@@ -723,6 +728,24 @@ export default function AttendancePage() {
                                     ))}
                                 </div>
 
+                                {/* Teaching Diary section - Academic Mode Only */}
+                                {!["USER", "SMS_USER"].includes((session?.user?.role || "").toUpperCase()) && selectedSubject && (
+                                    <div className="mt-8 bg-slate-50 border border-slate-200 rounded-xl p-6">
+                                        <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">New</span>
+                                            Session Teaching Diary (Topics Taught)
+                                        </h4>
+                                        <p className="text-xs text-slate-500 mb-4">
+                                            Optional: Document the concepts, syllabus topics, or lab exercises covered during this class session.
+                                        </p>
+                                        <RichTextEditor
+                                            value={topicsTaught}
+                                            onChange={setTopicsTaught}
+                                            placeholder="E.g., Unit-1: Introduction to Stack ADT, push and pop operations with array implementation examples..."
+                                        />
+                                    </div>
+                                )}
+
                                 <div className="sticky bottom-4 mt-8 flex justify-end">
                                     <button
                                         onClick={initiateSubmission}
@@ -876,6 +899,16 @@ export default function AttendancePage() {
                                     <span className="block text-[10px] uppercase font-bold text-slate-400">Absent</span>
                                     <span className="font-bold text-red-600 text-lg">{summaryData.absent}</span>
                                 </div>
+
+                                {summaryData.topicsTaught && (
+                                    <div className="col-span-2 border-t border-slate-200 pt-3 mt-1">
+                                        <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Topics Taught</span>
+                                        <div 
+                                            className="text-xs text-slate-700 bg-white border border-slate-100 rounded-lg p-2.5 max-h-[120px] overflow-y-auto prose prose-sm"
+                                            dangerouslySetInnerHTML={{ __html: summaryData.topicsTaught }}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </div>
 

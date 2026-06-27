@@ -235,6 +235,7 @@ model AttendanceHistory {
   fileName       String?
   downloadedBy   String
   details        String        @default("[]")
+  topicsTaught   String?
   academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id])
   department     Department    @relation(fields: [departmentId], references: [id])
   user           User          @relation(fields: [downloadedBy], references: [id])

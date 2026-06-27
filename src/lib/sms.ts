@@ -49,7 +49,8 @@ export async function sendMarksSMS(
     rollNumber: string,
     year: string,
     semester: string,
-    subjects: { name: string; marks: string | number }[]
+    subjects: { name: string; marks: string | number }[],
+    examType: string
 ) {
     try {
         // Pad the subjects array to exactly 5 elements
@@ -58,8 +59,43 @@ export async function sendMarksSMS(
             paddedSubjects.push({ name: "N/A", marks: "-" });
         }
 
-        // Construct DLT-compliant message text
-        const message = `Dear Parent, Your ward ${studentName}, ${rollNumber} Year ${year} sem ${semester} Mid Examination marks are as follows: subject 1: ${paddedSubjects[0].name} Marks: ${paddedSubjects[0].marks} subject 2: ${paddedSubjects[1].name} Marks: ${paddedSubjects[1].marks} subject 3: ${paddedSubjects[2].name} Marks: ${paddedSubjects[2].marks} subject 4: ${paddedSubjects[3].name} Marks: ${paddedSubjects[3].marks} subject 5: ${paddedSubjects[4].name} Marks: ${paddedSubjects[4].marks} Please Contact HOD for any queries. Gayatri Vidya Parishad`;
+        // Convert numeric year, semester, and examType to Roman numerals
+        const toRoman = (num: string | number): string => {
+            const map: Record<string, string> = {
+                "1": "I",
+                "2": "II",
+                "3": "III",
+                "4": "IV",
+                "I": "I",
+                "II": "II",
+                "III": "III",
+                "IV": "IV"
+            };
+            return map[String(num)] || String(num);
+        };
+
+        const yearRoman = toRoman(year);
+        const semRoman = toRoman(semester);
+        const midRoman = examType === "MID_II" ? "II" : "I";
+
+        // Construct DLT-compliant message text with exact newlines matching the screenshot
+        const message = `Dear Parent,
+Your ward ${studentName},
+${yearRoman} Year ${semRoman} sem ${midRoman} Mid
+Examination marks are as
+follows:
+subject 1:${paddedSubjects[0].name} Marks:
+${paddedSubjects[0].marks}
+subject 2:${paddedSubjects[1].name}
+Marks: ${paddedSubjects[1].marks}
+subject 3:${paddedSubjects[2].name} Marks:
+${paddedSubjects[2].marks}
+subject 4:${paddedSubjects[3].name} Marks:
+${paddedSubjects[3].marks}
+subject 5:${paddedSubjects[4].name} Marks: ${paddedSubjects[4].marks}
+Please Contact HOD for any
+queries.
+Gayatri Vidya Parishad`;
 
         const url = new URL('http://sms.platinumsms.co.in/sendsms.jsp');
         url.searchParams.append('user', SMS_USER);

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { academicYearId, departmentId, year, semester, sectionId, examType } = body;
+    const { academicYearId, departmentId, year, semester, sectionId, examType, studentIds, allowUnpublished } = body;
 
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !examType) {
       return NextResponse.json({ error: "All filter fields are required." }, { status: 400 });
@@ -63,15 +63,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (unpublishedSubjects.length > 0) {
+    if (unpublishedSubjects.length > 0 && !allowUnpublished) {
       const names = unpublishedSubjects.map(s => `${s.code} - ${s.name}`).join(", ");
       return NextResponse.json({
-        error: `Cannot send SMS. The following theory subjects have not been published yet: ${names}`
+        error: `Cannot send SMS. The following theory subjects have not been published yet: ${names}`,
+        unpublishedSubjects: unpublishedSubjects.map(s => ({ id: s.id, code: s.code, name: s.name }))
       }, { status: 400 });
     }
 
     // 4. Fetch students in the section
-    const students = await prisma.student.findMany({
+    const allStudents = await prisma.student.findMany({
       where: {
         departmentId,
         year,
@@ -88,8 +89,16 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    if (students.length === 0) {
+    if (allStudents.length === 0) {
       return NextResponse.json({ error: "No active students found in this section." }, { status: 400 });
+    }
+
+    const students = studentIds && Array.isArray(studentIds) && studentIds.length > 0
+      ? allStudents.filter(s => studentIds.includes(s.id))
+      : allStudents;
+
+    if (students.length === 0) {
+      return NextResponse.json({ error: "No selected students found in this section." }, { status: 400 });
     }
 
     // 5. Fetch internal marks for theory subjects
@@ -158,7 +167,8 @@ export async function POST(req: NextRequest) {
                 student.rollNumber,
                 year,
                 semester,
-                subjectsList
+                subjectsList,
+                examType
               );
 
               await prisma.sMSLog.create({

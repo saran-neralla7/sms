@@ -379,6 +379,15 @@ export default function AdminMidExamDashboard() {
   const [smsExamType, setSmsExamType] = useState<"MID_I" | "MID_II">("MID_I");
   const [sendingSMS, setSendingSMS] = useState(false);
 
+  // Send SMS Modal states
+  const [showSMSModal, setShowSMSModal] = useState(false);
+  const [smsStudents, setSmsStudents] = useState<any[]>([]);
+  const [smsSearchQuery, setSmsSearchQuery] = useState("");
+  const [selectedSmsStudentIds, setSelectedSmsStudentIds] = useState<Set<string>>(new Set());
+  const [loadingSmsStudents, setLoadingSmsStudents] = useState(false);
+  const [smsUnpublishedSubjects, setSmsUnpublishedSubjects] = useState<any[]>([]);
+  const [allowUnpublishedOverride, setAllowUnpublishedOverride] = useState(false);
+
   const executePublish = async () => {
     if (!selectedPaperForPublish) return;
     const paperId = selectedPaperForPublish.id;
@@ -426,13 +435,38 @@ export default function AdminMidExamDashboard() {
       return !paper || !paper.publishRecord?.isPublished;
     });
 
-    if (unpublished.length > 0) {
-      const names = unpublished.map(s => `${s.code} - ${s.name}`).join(", ");
-      showToast(`Cannot send SMS. The following theory subjects have not been published yet: ${names}`, "error");
+    setSmsUnpublishedSubjects(unpublished);
+    setAllowUnpublishedOverride(false);
+    setSmsSearchQuery("");
+    setShowSMSModal(true);
+    setLoadingSmsStudents(true);
+    setSmsStudents([]);
+    setSelectedSmsStudentIds(new Set());
+
+    try {
+      const res = await fetch(`/api/students?departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}&limit=-1`);
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setSmsStudents(data.data);
+        setSelectedSmsStudentIds(new Set(data.data.map((s: any) => s.id)));
+      } else {
+        showToast(data.error || "Failed to fetch student details.", "error");
+      }
+    } catch (err) {
+      showToast("Error fetching student details.", "error");
+    } finally {
+      setLoadingSmsStudents(false);
+    }
+  };
+
+  const executeSendSMS = async () => {
+    if (selectedSmsStudentIds.size === 0) {
+      showToast("Please select at least one student.", "error");
       return;
     }
 
-    if (!confirm(`Are you sure you want to send ${smsExamType.replace("_", " ")} marks SMS to parents for all students in this section?`)) {
+    if (smsUnpublishedSubjects.length > 0 && !allowUnpublishedOverride) {
+      showToast("Please confirm that you want to proceed with unpublished subjects.", "error");
       return;
     }
 
@@ -447,13 +481,16 @@ export default function AdminMidExamDashboard() {
           year: selectedYear,
           semester: selectedSem,
           sectionId: selectedSection,
-          examType: smsExamType
+          examType: smsExamType,
+          studentIds: Array.from(selectedSmsStudentIds),
+          allowUnpublished: allowUnpublishedOverride
         })
       });
 
       const data = await res.json();
       if (res.ok) {
         showToast(data.message || "SMS dispatch started in background.", "success");
+        setShowSMSModal(false);
       } else {
         showToast(data.error || "Failed to send SMS.", "error");
       }
@@ -3282,6 +3319,187 @@ export default function AdminMidExamDashboard() {
               className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
             >
               Publish Marks
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Send SMS Checklist Modal */}
+      <Modal isOpen={showSMSModal} onClose={() => setShowSMSModal(false)} title={`Send ${smsExamType.replace("_", " ")} SMS to Parents`} maxWidth="max-w-2xl">
+        <div className="space-y-5 p-6">
+          {/* Unpublished Warning */}
+          {smsUnpublishedSubjects.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-800">
+              <div className="flex gap-2 font-bold mb-1 items-center">
+                <span className="text-base">⚠️</span> Warning: The following subjects did not publish marks yet:
+              </div>
+              <ul className="list-disc pl-5 mb-3 font-semibold space-y-0.5">
+                {smsUnpublishedSubjects.map((s: any) => (
+                  <li key={s.id}>{s.code} - {s.name}</li>
+                ))}
+              </ul>
+              <div className="flex items-center gap-2 pt-2 border-t border-amber-200/50">
+                <input
+                  type="checkbox"
+                  id="allowUnpublishedOverride"
+                  checked={allowUnpublishedOverride}
+                  onChange={e => setAllowUnpublishedOverride(e.target.checked)}
+                  className="rounded border-amber-300 text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
+                />
+                <label htmlFor="allowUnpublishedOverride" className="font-bold cursor-pointer select-none">
+                  I understand, proceed sending marks anyway (unpublished subjects will show as N/A or -).
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* SMS Text Template Preview */}
+          <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-4">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Message Template Preview</h4>
+            <div className="bg-white rounded-lg p-3 border border-slate-100 shadow-inner max-h-[160px] overflow-y-auto">
+              <p className="text-[10px] md:text-xs text-slate-600 font-mono leading-relaxed whitespace-pre-wrap">
+{`Dear Parent,
+Your ward [Student Name],
+${smsExamType === "MID_II" ? "II" : "I"} Year ${selectedSem === "2" ? "II" : selectedSem === "1" ? "I" : selectedSem === "3" ? "III" : selectedSem === "4" ? "IV" : selectedSem} sem ${smsExamType === "MID_II" ? "II" : "I"} Mid
+Examination marks are as
+follows:
+subject 1:[Sub 1 Name] Marks:
+[Sub 1 Marks]
+subject 2:[Sub 2 Name]
+Marks: [Sub 2 Marks]
+subject 3:[Sub 3 Name] Marks:
+[Sub 3 Marks]
+subject 4:[Sub 4 Name] Marks:
+[Sub 4 Marks]
+subject 5:[Sub 5 Name] Marks: [Sub 5 Marks]
+Please Contact HOD for any
+queries.
+Gayatri Vidya Parishad`}
+              </p>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2 italic">
+              Note: Layout formatted with explicit newlines as per DLT registered template. Ward roll numbers are not included in the template text.
+            </p>
+          </div>
+
+          {/* Student Selector Checklist */}
+          <div className="space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Select Students ({selectedSmsStudentIds.size} selected / {smsStudents.length} total)
+              </h4>
+              <div className="flex items-center gap-3">
+                {/* Search Bar */}
+                <input
+                  type="text"
+                  placeholder="Search roll number or name..."
+                  value={smsSearchQuery}
+                  onChange={e => setSmsSearchQuery(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm w-[200px]"
+                />
+                
+                {/* Select All */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const filtered = smsStudents.filter((s: any) =>
+                      s.rollNumber.toLowerCase().includes(smsSearchQuery.toLowerCase()) ||
+                      s.name.toLowerCase().includes(smsSearchQuery.toLowerCase())
+                    );
+                    const allSelected = filtered.every(s => selectedSmsStudentIds.has(s.id));
+                    const newSet = new Set(selectedSmsStudentIds);
+                    if (allSelected) {
+                      filtered.forEach(s => newSet.delete(s.id));
+                    } else {
+                      filtered.forEach(s => newSet.add(s.id));
+                    }
+                    setSelectedSmsStudentIds(newSet);
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition-colors"
+                >
+                  {smsStudents.filter((s: any) =>
+                    s.rollNumber.toLowerCase().includes(smsSearchQuery.toLowerCase()) ||
+                    s.name.toLowerCase().includes(smsSearchQuery.toLowerCase())
+                  ).every(s => selectedSmsStudentIds.has(s.id)) ? "Deselect Filtered" : "Select Filtered"}
+                </button>
+              </div>
+            </div>
+
+            {/* Checklist Box */}
+            <div className="relative rounded-xl border border-slate-200 bg-white p-2">
+              {loadingSmsStudents ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+                  <FaSpinner className="animate-spin text-blue-500" size={24} />
+                  <span className="text-xs font-medium">Fetching students list...</span>
+                </div>
+              ) : smsStudents.length === 0 ? (
+                <div className="flex items-center justify-center py-12 text-xs text-slate-400 font-medium">
+                  No active students found in this section.
+                </div>
+              ) : (
+                <div className="max-h-[220px] overflow-y-auto divide-y divide-slate-100 pr-1">
+                  {smsStudents.filter((s: any) =>
+                    s.rollNumber.toLowerCase().includes(smsSearchQuery.toLowerCase()) ||
+                    s.name.toLowerCase().includes(smsSearchQuery.toLowerCase())
+                  ).map((student: any) => {
+                    const isChecked = selectedSmsStudentIds.has(student.id);
+                    return (
+                      <label
+                        key={student.id}
+                        className={`flex items-center justify-between px-3 py-2 text-xs cursor-pointer rounded-lg hover:bg-slate-50 transition-colors ${
+                          isChecked ? "bg-blue-50/30" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              const newSet = new Set(selectedSmsStudentIds);
+                              if (isChecked) {
+                                newSet.delete(student.id);
+                              } else {
+                                newSet.add(student.id);
+                              }
+                              setSelectedSmsStudentIds(newSet);
+                            }}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                          />
+                          <span className="font-mono font-bold text-slate-800">{student.rollNumber}</span>
+                          <span className="text-slate-600 font-medium">{student.name}</span>
+                        </div>
+                        <span className="text-slate-400 font-mono">{student.mobile || student.studentContactNumber || "No mobile"}</span>
+                      </label>
+                    );
+                  })}
+                  {smsStudents.filter((s: any) =>
+                    s.rollNumber.toLowerCase().includes(smsSearchQuery.toLowerCase()) ||
+                    s.name.toLowerCase().includes(smsSearchQuery.toLowerCase())
+                  ).length === 0 && (
+                    <div className="flex items-center justify-center py-8 text-xs text-slate-400 font-medium">
+                      No matching students.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4 border-t border-slate-100">
+            <button
+              onClick={() => setShowSMSModal(false)}
+              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={executeSendSMS}
+              disabled={sendingSMS || loadingSmsStudents || selectedSmsStudentIds.size === 0 || (smsUnpublishedSubjects.length > 0 && !allowUnpublishedOverride)}
+              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {sendingSMS ? <FaSpinner className="animate-spin" size={14} /> : <FaPaperPlane size={12} />}
+              {sendingSMS ? "Sending SMS..." : `Send SMS (${selectedSmsStudentIds.size})`}
             </button>
           </div>
         </div>

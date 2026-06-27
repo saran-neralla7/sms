@@ -70,6 +70,13 @@ export default function DashboardPage() {
         color: "bg-cyan-50 text-cyan-600"
       },
       {
+        title: "Teaching Diary Logs",
+        icon: <FaBook className="h-6 w-6" />,
+        description: "View and filter faculty teaching diary records across all departments.",
+        href: "/admin/teaching-diary",
+        color: "bg-rose-50 text-rose-600"
+      },
+      {
         title: "Faculty",
         icon: <FaChalkboardTeacher className="h-6 w-6" />,
         description: "Manage faculty records, assignments, and workload.",
@@ -172,6 +179,13 @@ export default function DashboardPage() {
         description: "View past records and download reports.",
         href: "/attendance/history",
         color: "bg-teal-50 text-teal-600"
+      },
+      {
+        title: "My Teaching Diary",
+        icon: <FaBook className="h-6 w-6" />,
+        description: "View and filter your submitted teaching diary records.",
+        href: "/faculty/teaching-diary",
+        color: "bg-emerald-50 text-emerald-600"
       },
       {
         title: "Reports",

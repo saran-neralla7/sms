@@ -23,11 +23,12 @@ export async function POST(request: Request) {
             periodIds,
             labBatchId,
             students,
-            academicYearId  // NEW: passed from frontend cookie
+            academicYearId, // NEW: passed from frontend cookie
+            topicsTaught // NEW: rich text teaching diary
         } = body;
 
         console.log("Attendance Submission Payload:", {
-            date, sectionIds, sectionId, studentCount: students?.length, periodIds
+            date, sectionIds, sectionId, studentCount: students?.length, periodIds, hasTopics: !!topicsTaught
         });
 
         // Validation
@@ -223,19 +224,24 @@ export async function POST(request: Request) {
 
                     const mergedDetailsJson = JSON.stringify(Array.from(mergedMap.values()));
 
+                    // Update data object
+                    const updateData: any = {
+                        status: "Completed",
+                        type: recordType,
+                        fileName: "Manual Entry Update",
+                        downloadedBy: (session.user as any).id,
+                        details: mergedDetailsJson
+                    };
+
+                    if (topicsTaught !== undefined) {
+                        updateData.topicsTaught = topicsTaught;
+                    }
+
                     // Update the existing record instead of skipping or crashing
                     transactions.push(
                         prisma.attendanceHistory.update({
                             where: { id: existing.id },
-                            data: {
-                                status: "Completed",
-                                type: recordType,
-                                fileName: "Manual Entry Update",
-                                downloadedBy: (session.user as any).id,
-                                details: mergedDetailsJson
-                                // We purposefully do NOT overwrite the parent subjectId for mixed classes.
-                                // The individual student JSON "Subject ID" governs their attended subject.
-                            }
+                            data: updateData
                         })
                     );
                     continue;
@@ -256,7 +262,8 @@ export async function POST(request: Request) {
                             type: recordType,
                             fileName: "Manual Entry",
                             downloadedBy: (session.user as any).id,
-                            details
+                            details,
+                            topicsTaught: topicsTaught || null
                         }
                     })
                 );
