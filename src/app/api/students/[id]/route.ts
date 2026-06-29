@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(
     request: Request,
@@ -57,7 +58,11 @@ export async function GET(
                     return NextResponse.json({ error: "Access denied" }, { status: 403 });
                 }
             } else if (role === "HOD") {
-                if (student.departmentId !== departmentId) {
+                if (isBSHHod(session.user)) {
+                    if (student.year !== "1") {
+                        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+                    }
+                } else if (student.departmentId !== departmentId) {
                     return NextResponse.json({ error: "Access denied" }, { status: 403 });
                 }
             }
@@ -91,20 +96,29 @@ export async function PUT(
         if (role === "HOD") {
             const existingStudent = await prisma.student.findUnique({
                 where: { id: params.id },
-                select: { departmentId: true }
+                select: { departmentId: true, year: true }
             });
 
             if (!existingStudent) {
                 return NextResponse.json({ error: "Student not found" }, { status: 404 });
             }
 
-            if (existingStudent.departmentId !== userDeptId) {
-                return NextResponse.json({ error: "You can only update students of your department" }, { status: 403 });
-            }
+            if (isBSHHod(session.user)) {
+                if (existingStudent.year !== "1") {
+                    return NextResponse.json({ error: "You can only update Year 1 students" }, { status: 403 });
+                }
+                if (body.year && body.year !== "1") {
+                    return NextResponse.json({ error: "You can only set year to Year 1" }, { status: 403 });
+                }
+            } else {
+                if (existingStudent.departmentId !== userDeptId) {
+                    return NextResponse.json({ error: "You can only update students of your department" }, { status: 403 });
+                }
 
-            // Also prevent moving student to another department
-            if (body.departmentId && body.departmentId !== userDeptId) {
-                return NextResponse.json({ error: "You cannot move students to another department" }, { status: 403 });
+                // Also prevent moving student to another department
+                if (body.departmentId && body.departmentId !== userDeptId) {
+                    return NextResponse.json({ error: "You cannot move students to another department" }, { status: 403 });
+                }
             }
         }
 
@@ -186,15 +200,21 @@ export async function DELETE(
         if (role === "HOD") {
             const existingStudent = await prisma.student.findUnique({
                 where: { id: params.id },
-                select: { departmentId: true }
+                select: { departmentId: true, year: true }
             });
 
             if (!existingStudent) {
                 return NextResponse.json({ error: "Student not found" }, { status: 404 });
             }
 
-            if (existingStudent.departmentId !== userDeptId) {
-                return NextResponse.json({ error: "You can only delete students of your department" }, { status: 403 });
+            if (isBSHHod(session.user)) {
+                if (existingStudent.year !== "1") {
+                    return NextResponse.json({ error: "You can only delete Year 1 students" }, { status: 403 });
+                }
+            } else {
+                if (existingStudent.departmentId !== userDeptId) {
+                    return NextResponse.json({ error: "You can only delete students of your department" }, { status: 403 });
+                }
             }
         }
 

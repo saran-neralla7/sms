@@ -2,15 +2,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET() {
     try {
         const session = await getServerSession(authOptions);
-        if (!session?.user || !["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(session.user.role)) {
+        if (!session?.user || !["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(session.user.role)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const isBSH = isBSHHod(session.user);
+        const where: any = {};
+        if (isBSH) {
+            where.targetYear = 1;
+        }
+
         const forms = await prisma.feedbackForm.findMany({
+            where,
             include: {
                 academicYear: true,
                 template: true,

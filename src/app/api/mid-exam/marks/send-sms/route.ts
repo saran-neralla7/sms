@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendMarksSMS } from "@/lib/sms";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -19,6 +20,11 @@ export async function POST(req: NextRequest) {
 
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !examType) {
       return NextResponse.json({ error: "All filter fields are required." }, { status: 400 });
+    }
+
+    const isBSH = isBSHHod(session.user);
+    if (isBSH && year !== "1") {
+      return NextResponse.json({ error: "BSH HOD can only send SMS for Year 1 students." }, { status: 403 });
     }
 
     // 1. Fetch all theory subjects matching the academic class criteria

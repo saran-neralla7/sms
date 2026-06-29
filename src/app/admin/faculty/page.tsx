@@ -13,6 +13,7 @@ import { useSession } from "next-auth/react";
 
 export default function FacultyPage() {
     const { data: session } = useSession();
+    const isBSHHod = session?.user?.role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
     const [facultyList, setFacultyList] = useState<Faculty[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [loading, setLoading] = useState(false);
@@ -395,42 +396,46 @@ export default function FacultyPage() {
                     >
                         <FaDownload size={12} /> Export
                     </button>
-                    <button
-                        onClick={downloadSample}
-                        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
-                    >
-                        <FaDownload size={12} /> Template
-                    </button>
-                    <div className="relative">
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={handlePhotoUpload}
-                            className="absolute inset-0 cursor-pointer opacity-0"
-                            title="Upload photos named with EmpCode (e.g. EMP001.jpg)"
-                        />
-                        <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
-                            <FaCamera size={12} /> Photos
-                        </button>
-                    </div>
-                    <div className="relative">
-                        <input
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={handleFileUpload}
-                            className="absolute inset-0 cursor-pointer opacity-0"
-                        />
-                        <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
-                            <FaFileImport size={12} /> Import
-                        </button>
-                    </div>
-                    <button
-                        onClick={openAddModal}
-                        className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
-                    >
-                        <FaPlus size={12} /> Add Faculty
-                    </button>
+                    {!isBSHHod && (
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                onClick={downloadSample}
+                                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+                            >
+                                <FaDownload size={12} /> Template
+                            </button>
+                            <div className="relative">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handlePhotoUpload}
+                                    className="absolute inset-0 cursor-pointer opacity-0"
+                                    title="Upload photos named with EmpCode (e.g. EMP001.jpg)"
+                                />
+                                <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
+                                    <FaCamera size={12} /> Photos
+                                </button>
+                            </div>
+                            <div className="relative">
+                                <input
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    onChange={handleFileUpload}
+                                    className="absolute inset-0 cursor-pointer opacity-0"
+                                />
+                                <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
+                                    <FaFileImport size={12} /> Import
+                                </button>
+                            </div>
+                            <button
+                                onClick={openAddModal}
+                                className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
+                            >
+                                <FaPlus size={12} /> Add Faculty
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -490,16 +495,16 @@ export default function FacultyPage() {
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Designation</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Contact</th>
-                                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>
+                                {!isBSHHod && <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
-                                <tr><td colSpan={5} className="py-12 text-center"><LogoSpinner /></td></tr>
+                                <tr><td colSpan={isBSHHod ? 4 : 5} className="py-12 text-center"><LogoSpinner /></td></tr>
                             ) : !hasLoaded ? (
-                                <tr><td colSpan={5} className="py-12 text-center text-slate-500">Select a Department and click &quot;Load Faculty&quot; to view records.</td></tr>
+                                <tr><td colSpan={isBSHHod ? 4 : 5} className="py-12 text-center text-slate-500">Select a Department and click &quot;Load Faculty&quot; to view records.</td></tr>
                             ) : filteredFaculty.length === 0 ? (
-                                <tr><td colSpan={5} className="py-12 text-center text-slate-500">No faculty members found.</td></tr>
+                                <tr><td colSpan={isBSHHod ? 4 : 5} className="py-12 text-center text-slate-500">No faculty members found.</td></tr>
                             ) : (
                                 filteredFaculty.map((f) => (
                                     <tr key={f.id} className="hover:bg-slate-50/50 transition-colors">
@@ -547,18 +552,20 @@ export default function FacultyPage() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => openEditModal(f)} className="rounded p-2 text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors">
-                                                    <FaEdit size={16} />
-                                                </button>
-                                                {(session?.user as any)?.role === "ADMIN" && (
-                                                    <button onClick={() => handleDelete(f.id)} className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                                                        <FaTrash size={16} />
+                                        {!isBSHHod && (
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button onClick={() => openEditModal(f)} className="rounded p-2 text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors">
+                                                        <FaEdit size={16} />
                                                     </button>
-                                                )}
-                                            </div>
-                                        </td>
+                                                    {(session?.user as any)?.role === "ADMIN" && (
+                                                        <button onClick={() => handleDelete(f.id)} className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                                                            <FaTrash size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             )}

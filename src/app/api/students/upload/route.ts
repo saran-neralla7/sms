@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import fs from "fs";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -54,6 +55,13 @@ export async function POST(request: Request) {
 
                 if (!student) {
                     results.push({ file: originalName, status: "error", message: "Student not found" });
+                    failCount++;
+                    continue;
+                }
+
+                const isBSH = isBSHHod(session.user);
+                if (isBSH && student.year !== "1") {
+                    results.push({ file: originalName, status: "error", message: "BSH HOD can only upload photos for Year 1 students" });
                     failCount++;
                     continue;
                 }

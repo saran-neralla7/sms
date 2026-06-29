@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(req: Request) {
     try {
@@ -18,12 +19,20 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "facultyId and academicYearId are required" }, { status: 400 });
         }
 
+        const isBSH = isBSHHod(session.user);
+        const feedbackWhere: any = {
+            facultyId: facultyId,
+            form: { academicYearId: academicYearId }
+        };
+        if (isBSH) {
+            feedbackWhere.subject = {
+                year: "1"
+            };
+        }
+
         // 1. Fetch all distinct forms this faculty has responses for in the given academic year
         const distinctForms = await prisma.feedbackResponse.findMany({
-            where: {
-                facultyId: facultyId,
-                form: { academicYearId: academicYearId }
-            },
+            where: feedbackWhere,
             select: { formId: true },
             distinct: ['formId']
         });
@@ -65,9 +74,16 @@ export async function GET(req: Request) {
                 batchName = firstSubmission?.student?.batch?.name || "-";
             }
 
+            const responsesWhere: any = { formId: fId, facultyId: facultyId };
+            if (isBSH) {
+                responsesWhere.subject = {
+                    year: "1"
+                };
+            }
+
             // Fetch responses ONLY for this faculty for this form
             const responses = await prisma.feedbackResponse.findMany({
-                where: { formId: fId, facultyId: facultyId },
+                where: responsesWhere,
                 include: {
                     faculty: { select: { empName: true, photoUrl: true } },
                     subject: { select: { name: true, code: true } }

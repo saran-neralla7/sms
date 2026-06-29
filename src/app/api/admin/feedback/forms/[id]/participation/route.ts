@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions);
-    if (!session || (session.user as any).role !== "ADMIN") {
+    if (!session || !["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes((session.user as any).role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -22,6 +23,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         });
 
         if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
+
+        const isBSH = isBSHHod(session.user);
+        if (isBSH && form.targetYear !== 1) {
+            return NextResponse.json({ error: "Forbidden: BSH HOD can only access Year 1 participation" }, { status: 403 });
+        }
 
         const formData = form as any;
 

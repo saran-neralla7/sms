@@ -82,19 +82,21 @@ export default function StudentsPage() {
         }
     };
 
+    const { data: session } = useSession();
+    const isBSHHod = session?.user?.role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
+
     // Filters
     const searchParams = useSearchParams();
     const pathname = usePathname();
 
     // Filters - Init from URL or Default
-    const [year, setYear] = useState(searchParams?.get("year") || "");
+    const [year, setYear] = useState(isBSHHod ? "1" : (searchParams?.get("year") || ""));
     const [semester, setSemester] = useState(searchParams?.get("semester") || "");
     const [section, setSection] = useState(searchParams?.get("section") || "");
     const [filterDepartmentId, setFilterDepartmentId] = useState(searchParams?.get("dept") || "");
 
     // Search State
     const [searchTerm, setSearchTerm] = useState(searchParams?.get("q") || "");
-    const { data: session } = useSession();
     // The original loading state for fetchStudents is now replaced by the new `loading` state,
     // but its initial value was `false`. The new `loading` state starts as `true`.
     // I will keep the original `loading` state for filters as it was, assuming it's distinct.
@@ -170,7 +172,7 @@ export default function StudentsPage() {
 
     // Update state when URL params change (e.g. Back button)
     useEffect(() => {
-        setYear(searchParams?.get("year") || "");
+        setYear(isBSHHod ? "1" : (searchParams?.get("year") || ""));
         setSemester(searchParams?.get("semester") || "");
         setSection(searchParams?.get("section") || "");
         setFilterDepartmentId(searchParams?.get("dept") || "");
@@ -883,12 +885,23 @@ export default function StudentsPage() {
                     </select>
                 )}
 
-                <select value={year} onChange={(e) => updateFilters("year", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                    <option value="">All Years</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
+                <select 
+                    value={year} 
+                    onChange={(e) => updateFilters("year", e.target.value)} 
+                    disabled={isBSHHod}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                    {isBSHHod ? (
+                        <option value="1">1st Year</option>
+                    ) : (
+                        <>
+                            <option value="">All Years</option>
+                            <option value="1">1st Year</option>
+                            <option value="2">2nd Year</option>
+                            <option value="3">3rd Year</option>
+                            <option value="4">4th Year</option>
+                        </>
+                    )}
                 </select>
                 <select value={semester} onChange={(e) => updateFilters("semester", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
                     <option value="">All Semesters</option>
@@ -1121,11 +1134,16 @@ export default function StudentsPage() {
                             <select
                                 value={formData.year}
                                 onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                disabled={isBSHHod}
+                                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                             >
-                                {[1, 2, 3, 4].map((y) => (
-                                    <option key={y} value={y}>{y}</option>
-                                ))}
+                                {isBSHHod ? (
+                                    <option value="1">1</option>
+                                ) : (
+                                    [1, 2, 3, 4].map((y) => (
+                                        <option key={y} value={y}>{y}</option>
+                                    ))
+                                )}
                             </select>
                         </div>
                         <div>
@@ -1447,10 +1465,17 @@ export default function StudentsPage() {
                             <select
                                 value={exportFilters.year}
                                 onChange={(e) => setExportFilters({ ...exportFilters, year: e.target.value })}
-                                className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white"
+                                disabled={isBSHHod}
+                                className="w-full rounded-md border-slate-300 px-3 py-2 text-sm outline-none border bg-white disabled:bg-slate-100 disabled:text-slate-500"
                             >
-                                <option value="">Select Year</option>
-                                {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                                {isBSHHod ? (
+                                    <option value="1">1</option>
+                                ) : (
+                                    <>
+                                        <option value="">Select Year</option>
+                                        {[1, 2, 3, 4].map(y => <option key={y} value={y}>{y}</option>)}
+                                    </>
+                                )}
                             </select>
                         </div>
 

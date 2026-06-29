@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks } from "@/lib/mid-exam-calc";
 import { sendMarksSMS } from "@/lib/sms";
+import { isBSHHod } from "@/lib/permissions";
 
 // POST — lock and/or publish marks (writes to InternalMark table)
 export async function POST(req: NextRequest) {
@@ -47,6 +48,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!paper) return NextResponse.json({ error: "Paper not found" }, { status: 404 });
+
+    const isBSH = isBSHHod(session.user);
+    if (isBSH && paper.year !== "1") {
+      return NextResponse.json({ error: "BSH HOD can only publish/lock marks for Year 1 papers." }, { status: 403 });
+    }
 
     if (paper.masterPaperId && paper.masterPaper) {
       (paper as any).questions = paper.masterPaper.questions;

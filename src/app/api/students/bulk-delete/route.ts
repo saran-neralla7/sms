@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -24,16 +25,24 @@ export async function POST(request: Request) {
 
         // Security check for HOD: Ensure all students belong to their department
         if (role === "HOD") {
+            const isBSH = isBSHHod(session.user);
             const students = await prisma.student.findMany({
                 where: {
                     id: { in: studentIds },
                 },
-                select: { departmentId: true }
+                select: { departmentId: true, year: true }
             });
 
-            const unauthorized = students.some(s => s.departmentId !== userDeptId);
-            if (unauthorized) {
-                return NextResponse.json({ error: "You can only delete students from your department" }, { status: 403 });
+            if (isBSH) {
+                const unauthorized = students.some(s => s.year !== "1");
+                if (unauthorized) {
+                    return NextResponse.json({ error: "You can only delete Year 1 students" }, { status: 403 });
+                }
+            } else {
+                const unauthorized = students.some(s => s.departmentId !== userDeptId);
+                if (unauthorized) {
+                    return NextResponse.json({ error: "You can only delete students from your department" }, { status: 403 });
+                }
             }
         }
 

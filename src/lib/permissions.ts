@@ -13,6 +13,7 @@ export type UserSession = {
     id: string;
     role: string;
     departmentId?: string | null;
+    username?: string | null;
 };
 
 /**
@@ -24,8 +25,17 @@ export function hasGlobalAccess(user: UserSession | undefined): boolean {
 }
 
 /**
+ * Checks if the user is the BSH HOD.
+ */
+export function isBSHHod(user: UserSession | undefined): boolean {
+    if (!user) return false;
+    return user.role === ROLES.HOD && (user.username === "hodbsh" || user.username === "hod-bsh");
+}
+
+/**
  * Checks if the user has permission to manage a specific department.
  * - Global admins have access to ALL departments.
+ * - BSH HOD has access to ALL departments (restricted to Year 1 in API).
  * - HODs/Faculty have access ONLY to their assigned department.
  */
 export function hasDepartmentAccess(user: UserSession | undefined, targetDepartmentId: string): boolean {
@@ -34,6 +44,7 @@ export function hasDepartmentAccess(user: UserSession | undefined, targetDepartm
 
     // HOD or Faculty must belong to the target department
     if (user.role === ROLES.HOD || user.role === ROLES.FACULTY) {
+        if (isBSHHod(user)) return true;
         return user.departmentId === targetDepartmentId;
     }
 

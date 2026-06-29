@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
-    const performerId = session?.user?.id || "SYSTEM"; // Fallback if seeding or public form
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { role } = session.user as any;
+    if (role !== "ADMIN" && role !== "HOD") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (isBSHHod(session.user)) {
+        return NextResponse.json({ error: "BSH HOD has view-only access to faculty" }, { status: 403 });
+    }
+
+    const performerId = session.user.id || "SYSTEM";
 
     try {
         const body = await req.json();

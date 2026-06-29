@@ -2,17 +2,33 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "ADMIN") {
+    const isBSH = isBSHHod(session?.user as any);
+    if (!session || (session.user.role !== "ADMIN" && !isBSH)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     try {
         const body = await request.json();
         const { name, shortName, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
+
+        // Check scoping for BSH HOD
+        if (isBSH) {
+            const existingSubject = await prisma.subject.findUnique({
+                where: { id: params.id },
+                select: { year: true }
+            });
+            if (!existingSubject || existingSubject.year !== "1") {
+                return NextResponse.json({ error: "BSH HOD can only update Year 1 subjects" }, { status: 403 });
+            }
+            if (year && year !== "1") {
+                return NextResponse.json({ error: "BSH HOD can only set year to Year 1" }, { status: 403 });
+            }
+        }
 
         const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 
@@ -65,11 +81,22 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "ADMIN") {
+    const isBSH = isBSHHod(session?.user as any);
+    if (!session || (session.user.role !== "ADMIN" && !isBSH)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     try {
+        if (isBSH) {
+            const existingSubject = await prisma.subject.findUnique({
+                where: { id: params.id },
+                select: { year: true }
+            });
+            if (!existingSubject || existingSubject.year !== "1") {
+                return NextResponse.json({ error: "BSH HOD can only delete Year 1 subjects" }, { status: 403 });
+            }
+        }
+
         await prisma.subject.delete({
             where: { id: params.id }
         });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -14,6 +15,14 @@ export async function GET(request: Request) {
     if (departmentId) where.departmentId = departmentId;
     if (year) where.year = year;
     if (semester) where.semester = semester;
+
+    const isBSH = isBSHHod(session?.user as any);
+    if (isBSH) {
+        if (year && year !== "1") {
+            return NextResponse.json([]);
+        }
+        where.year = "1";
+    }
 
     // FACULTY SUBJECT MAPPING FALLBACK LOGIC
     const user = session?.user as any;
@@ -49,13 +58,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "ADMIN") {
+    const isBSH = isBSHHod(session?.user as any);
+    if (!session || (session.user.role !== "ADMIN" && !isBSH)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     try {
         const body = await request.json();
         const { name, shortName, code, year, semester, type, departmentId, regulation, electiveSlot } = body;
+
+        if (isBSH && year !== "1") {
+            return NextResponse.json({ error: "BSH HOD can only create Year 1 subjects" }, { status: 403 });
+        }
 
         const isElective = type.includes("ELECTIVE") || !!electiveSlot;
 

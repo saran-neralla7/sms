@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -82,6 +83,14 @@ export async function GET(request: Request) {
     const userRole = (session.user as any).role;
     const userDeptId = (session.user as any).departmentId;
     const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL", "OFFICE"].includes(userRole);
+    const isBSH = isBSHHod(session.user);
+
+    if (isBSH) {
+        if (year && year !== "1") {
+            return NextResponse.json({ data: [], meta: { total: 0, page, limit, totalPages: 0 } });
+        }
+        where.year = "1";
+    }
 
     const queryDeptId = searchParams.get("departmentId");
 
@@ -90,8 +99,8 @@ export async function GET(request: Request) {
         where.departmentId = queryDeptId;
     } else {
         // Default behavior if no department specified
-        if (isGlobalAdmin) {
-            // Admin sees all if no filter
+        if (isGlobalAdmin || isBSH) {
+            // Admin and BSH HOD see all if no filter
         } else {
             // Faculty/HOD defaults to their own department
             if (userDeptId) {
@@ -158,6 +167,7 @@ export async function POST(request: Request) {
 
     const { role, departmentId: userDeptId } = session.user as any;
     const isGlobalAdmin = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+    const isBSH = isBSHHod(session.user);
 
     if (!isGlobalAdmin && role !== "HOD") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -173,7 +183,11 @@ export async function POST(request: Request) {
         }
 
         // HOD Scoping Enforcement
-        if (role === "HOD" && body.departmentId !== userDeptId) {
+        if (isBSH) {
+            if (body.year !== "1") {
+                return NextResponse.json({ error: "BSH HOD can only add students to Year 1" }, { status: 403 });
+            }
+        } else if (role === "HOD" && body.departmentId !== userDeptId) {
             return NextResponse.json({ error: "You can only add/update students in your own department" }, { status: 403 });
         }
 

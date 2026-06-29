@@ -156,11 +156,13 @@ export default function DashboardPage() {
       }
     ];
 
-    // Filter out Administration and Fees for HOD if desired, or keep them.
-    // User said "HODs have global edit/view access".
-    // Usually HOD doesn't manage Users (Administration).
+    const isBSH = role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
     if (role === "HOD") {
-      modules = modules.filter(m => m.title !== "Administration" && m.title !== "Fees");
+      if (isBSH) {
+        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval"].includes(m.title));
+      } else {
+        modules = modules.filter(m => m.title !== "Administration" && m.title !== "Fees");
+      }
     }
 
   } else {

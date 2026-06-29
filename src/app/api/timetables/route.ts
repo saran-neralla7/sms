@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(request: Request) {
     try {
@@ -12,6 +13,9 @@ export async function GET(request: Request) {
         if (!sectionId) {
             return NextResponse.json({ error: "Missing sectionId" }, { status: 400 });
         }
+
+        const session = await getServerSession(authOptions);
+        const isBSH = isBSHHod(session?.user as any);
 
         let dateCondition = {};
         if (dateStr) {
@@ -33,6 +37,7 @@ export async function GET(request: Request) {
         const timetables = await prisma.timetable.findMany({
             where: {
                 sectionId,
+                year: isBSH ? "1" : undefined,
                 ...dateCondition
             },
             include: {
@@ -49,12 +54,37 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { role, departmentId: userDeptId } = session.user as any;
+    const isBSH = isBSHHod(session.user);
+
+    if (role !== "ADMIN" && role !== "HOD") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     try {
         const body = await request.json();
         const { departmentId, year, semester, sectionId, entries } = body;
 
         if (!departmentId || !year || !semester || !sectionId || !entries) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        // Enforce scoping
+        if (role === "HOD") {
+            if (isBSH) {
+                if (year !== "1") {
+                    return NextResponse.json({ error: "BSH HOD can only manage Year 1 timetables" }, { status: 403 });
+                }
+            } else {
+                if (departmentId !== userDeptId) {
+                    return NextResponse.json({ error: "You can only manage timetables for your own department" }, { status: 403 });
+                }
+            }
         }
 
         const now = new Date();

@@ -3,6 +3,7 @@ import formidable, { File } from 'formidable';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from '@/lib/permissions';
 import fs from 'fs';
 import path from 'path';
 
@@ -51,6 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let successCount = 0;
         let failCount = 0;
         const results = [];
+        const isBSH = isBSHHod(session.user);
 
         for (const file of fileArray) {
             try {
@@ -67,6 +69,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (!student) {
                     results.push({ file: originalName, status: "error", message: "Student not found" });
                     // We should delete the temp uploaded file
+                    fs.unlinkSync(file.filepath);
+                    failCount++;
+                    continue;
+                }
+
+                if (isBSH && student.year !== "1") {
+                    results.push({ file: originalName, status: "error", message: "Unauthorized to upload for Year 2/3/4" });
                     fs.unlinkSync(file.filepath);
                     failCount++;
                     continue;

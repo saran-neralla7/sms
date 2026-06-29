@@ -227,6 +227,11 @@ export default function AdminDashboardPage() {
         }
     ];
 
+    const isBSH = session?.user?.role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
+    const visibleModules = isBSH 
+        ? modules.filter(m => ["Batches", "Sections", "Faculty Mapping", "Feedback Analysis", "MID Exam Engine"].includes(m.title))
+        : modules;
+
     return (
         <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">
@@ -292,7 +297,7 @@ export default function AdminDashboardPage() {
                 {/* Grid */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     <AnimatePresence>
-                        {modules.map((module, index) => (
+                        {visibleModules.map((module, index) => (
                             <motion.div
                                 key={module.title}
                                 initial={{ opacity: 0, y: 20 }}

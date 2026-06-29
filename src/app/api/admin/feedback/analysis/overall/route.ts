@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { isBSHHod } from "@/lib/permissions";
 
 export async function GET(req: Request) {
     try {
@@ -27,6 +28,13 @@ export async function GET(req: Request) {
             },
             facultyId: { not: null }
         };
+
+        const isBSH = isBSHHod(session.user);
+        if (isBSH) {
+            whereClause.subject = {
+                year: "1"
+            };
+        }
 
         if (departmentId) {
             whereClause.faculty = {
