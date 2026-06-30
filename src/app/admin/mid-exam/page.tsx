@@ -345,6 +345,7 @@ export default function AdminMidExamDashboard() {
   const [savingScheme, setSavingScheme] = useState(false);
 
   const [selectedReportSubjectId, setSelectedReportSubjectId] = useState("");
+  const [consolidatedSection, setConsolidatedSection] = useState("ALL");
   const [reportSubjects, setReportSubjects] = useState<any[]>([]);
 
   useEffect(() => {
@@ -1018,6 +1019,36 @@ export default function AdminMidExamDashboard() {
     }
   };
 
+  const handleViewConsolidatedReport = async () => {
+    if (!consolidatedSection) {
+      showToast("Select a Section option", "error");
+      return;
+    }
+    setFetchingReport(true);
+    try {
+      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${consolidatedSection}`);
+      if (!res.ok) {
+        showToast("Failed to fetch report data", "error");
+        return;
+      }
+      const data = await res.json();
+      setPreviewData(data);
+      setPreviewType("FINAL");
+      setPreviewSubjectId("");
+      setShowAttendance(false);
+      setAttendanceMap({});
+      // Scroll to preview element smoothly
+      setTimeout(() => {
+        document.getElementById("report-preview-pane")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to load report", "error");
+    } finally {
+      setFetchingReport(false);
+    }
+  };
+
   const handleViewSubjectReport = async () => {
     if (!selectedSection) {
       showToast("Select a Section to view reports", "error");
@@ -1163,7 +1194,7 @@ export default function AdminMidExamDashboard() {
       }
       const filteredSubjects = previewData.subjects.filter((sub: any) => {
         const isLab = sub.type?.toUpperCase() === "LAB";
-        if (isLab) return showLabMarks;
+        if (isLab) return previewType === "FINAL" ? true : showLabMarks;
         return true;
       });
       filteredSubjects.forEach((sub: any) => {
@@ -1287,7 +1318,7 @@ export default function AdminMidExamDashboard() {
       const meta = data.meta;
       const subjects = (data.subjects || []).filter((sub: any) => {
         const isLab = sub.type?.toUpperCase() === "LAB";
-        if (isLab) return showLabMarks;
+        if (isLab) return reportType === "FINAL" ? true : showLabMarks;
         return true;
       });
       const rows = data.rows || [];
@@ -2227,7 +2258,7 @@ export default function AdminMidExamDashboard() {
                 <p className="text-sm text-slate-500">View compiled reports online with dynamic heatmaps or download signature-ready PDFs</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 {/* Class-Wise Reports Card */}
                 <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
                   <div>
@@ -2311,6 +2342,40 @@ export default function AdminMidExamDashboard() {
                     {fetchingReport && previewType === "SUBJECT" ? <FaSpinner className="animate-spin" /> : <FaEye />} View Subject Report
                   </button>
                 </div>
+
+                {/* Final Internal Marks Consolidated Report Card */}
+                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-900">Final Internal Marks Consolidated Report</h4>
+                      <p className="text-xs text-slate-500 font-medium">Generate final internal marks (Theory: 30, Lab: 50) for a single section or all sections combined.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Target Section</label>
+                      <select
+                        value={consolidatedSection}
+                        onChange={e => setConsolidatedSection(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="ALL">All Sections</option>
+                        {sections.map(s => (
+                          <option key={s.id} value={s.id}>
+                            Section {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleViewConsolidatedReport}
+                    disabled={fetchingReport}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 mt-auto"
+                  >
+                    {fetchingReport && previewType === "FINAL" && !previewSubjectId ? <FaSpinner className="animate-spin" /> : <FaEye />} View Consolidated Report
+                  </button>
+                </div>
               </div>
 
               {/* Report Preview Section */}
@@ -2362,7 +2427,7 @@ export default function AdminMidExamDashboard() {
                       </button>
 
                       {/* Show Lab Marks Toggle */}
-                      {previewType !== "SUBJECT" && (
+                      {previewType !== "SUBJECT" && previewType !== "FINAL" && (
                         <button
                           onClick={() => setShowLabMarks(prev => !prev)}
                           className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm transition-colors ${
@@ -2444,7 +2509,7 @@ export default function AdminMidExamDashboard() {
                     {(() => {
                       const filteredSubjects = previewData.subjects.filter((sub: any) => {
                         const isLab = sub.type?.toUpperCase() === "LAB";
-                        if (isLab) return showLabMarks;
+                        if (isLab) return previewType === "FINAL" ? true : showLabMarks;
                         return true;
                       });
                       return (
@@ -2546,80 +2611,82 @@ export default function AdminMidExamDashboard() {
                                   </tr>
                                 ))}
                               </tbody>
-                              <tfoot className="print:hidden">
-                                {/* Column Average Row */}
-                                <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
-                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">column average</td>
-                                  {filteredSubjects.map((sub: any) => {
-                                    const stats = getSubjectStats(sub.id, sub.type);
-                                    return (
-                                      <td key={sub.id} className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">
-                                        {stats.average}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                                {/* Above 60% Row */}
-                                <tr className="bg-white text-slate-700">
-                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Above 60% (18 and above)</td>
-                                  {filteredSubjects.map((sub: any) => {
-                                    const stats = getSubjectStats(sub.id, sub.type);
-                                    return (
-                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                        {stats.countAbove}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                                {/* Between 60% to 40% Row */}
-                                <tr className="bg-white text-slate-700">
-                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Between 60% to 40% (17 - 12 Marks)</td>
-                                  {filteredSubjects.map((sub: any) => {
-                                    const stats = getSubjectStats(sub.id, sub.type);
-                                    return (
-                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                        {stats.countBetween}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                                {/* Below 40% Row */}
-                                <tr className="bg-white text-slate-700">
-                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Below 40% ( &lt; 12 Marks)</td>
-                                  {filteredSubjects.map((sub: any) => {
-                                    const stats = getSubjectStats(sub.id, sub.type);
-                                    return (
-                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                        {stats.countBelow}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                                {/* With zero Marks Row */}
-                                <tr className="bg-white text-slate-700">
-                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students With zero Marks</td>
-                                  {filteredSubjects.map((sub: any) => {
-                                    const stats = getSubjectStats(sub.id, sub.type);
-                                    return (
-                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                        {stats.countZero}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                                {/* Total No. of Absentees Row */}
-                                <tr className="bg-white text-slate-700">
-                                  <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Absentees</td>
-                                  {filteredSubjects.map((sub: any) => {
-                                    const stats = getSubjectStats(sub.id, sub.type);
-                                    return (
-                                      <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
-                                        {stats.countAbsent}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              </tfoot>
+                              {previewType !== "FINAL" && (
+                                <tfoot className="print:hidden">
+                                  {/* Column Average Row */}
+                                  <tr className="bg-slate-50 border-t border-b border-black font-bold text-slate-800">
+                                    <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2.5 text-right border border-black uppercase text-[10px] text-slate-500 font-bold">column average</td>
+                                    {filteredSubjects.map((sub: any) => {
+                                      const stats = getSubjectStats(sub.id, sub.type);
+                                      return (
+                                        <td key={sub.id} className="px-4 py-2.5 text-center text-sm font-bold border border-black text-slate-700 bg-slate-50">
+                                          {stats.average}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                  {/* Above 60% Row */}
+                                  <tr className="bg-white text-slate-700">
+                                    <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Above 60% (18 and above)</td>
+                                    {filteredSubjects.map((sub: any) => {
+                                      const stats = getSubjectStats(sub.id, sub.type);
+                                      return (
+                                        <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                          {stats.countAbove}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                  {/* Between 60% to 40% Row */}
+                                  <tr className="bg-white text-slate-700">
+                                    <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Between 60% to 40% (17 - 12 Marks)</td>
+                                    {filteredSubjects.map((sub: any) => {
+                                      const stats = getSubjectStats(sub.id, sub.type);
+                                      return (
+                                        <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                          {stats.countBetween}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                  {/* Below 40% Row */}
+                                  <tr className="bg-white text-slate-700">
+                                    <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students Below 40% (11 - 1 Marks)</td>
+                                    {filteredSubjects.map((sub: any) => {
+                                      const stats = getSubjectStats(sub.id, sub.type);
+                                      return (
+                                        <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                          {stats.countBelow}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                  {/* Total No. of Students With zero Marks Row */}
+                                  <tr className="bg-white text-slate-700">
+                                    <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Students With zero Marks</td>
+                                    {filteredSubjects.map((sub: any) => {
+                                      const stats = getSubjectStats(sub.id, sub.type);
+                                      return (
+                                        <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                          {stats.countZero}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                  {/* Total No. of Absentees Row */}
+                                  <tr className="bg-white text-slate-700">
+                                    <td colSpan={showAttendance ? 4 : 3} className="px-4 py-2 text-right border border-black text-[11px] font-medium text-slate-600">Total No. of Absentees</td>
+                                    {filteredSubjects.map((sub: any) => {
+                                      const stats = getSubjectStats(sub.id, sub.type);
+                                      return (
+                                        <td key={sub.id} className="px-4 py-2 text-center text-xs font-semibold border border-black">
+                                          {stats.countAbsent}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                </tfoot>
+                              )}
                             </>
                           ) : (() => {
                         const getAvg = (extractor: (marks: any) => number | null) => {
@@ -2777,7 +2844,7 @@ export default function AdminMidExamDashboard() {
               </div>
 
                   {/* Attendance Statistics Section below the table */}
-                  {previewType !== "SUBJECT" && (() => {
+                  {previewType !== "SUBJECT" && previewType !== "FINAL" && (() => {
                     const attStats = getAttendanceStats();
                     return (
                       <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col md:flex-row justify-between items-start gap-6 print:hidden">

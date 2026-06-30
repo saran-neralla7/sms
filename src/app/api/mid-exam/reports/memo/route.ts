@@ -24,21 +24,38 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const isAllSections = sectionId === "ALL";
+
     const [students, academicYear, department, section, subjects] = await Promise.all([
       prisma.student.findMany({
-        where: { departmentId, year, semester, sectionId, isAlumni: false },
-        select: { id: true, rollNumber: true, name: true },
+        where: { 
+          departmentId, 
+          year, 
+          semester, 
+          sectionId: isAllSections ? undefined : sectionId, 
+          isAlumni: false 
+        },
+        select: { id: true, rollNumber: true, name: true, sectionId: true },
         orderBy: { rollNumber: "asc" }
       }),
       prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } }),
       prisma.department.findUnique({ where: { id: departmentId }, select: { name: true, code: true } }),
-      prisma.section.findUnique({ where: { id: sectionId }, select: { name: true } }),
+      isAllSections ? { name: "All Sections" } : prisma.section.findUnique({ where: { id: sectionId }, select: { name: true } }),
       prisma.subject.findMany({
         where: { departmentId, year, semester },
         select: { id: true, name: true, code: true, shortName: true, type: true },
         orderBy: { code: "asc" }
       })
     ]);
+
+    // Sort subjects: THEORY first, LAB last, then by code
+    subjects.sort((a, b) => {
+      const typeA = (a.type || "THEORY").toUpperCase();
+      const typeB = (b.type || "THEORY").toUpperCase();
+      if (typeA === "THEORY" && typeB === "LAB") return -1;
+      if (typeA === "LAB" && typeB === "THEORY") return 1;
+      return a.code.localeCompare(b.code);
+    });
 
     const studentIds = students.map(s => s.id);
     const subjectIds = subjects.map(s => s.id);
@@ -47,7 +64,7 @@ export async function GET(req: NextRequest) {
     const papers = await prisma.midExamPaper.findMany({
       where: {
         subjectId: { in: subjectIds },
-        sectionId,
+        sectionId: isAllSections ? undefined : sectionId,
         academicYearId,
       },
       include: {
@@ -114,7 +131,8 @@ export async function GET(req: NextRequest) {
     // Get assignment marks (only finalized ones)
     const assignmentMarks = await prisma.assignmentMark.findMany({
       where: {
-        academicYearId, departmentId, year, semester, sectionId,
+        academicYearId, departmentId, year, semester,
+        sectionId: isAllSections ? undefined : sectionId,
         studentId: { in: studentIds },
         isDraft: false,
       }
@@ -138,9 +156,9 @@ export async function GET(req: NextRequest) {
           mid1Marks = labMark?.marksObtained ?? null;
           mid1Max = labMark?.maxMarks ?? 50;
         } else {
-          // For theory: MID_I and MID_II papers
-          const mid1Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_I");
-          const mid2Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_II");
+          // For theory: MID_I and MID_II papers (ensure we match the student's section!)
+          const mid1Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_I" && p.sectionId === student.sectionId);
+          const mid2Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_II" && p.sectionId === student.sectionId);
 
           const getPaperTotal = (paper: any, examType: "MID_I" | "MID_II") => {
             if (!paper) {

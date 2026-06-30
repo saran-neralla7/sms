@@ -112,6 +112,13 @@ export default function DashboardPage() {
         color: "bg-emerald-50 text-emerald-600"
       },
       {
+        title: "MID Exam Engine",
+        icon: <FaBook className="h-6 w-6" />,
+        description: "OBE-ready Mid examinations & marks evaluation control panel.",
+        href: "/admin/mid-exam",
+        color: "bg-blue-50 text-blue-600"
+      },
+      {
         title: "Reports",
         icon: <FaFileAlt className="h-6 w-6" />,
         description: "Generate attendance, performance, and analytical reports.",
@@ -159,7 +166,7 @@ export default function DashboardPage() {
     const isBSH = role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
     if (role === "HOD") {
       if (isBSH) {
-        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval"].includes(m.title));
+        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine"].includes(m.title));
       } else {
         modules = modules.filter(m => m.title !== "Administration" && m.title !== "Fees");
       }

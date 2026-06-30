@@ -1,16 +1,15 @@
 // src/lib/sms.ts
 
-// These should ideally be moved to .env in the future
-const SMS_USER = "gayatri1";
-const SMS_PASS = "8b898f7c2bXX";
-const SMS_SENDER = "GVPRUS";
-const SMS_TEMPLATE_ID = "1707173598509565396";
+const SMS_USER = process.env.SMS_USER || "";
+const SMS_PASS = process.env.SMS_PASS || "";
+const SMS_SENDER = process.env.SMS_SENDER || "GVPRUS";
+const SMS_TEMPLATE_ID = process.env.SMS_TEMPLATE_ID || "";
 
 export async function sendAbsenteeSMS(mobile: string, rollNumber: string, name: string) {
     try {
         const message = `Dear Parent, Your ward Roll No: ${rollNumber} Name: ${name} is Absent for today's first hour. Regards, GAYATRI VIDYA PARISHAD COLLEGE`;
 
-        const url = new URL('http://sms.platinumsms.co.in/sendsms.jsp');
+        const url = new URL('https://sms.platinumsms.co.in/sendsms.jsp');
         url.searchParams.append('user', SMS_USER);
         url.searchParams.append('password', SMS_PASS);
         url.searchParams.append('senderid', SMS_SENDER);
@@ -41,7 +40,7 @@ export async function sendAbsenteeSMS(mobile: string, rollNumber: string, name: 
     }
 }
 
-export const SMS_MARKS_TEMPLATE_ID = "1707177545746041134";
+export const SMS_MARKS_TEMPLATE_ID = process.env.SMS_MARKS_TEMPLATE_ID || "";
 
 export async function sendMarksSMS(
     mobile: string,
@@ -97,7 +96,7 @@ Please Contact HOD for any
 queries.
 Gayatri Vidya Parishad`;
 
-        const url = new URL('http://sms.platinumsms.co.in/sendsms.jsp');
+        const url = new URL('https://sms.platinumsms.co.in/sendsms.jsp');
         url.searchParams.append('user', SMS_USER);
         url.searchParams.append('password', SMS_PASS);
         url.searchParams.append('senderid', SMS_SENDER);
