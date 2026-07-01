@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
@@ -7,8 +6,6 @@ import { authOptions } from "@/lib/auth";
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session || (session.user as any).role !== "ADMIN") {
-        // Only Admin should see all logs? 
-        // User said "add a log in the admin panel". So yes, Admin only.
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -18,26 +15,54 @@ export async function GET(req: Request) {
         const page = parseInt(searchParams.get("page") || "1");
         const skip = (page - 1) * limit;
 
-        // Fetch logs with user details if possible (manually or relation?)
-        // Schema has `performedBy` as String (User ID). User model has ID.
-        // We can join if we add relation, but currently schema doesn't seem to have relation on AuditLog.
-        // I defined: performedBy String // User ID. No @relation?
-        // Let's check schema.
-        // "performedBy String // User ID"
-        // If no relation, I can't include user name easily. 
-        // I will fetch logs and then fetch users or just display ID?
-        // Better: Update schema to have relation?
-        // User said "simplified". I'll try to fetch users manualy if needed, or just show ID for now.
-        // Actually, for "Simplified", I'll just show what I have.
-        // Or I can do a second query to get distinct user names.
+        const actionFilter = searchParams.get("action");
+        const entityFilter = searchParams.get("entity");
+        const searchQuery = searchParams.get("q");
 
-        const logs = await prisma.auditLog.findMany({
-            orderBy: { createdAt: "desc" },
-            take: limit,
-            skip: skip
-        });
+        const where: any = {};
 
-        const total = await prisma.auditLog.count();
+        if (actionFilter) {
+            where.action = actionFilter;
+        }
+
+        if (entityFilter) {
+            where.entity = entityFilter;
+        }
+
+        if (searchQuery) {
+            // Find users matching search query first
+            const matchingUsers = await prisma.user.findMany({
+                where: {
+                    username: { contains: searchQuery, mode: "insensitive" }
+                },
+                select: { id: true }
+            });
+            const matchingUserIds = matchingUsers.map(u => u.id);
+
+            where.OR = [
+                { entity: { contains: searchQuery, mode: "insensitive" } },
+                { entityId: { contains: searchQuery, mode: "insensitive" } },
+                { details: { contains: searchQuery, mode: "insensitive" } },
+                { performedBy: { in: [searchQuery, ...matchingUserIds] } }
+            ];
+        }
+
+        const [logs, total] = await prisma.$transaction([
+            prisma.auditLog.findMany({
+                where,
+                orderBy: { createdAt: "desc" },
+                take: limit,
+                skip: skip
+            }),
+            prisma.auditLog.count({ where })
+        ]);
+
+        const [globalTotal, failedLoginsCount, successLoginsCount, dataMutationsCount] = await prisma.$transaction([
+            prisma.auditLog.count(),
+            prisma.auditLog.count({ where: { action: "LOGIN_FAILURE" } }),
+            prisma.auditLog.count({ where: { action: "LOGIN_SUCCESS" } }),
+            prisma.auditLog.count({ where: { action: { in: ["CREATE", "UPDATE", "DELETE"] } } }),
+        ]);
 
         // Enrich with User info manually
         const userIds = Array.from(new Set(logs.map(l => l.performedBy)));
@@ -50,13 +75,19 @@ export async function GET(req: Request) {
 
         const enrichedLogs = logs.map(log => ({
             ...log,
-            performerName: userMap.get(log.performedBy)?.username || log.performedBy || "Unknown",
-            performerRole: userMap.get(log.performedBy)?.role || "N/A"
+            performerName: userMap.get(log.performedBy)?.username || log.performedBy || "SYSTEM",
+            performerRole: userMap.get(log.performedBy)?.role || "SYSTEM"
         }));
 
         return NextResponse.json({
             data: enrichedLogs,
-            meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
+            meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+            stats: {
+                total: globalTotal,
+                failedLogins: failedLoginsCount,
+                successLogins: successLoginsCount,
+                dataMutations: dataMutationsCount
+            }
         });
 
     } catch (error) {

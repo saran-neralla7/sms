@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { logActivity } from "@/lib/logging";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -271,6 +272,23 @@ export async function POST(request: Request) {
         }
 
         const records = await prisma.$transaction(transactions);
+
+        // Audit Log for Attendance Submission
+        await logActivity(
+            (session.user as any).id,
+            transactions.some(t => t.update) ? "UPDATE" : "CREATE",
+            "Attendance",
+            targetSectionIds.join(", "),
+            {
+                date,
+                year,
+                semester,
+                departmentId,
+                subjectId: finalSubjectId,
+                periodIds: finalPeriodIds,
+                recordCount: records.length
+            }
+        );
 
         return NextResponse.json({ success: true, count: records.length });
 

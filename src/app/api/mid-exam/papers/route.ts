@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/logging";
 
 // GET all papers for a given academic class (with full question structure)
 export async function GET(req: NextRequest) {
@@ -209,6 +210,22 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Audit Log for Mid Exam Paper Creation
+    await logActivity(
+      session.user.id,
+      "CREATE",
+      "MidExamPaper",
+      paper.id,
+      {
+        academicYearId: paper.academicYearId,
+        subjectCode: paper.subject.code,
+        subjectName: paper.subject.name,
+        sectionName: paper.section.name,
+        examType: paper.examType,
+        totalMarks: paper.totalMarks
+      }
+    );
 
     return NextResponse.json(paper);
   } catch (e) {

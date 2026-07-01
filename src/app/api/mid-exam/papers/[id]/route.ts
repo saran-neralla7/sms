@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/logging";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -152,6 +153,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           publishRecord: true,
         }
       });
+
+      // Audit Log for Paper Structure Update
+      await logActivity(
+        session.user.id,
+        "UPDATE",
+        "MidExamPaper",
+        id,
+        {
+          hasQuestionsUpdate: true,
+          totalMarks: updatedPaper.totalMarks
+        }
+      );
+
       return NextResponse.json(updatedPaper);
     }
 
@@ -166,6 +180,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         commonText: body.commonText !== undefined ? body.commonText : paper.commonText,
       }
     });
+
+    // Audit Log for Paper Metadata Update
+    await logActivity(
+      session.user.id,
+      "UPDATE",
+      "MidExamPaper",
+      id,
+      {
+        hasQuestionsUpdate: false,
+        totalMarks: updated.totalMarks,
+        examDate: updated.examDate
+      }
+    );
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);
@@ -187,5 +215,19 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   }
 
   await prisma.midExamPaper.delete({ where: { id } });
+
+  // Audit Log for Paper Deletion
+  await logActivity(
+    session.user.id,
+    "DELETE",
+    "MidExamPaper",
+    id,
+    {
+      subjectId: paper.subjectId,
+      sectionId: paper.sectionId,
+      examType: paper.examType
+    }
+  );
+
   return NextResponse.json({ success: true });
 }

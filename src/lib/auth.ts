@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { logActivity } from "@/lib/logging";
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -22,6 +23,7 @@ export const authOptions: NextAuthOptions = {
                 });
 
                 if (!user) {
+                    await logActivity("SYSTEM", "LOGIN_FAILURE", "Auth", credentials.username, { reason: "User not found" });
                     return null;
                 }
 
@@ -31,8 +33,11 @@ export const authOptions: NextAuthOptions = {
                 );
 
                 if (!isPasswordValid) {
+                    await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Incorrect password" });
                     return null;
                 }
+
+                await logActivity(user.id, "LOGIN_SUCCESS", "Auth", user.username, { role: user.role });
 
                 return {
                     id: user.id,
@@ -65,6 +70,13 @@ export const authOptions: NextAuthOptions = {
             }
             return session;
         },
+    },
+    events: {
+        async signOut({ token }) {
+            if (token && token.id) {
+                await logActivity(token.id as string, "LOGOUT", "Auth", (token as any).username || "", { role: token.role });
+            }
+        }
     },
     pages: {
         signIn: "/login",

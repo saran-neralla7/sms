@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isBSHHod } from "@/lib/permissions";
+import { logActivity } from "@/lib/logging";
 
 export async function GET(request: Request) {
     try {
@@ -132,6 +133,20 @@ export async function POST(request: Request) {
                 });
             }
         });
+
+        // Audit Log for Timetable Update
+        await logActivity(
+            (session.user as any).id,
+            "UPDATE",
+            "Timetable",
+            sectionId,
+            {
+                departmentId,
+                year,
+                semester,
+                entryCount: entries.length
+            }
+        );
 
         return NextResponse.json({ success: true, message: "Timetable updated successfully" });
     } catch (error: any) {

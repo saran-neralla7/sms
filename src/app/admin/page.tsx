@@ -18,7 +18,8 @@ import {
     FaKey,
     FaMobileAlt,
     FaSms,
-    FaFileAlt
+    FaFileAlt,
+    FaHistory
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -32,6 +33,30 @@ export default function AdminDashboardPage() {
     const [pendingRequests, setPendingRequests] = useState<number>(0);
     const [dismissBanner, setDismissBanner] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [liveLogs, setLiveLogs] = useState<any[]>([]);
+    const [logsLoading, setLogsLoading] = useState(true);
+
+    useEffect(() => {
+        if (status !== "authenticated" || !session?.user || !["ADMIN", "DIRECTOR"].includes((session.user as any).role)) return;
+
+        const fetchLiveLogs = async () => {
+            try {
+                const res = await fetch("/api/audit-logs?limit=5");
+                if (res.ok) {
+                    const data = await res.json();
+                    setLiveLogs(data.data || []);
+                }
+            } catch (err) {
+                console.error("Live logs error:", err);
+            } finally {
+                setLogsLoading(false);
+            }
+        };
+
+        fetchLiveLogs();
+        const interval = setInterval(fetchLiveLogs, 7000);
+        return () => clearInterval(interval);
+    }, [status, session]);
 
     useEffect(() => {
         setMounted(true);
@@ -224,6 +249,13 @@ export default function AdminDashboardPage() {
             description: "Generate and manage Transfer Certificates.",
             href: "/admin/certificates",
             color: "bg-orange-50 text-orange-600"
+        },
+        {
+            title: "System Audit Logs",
+            icon: <FaHistory className="h-6 w-6" />,
+            description: "Track all critical actions performed by users.",
+            href: "/admin/logs",
+            color: "bg-slate-50 text-slate-600"
         }
     ];
 
@@ -315,6 +347,77 @@ export default function AdminDashboardPage() {
                         ))}
                     </AnimatePresence>
                 </div>
+
+                {/* Live System Activity Feed */}
+                {!isBSH && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="mt-12 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+                    >
+                        <div className="mb-6 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="relative flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                </span>
+                                <h3 className="text-lg font-bold text-slate-900">Live System Activity</h3>
+                            </div>
+                            <button
+                                onClick={() => router.push("/admin/logs")}
+                                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                            >
+                                View All Logs →
+                            </button>
+                        </div>
+
+                        <div className="flow-root">
+                            <ul className="-mb-8">
+                                {logsLoading ? (
+                                    <div className="py-4 text-center text-sm text-slate-500">Loading activity...</div>
+                                ) : liveLogs.length === 0 ? (
+                                    <div className="py-4 text-center text-sm text-slate-500">No activity recorded yet.</div>
+                                ) : (
+                                    liveLogs.map((log, logIdx) => (
+                                        <li key={log.id}>
+                                            <div className="relative pb-8">
+                                                {logIdx !== liveLogs.length - 1 ? (
+                                                    <span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-slate-200" aria-hidden="true" />
+                                                ) : null}
+                                                <div className="relative flex space-x-3">
+                                                    <div>
+                                                        <span className={`flex h-8 w-8 items-center justify-center rounded-full ring-8 ring-white
+                                                            ${log.action === 'CREATE' ? 'bg-green-50 text-green-600' :
+                                                              log.action === 'DELETE' ? 'bg-red-50 text-red-600' :
+                                                              'bg-blue-50 text-blue-600'}`}>
+                                                            {log.action === 'CREATE' ? '＋' : log.action === 'DELETE' ? '✕' : '✎'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
+                                                        <div>
+                                                            <p className="text-sm text-slate-600">
+                                                                <strong className="font-semibold text-slate-900">{log.performerName}</strong> ({log.performerRole}){' '}
+                                                                <span className="text-slate-500">performed</span>{' '}
+                                                                <span className="font-medium text-slate-800">{log.action}</span>{' '}
+                                                                <span className="text-slate-500">on</span>{' '}
+                                                                <strong className="font-semibold text-slate-900">{log.entity}</strong>{' '}
+                                                                <span className="text-xs font-mono text-slate-400">({log.entityId})</span>
+                                                            </p>
+                                                        </div>
+                                                        <div className="whitespace-nowrap text-right text-xs text-slate-500">
+                                                            {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    ))
+                                )}
+                            </ul>
+                        </div>
+                    </motion.div>
+                )}
             </div>
         </div>
     );
