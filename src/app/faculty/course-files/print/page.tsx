@@ -1475,24 +1475,24 @@ export default function CourseFilePrintPage() {
               const isAbs1 = mid1AbsentMap[student.id];
               const isAbs2 = mid2AbsentMap[student.id];
 
-              const m1Val = isAbs1 ? "Absent" : (m1Raw !== undefined ? m1Raw : "-");
-              const m2Val = isAbs2 ? "Absent" : (m2Raw !== undefined ? m2Raw : "-");
+              const m1Val = isAbs1 ? "AB" : (m1Raw !== undefined ? m1Raw : "-");
+              const m2Val = isAbs2 ? "AB" : (m2Raw !== undefined ? m2Raw : "-");
 
               const s1Val = isAbs1 ? 0 : (m1Raw !== undefined ? scaleMidMarks(m1Raw, mid1Paper?.totalMarks || 30, 20) : 0);
               const s2Val = isAbs2 ? 0 : (m2Raw !== undefined ? scaleMidMarks(m2Raw, mid2Paper?.totalMarks || 30, 20) : 0);
 
-              const s1Display = isAbs1 ? "Absent" : (m1Raw !== undefined ? s1Val : "-");
-              const s2Display = isAbs2 ? "Absent" : (m2Raw !== undefined ? s2Val : "-");
+              const s1Display = isAbs1 ? "0" : (m1Raw !== undefined ? s1Val : "-");
+              const s2Display = isAbs2 ? "0" : (m2Raw !== undefined ? s2Val : "-");
 
               // Compute average of scaled MIDs (excluding absents/nulls if applicable, or count absent as 0)
               const availableScaled: number[] = [];
-              if (m1Raw !== undefined && !isAbs1) availableScaled.push(s1Val);
-              if (m2Raw !== undefined && !isAbs2) availableScaled.push(s2Val);
+              if (m1Raw !== undefined || isAbs1) availableScaled.push(s1Val);
+              if (m2Raw !== undefined || isAbs2) availableScaled.push(s2Val);
 
               const avgMid = availableScaled.length > 0
                 ? availableScaled.reduce((a, b) => a + b, 0) / availableScaled.length
                 : 0;
-              const avgMidDisplay = (m1Raw !== undefined || m2Raw !== undefined)
+              const avgMidDisplay = (m1Raw !== undefined || m2Raw !== undefined || isAbs1 || isAbs2)
                 ? Math.round(avgMid)
                 : "-";
 
@@ -1508,10 +1508,10 @@ export default function CourseFilePrintPage() {
               if (isLab && directInternal) {
                 finalInternalVal = directInternal.marksObtained;
               } else {
-                if (m1Raw !== undefined || m2Raw !== undefined || assignmentVal !== null) {
+                if (m1Raw !== undefined || m2Raw !== undefined || isAbs1 || isAbs2 || assignmentVal !== null) {
                   finalInternalVal = calculateInternalMarks({
-                    mid1Total: (m1Raw !== undefined && !isAbs1) ? m1Raw : null,
-                    mid2Total: (m2Raw !== undefined && !isAbs2) ? m2Raw : null,
+                    mid1Total: (m1Raw !== undefined && !isAbs1) ? m1Raw : (isAbs1 ? 0 : null),
+                    mid2Total: (m2Raw !== undefined && !isAbs2) ? m2Raw : (isAbs2 ? 0 : null),
                     mid1MaxMarks: mid1Paper?.totalMarks || 30,
                     mid2MaxMarks: mid2Paper?.totalMarks || 30,
                     mid1ScaledTo: 20,

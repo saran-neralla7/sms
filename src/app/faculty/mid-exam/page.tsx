@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -8,11 +8,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaFileAlt, FaPen, FaLock, FaUnlock, FaCheckCircle, FaClipboardList,
   FaChevronRight, FaBook, FaLayerGroup, FaCalendarAlt, FaSpinner,
-  FaPlus, FaEye, FaDownload, FaFileExcel, FaFlask
+  FaPlus, FaEye, FaDownload, FaFileExcel, FaFlask, FaInfoCircle, FaArchive
 } from "react-icons/fa";
 import Modal from "@/components/Modal";
 import LogoSpinner from "@/components/LogoSpinner";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
 
 // jsPDF imports for report generation
 import jsPDF from "jspdf";
@@ -127,7 +128,89 @@ export default function FacultyMidExamPage() {
   // Analysis states
   const [analysisData, setAnalysisData] = useState<any | null>(null);
   const [fetchingAnalysis, setFetchingAnalysis] = useState<boolean>(false);
-  const [selectedAnalysisExamType, setSelectedAnalysisExamType] = useState<"MID_I" | "MID_II">("MID_I");
+  const [selectedAnalysisExamType, setSelectedAnalysisExamType] = useState<"MID_I" | "MID_II" | "FINAL" | "COMPARISON">("MID_I");
+
+  const theoryAnalysis = useMemo(() => {
+    if (!analysisData?.subjectAnalysis) return [];
+    return analysisData.subjectAnalysis.filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "THEORY") return true;
+      if (type === "LAB") return false;
+      return !sub.subjectCode?.endsWith("P");
+    });
+  }, [analysisData]);
+
+  const labAnalysis = useMemo(() => {
+    if (!analysisData?.subjectAnalysis) return [];
+    return analysisData.subjectAnalysis.filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "LAB") return true;
+      if (type === "THEORY") return false;
+      return !!sub.subjectCode?.endsWith("P");
+    });
+  }, [analysisData]);
+
+  const comparativeSubjects = useMemo(() => {
+    if (!analysisData?.isComparison) return [];
+    const mid1Subs = analysisData.mid1?.subjectAnalysis || [];
+    const mid2Subs = analysisData.mid2?.subjectAnalysis || [];
+    const finalSubs = analysisData.final?.subjectAnalysis || [];
+
+    return mid1Subs.map((sub1: any) => {
+      const sub2 = mid2Subs.find((s: any) => s.subjectCode === sub1.subjectCode) || {};
+      const subF = finalSubs.find((s: any) => s.subjectCode === sub1.subjectCode) || {};
+      return {
+        subjectCode: sub1.subjectCode,
+        subjectName: sub1.subjectName,
+        subjectType: sub1.subjectType,
+        mid1: {
+          average: sub1.average,
+          gap: sub1.gap,
+          difficultyIndex: sub1.difficultyIndex,
+          absentees: sub1.absentees,
+          insight: sub1.insight,
+          remarks: sub1.remarks,
+          performance: sub1.performance || { top: 0, middle: 0, low: 0 }
+        },
+        mid2: {
+          average: sub2.average ?? "N/A",
+          gap: sub2.gap ?? "N/A",
+          difficultyIndex: sub2.difficultyIndex ?? "N/A",
+          absentees: sub2.absentees ?? "N/A",
+          insight: sub2.insight ?? "N/A",
+          remarks: sub2.remarks ?? "N/A",
+          performance: sub2.performance || { top: 0, middle: 0, low: 0 }
+        },
+        final: {
+          average: subF.average ?? "N/A",
+          gap: subF.gap ?? "N/A",
+          difficultyIndex: subF.difficultyIndex ?? "N/A",
+          absentees: subF.absentees ?? "N/A",
+          insight: subF.insight ?? "N/A",
+          remarks: subF.remarks ?? "N/A",
+          performance: subF.performance || { top: 0, middle: 0, low: 0 }
+        }
+      };
+    });
+  }, [analysisData]);
+
+  const comparativeTheorySubjects = useMemo(() => {
+    return comparativeSubjects.filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "THEORY") return true;
+      if (type === "LAB") return false;
+      return !sub.subjectCode?.endsWith("P");
+    });
+  }, [comparativeSubjects]);
+
+  const comparativeLabSubjects = useMemo(() => {
+    return comparativeSubjects.filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "LAB") return true;
+      if (type === "THEORY") return false;
+      return !!sub.subjectCode?.endsWith("P");
+    });
+  }, [comparativeSubjects]);
 
   // Reports states
   const [previewData, setPreviewData] = useState<any | null>(null);
@@ -146,6 +229,8 @@ export default function FacultyMidExamPage() {
   const [selectedYear, setSelectedYear] = useState<string>("1");
   const [selectedSem, setSelectedSem] = useState<string>("1");
   const [consolidatedSection, setConsolidatedSection] = useState<string>("ALL");
+  const [bulkDownloadScope, setBulkDownloadScope] = useState<"CURRENT" | "ALL">("CURRENT");
+  const [bulkDownloading, setBulkDownloading] = useState<boolean>(false);
 
   useEffect(() => {
     setPreviewData(null);
@@ -308,15 +393,37 @@ export default function FacultyMidExamPage() {
     setFetchingAnalysis(true);
     try {
       const deptId = mapping.subject.departmentId || (session?.user as any).departmentId;
-      const res = await fetch(
-        `/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=${selectedAnalysisExamType}`
-      );
-      if (!res.ok) {
-        showToast("Failed to fetch analysis data", "error");
-        return;
+      if (selectedAnalysisExamType === "COMPARISON") {
+        const [mid1Res, mid2Res, finalRes] = await Promise.all([
+          fetch(`/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=MID_I`),
+          fetch(`/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=MID_II`),
+          fetch(`/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=FINAL`),
+        ]);
+        if (!mid1Res.ok || !mid2Res.ok || !finalRes.ok) {
+          showToast("Failed to fetch comparative analysis data", "error");
+          return;
+        }
+        const mid1 = await mid1Res.json();
+        const mid2 = await mid2Res.json();
+        const final = await finalRes.json();
+        setAnalysisData({
+          isComparison: true,
+          mid1,
+          mid2,
+          final,
+          metadata: mid1.metadata
+        });
+      } else {
+        const res = await fetch(
+          `/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=${selectedAnalysisExamType}`
+        );
+        if (!res.ok) {
+          showToast("Failed to fetch analysis data", "error");
+          return;
+        }
+        const data = await res.json();
+        setAnalysisData(data);
       }
-      const data = await res.json();
-      setAnalysisData(data);
     } catch (e) {
       console.error(e);
       showToast("Error loading analysis data", "error");
@@ -337,28 +444,66 @@ export default function FacultyMidExamPage() {
 
     const wb = XLSX.utils.book_new();
 
+    const theorySubjects = (subjectAnalysis || []).filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "THEORY") return true;
+      if (type === "LAB") return false;
+      return !sub.subjectCode?.endsWith("P");
+    });
+
+    const labSubjects = (subjectAnalysis || []).filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "LAB") return true;
+      if (type === "THEORY") return false;
+      return !!sub.subjectCode?.endsWith("P");
+    });
+
     const ws1Data = [
       ["MID EXAM ANALYSIS REPORT"],
       [`Academic Year: ${metadata.academicYear} | Department: ${metadata.department} | Year: ${metadata.year} | Sem: ${metadata.semester} | Section: ${metadata.section}`],
-      [`Exam: ${metadata.examType === "MID_I" ? "MID - I" : "MID - II"}`],
+      [`Exam: ${metadata.examType === "MID_I" ? "MID - I" : metadata.examType === "MID_II" ? "MID - II" : "FINAL INTERNAL"}`],
       [],
-      ["S.No", "Subject Code", "Subject Name", "Class Strength", "Absentees", "Average Marks", "Gap", "Difficulty Index (%)", "Insight", "Remarks"]
     ];
 
-    subjectAnalysis.forEach((sub: any) => {
-      ws1Data.push([
-        sub.sNo,
-        sub.subjectCode,
-        sub.subjectName,
-        sub.classStrength,
-        sub.absentees,
-        sub.average,
-        sub.gap,
-        sub.difficultyIndex,
-        sub.insight,
-        sub.remarks
-      ]);
-    });
+    if (theorySubjects.length > 0) {
+      ws1Data.push(["THEORY SUBJECTS"]);
+      ws1Data.push(["S.No", "Subject Code", "Subject Name", "Class Strength", "Absentees", "Average Marks", "Gap", "Difficulty Index (%)", "Insight", "Remarks"]);
+      theorySubjects.forEach((sub: any, idx: number) => {
+        ws1Data.push([
+          idx + 1,
+          sub.subjectCode,
+          sub.subjectName,
+          sub.classStrength,
+          sub.absentees,
+          sub.average,
+          sub.gap,
+          sub.difficultyIndex,
+          sub.insight,
+          sub.remarks
+        ]);
+      });
+      ws1Data.push([]);
+    }
+
+    if (labSubjects.length > 0) {
+      ws1Data.push(["LAB SUBJECTS"]);
+      ws1Data.push(["S.No", "Subject Code", "Subject Name", "Class Strength", "Absentees", "Average Marks", "Gap", "Difficulty Index (%)", "Insight", "Remarks"]);
+      labSubjects.forEach((sub: any, idx: number) => {
+        ws1Data.push([
+          idx + 1,
+          sub.subjectCode,
+          sub.subjectName,
+          sub.classStrength,
+          sub.absentees,
+          sub.average,
+          sub.gap,
+          sub.difficultyIndex,
+          sub.insight,
+          sub.remarks
+        ]);
+      });
+      ws1Data.push([]);
+    }
 
     const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
     XLSX.utils.book_append_sheet(wb, ws1, "Subject-wise Analysis");
@@ -403,7 +548,7 @@ export default function FacultyMidExamPage() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(15, 23, 42);
-    doc.text(`${metadata.year} Year ${metadata.semester} Sem ${metadata.examType === "MID_I" ? "I Mid" : "II Mid"} Analysis (AY: ${metadata.academicYear})`, 105, 34, { align: "center" });
+    doc.text(`${metadata.year} Year ${metadata.semester} Sem ${metadata.examType === "MID_I" ? "I Mid" : (metadata.examType === "MID_II" ? "II Mid" : "Final Internal")} Analysis (AY: ${metadata.academicYear})`, 105, 34, { align: "center" });
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
@@ -416,34 +561,93 @@ export default function FacultyMidExamPage() {
     doc.setFont("helvetica", "normal");
     doc.text(`SECTION - ${metadata.section}`, 135, 45);
 
-    const subjectHeaders = [
-      ["S.No", "Subject", "Strength", "Absentees", "Average", "Insight", "Gap", "Diff Index (%)", "Remarks"]
-    ];
-    const subjectRows = subjectAnalysis.map((sub: any) => [
-      sub.sNo,
-      sub.subjectName,
-      sub.classStrength,
-      sub.absentees,
-      sub.average,
-      sub.insight,
-      sub.gap,
-      `${sub.difficultyIndex}%`,
-      sub.remarks
-    ]);
-
-    autoTable(doc, {
-      startY: 50,
-      head: subjectHeaders,
-      body: subjectRows,
-      theme: "grid",
-      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center" },
-      styles: { fontSize: 8, halign: "center" },
-      columnStyles: {
-        1: { halign: "left" }
-      }
+    const theorySubjects = (subjectAnalysis || []).filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "THEORY") return true;
+      if (type === "LAB") return false;
+      return !sub.subjectCode?.endsWith("P");
     });
 
-    let currentY = (doc as any).lastAutoTable.finalY + 10;
+    const labSubjects = (subjectAnalysis || []).filter((sub: any) => {
+      const type = sub.subjectType?.toUpperCase();
+      if (type === "LAB") return true;
+      if (type === "THEORY") return false;
+      return !!sub.subjectCode?.endsWith("P");
+    });
+
+    let currentY = 50;
+
+    if (theorySubjects.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Theory Subjects:", 14, currentY);
+      currentY += 3;
+
+      const theoryHeaders = [
+        ["S.No", "Subject", "Strength", "Absentees", "Average", "Insight", "Gap", "Diff Index (%)", "Remarks"]
+      ];
+      const theoryRows = theorySubjects.map((sub: any, idx: number) => [
+        idx + 1,
+        sub.subjectName,
+        sub.classStrength,
+        sub.absentees,
+        sub.average,
+        sub.insight,
+        sub.gap,
+        `${sub.difficultyIndex}%`,
+        sub.remarks
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: theoryHeaders,
+        body: theoryRows,
+        theme: "grid",
+        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", lineWidth: 0.4, lineColor: [30, 40, 60] },
+        styles: { fontSize: 8, halign: "center", lineColor: [80, 80, 80], lineWidth: 0.3 },
+        columnStyles: {
+          1: { halign: "left" }
+        }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    if (labSubjects.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Lab / Practical Subjects:", 14, currentY);
+      currentY += 3;
+
+      const labHeaders = [
+        ["S.No", "Subject", "Strength", "Absentees", "Average", "Insight", "Gap", "Diff Index (%)", "Remarks"]
+      ];
+      const labRows = labSubjects.map((sub: any, idx: number) => [
+        idx + 1,
+        sub.subjectName,
+        sub.classStrength,
+        sub.absentees,
+        sub.average,
+        sub.insight,
+        sub.gap,
+        `${sub.difficultyIndex}%`,
+        sub.remarks
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: labHeaders,
+        body: labRows,
+        theme: "grid",
+        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", lineWidth: 0.4, lineColor: [30, 40, 60] },
+        styles: { fontSize: 8, halign: "center", lineColor: [80, 80, 80], lineWidth: 0.3 },
+        columnStyles: {
+          1: { halign: "left" }
+        }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+    }
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
@@ -462,8 +666,8 @@ export default function FacultyMidExamPage() {
       head: perfHeaders,
       body: perfRows,
       theme: "grid",
-      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center" },
-      styles: { fontSize: 9, halign: "center" }
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", lineWidth: 0.4, lineColor: [30, 40, 60] },
+      styles: { fontSize: 9, halign: "center", lineColor: [80, 80, 80], lineWidth: 0.3 }
     });
 
     currentY = (doc as any).lastAutoTable.finalY + 10;
@@ -485,8 +689,8 @@ export default function FacultyMidExamPage() {
       head: matrixHeaders,
       body: matrixRows,
       theme: "grid",
-      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center" },
-      styles: { fontSize: 8, halign: "center" },
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", lineWidth: 0.4, lineColor: [30, 40, 60] },
+      styles: { fontSize: 8, halign: "center", lineColor: [80, 80, 80], lineWidth: 0.3 },
       columnStyles: {
         0: { fontStyle: "bold", halign: "left" }
       }
@@ -758,8 +962,10 @@ export default function FacultyMidExamPage() {
         console.error("Could not load logo", e);
       }
 
+      const isLandscape = reportType === "FINAL";
+      const pageWidth = isLandscape ? 297 : 210;
       const doc = new jsPDF({
-        orientation: "landscape",
+        orientation: isLandscape ? "landscape" : "portrait",
         unit: "mm",
         format: "a4"
       });
@@ -788,43 +994,43 @@ export default function FacultyMidExamPage() {
       }
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", 40, 15, { align: "left" });
+      doc.setFontSize(isLandscape ? 13 : 9.5);
+      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", pageWidth / 2, 15, { align: "center" });
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text("Rushikonda, Visakhapatnam - 530045.", 40, 20, { align: "left" });
+      doc.setFontSize(isLandscape ? 10 : 8);
+      doc.text("Rushikonda, Visakhapatnam - 530045.", pageWidth / 2, 20, { align: "center" });
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
+      doc.setFontSize(isLandscape ? 11 : 9);
       const deptText = "DEPARTMENT OF " + (meta.department || "").toUpperCase();
-      const deptLines = doc.splitTextToSize(deptText, 297 - 40 - margin);
+      const deptLines = doc.splitTextToSize(deptText, pageWidth - 30 - margin * 2);
       let currentY = 25;
       deptLines.forEach((line: string) => {
-        doc.text(line, 40, currentY, { align: "left" });
+        doc.text(line, pageWidth / 2, currentY, { align: "center" });
         currentY += 5;
       });
 
-      doc.setFontSize(11);
+      doc.setFontSize(isLandscape ? 11 : 9);
       let reportTitle = "";
       if (reportType === "MID_I") reportTitle = "MID-I MARKS MEMO";
       else if (reportType === "MID_II") reportTitle = "MID-II MARKS MEMO";
       else if (reportType === "ASSIGNMENT") reportTitle = "ASSIGNMENTS MARKS MEMO";
       else if (reportType === "FINAL") reportTitle = "FINAL INTERNAL MARKS MEMO";
 
-      doc.text(`${reportTitle} - B.TECH ${meta.year} YEAR / ${meta.semester} SEMESTER`, 40, currentY, { align: "left" });
+      doc.text(`${reportTitle} - B.TECH ${meta.year} YEAR / ${meta.semester} SEMESTER`, pageWidth / 2, currentY, { align: "center" });
       currentY += 4;
 
       doc.setLineWidth(0.2);
       doc.setDrawColor(200, 200, 200);
-      doc.line(margin, currentY, 297 - margin, currentY);
+      doc.line(margin, currentY, pageWidth - margin, currentY);
 
       // Class details table
       const detailsY = currentY + 6;
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9.5);
+      doc.setFontSize(isLandscape ? 9.5 : 8.5);
       doc.text(`Academic Year: ${meta.academicYear}`, margin, detailsY);
-      doc.text(`Section: ${meta.section}`, 297 - margin - 40, detailsY);
+      doc.text(`Section: ${meta.section}`, pageWidth - margin - 20, detailsY);
 
       const tableStartY = detailsY + 6;
 
@@ -867,18 +1073,95 @@ export default function FacultyMidExamPage() {
       });
 
       // AutoTable styles
+      // Build footer analysis rows for MID_I, MID_II, FINAL
+      const buildClassStatsFooter = () => {
+        if (reportType === "ASSIGNMENT") return [];
+
+        const getSubjectAvg = (subId: string, extractor: (m: any) => number | null) => {
+          let sum = 0; let count = 0;
+          rows.forEach((r: any) => {
+            const m = r.subjects[subId] || {};
+            const v = extractor(m);
+            if (v !== null && v !== undefined && !isNaN(v)) { sum += v; count++; }
+          });
+          return count > 0 ? (sum / count).toFixed(1) : "N/A";
+        };
+
+        const getSubjectPerformers = (subId: string, extractor: (m: any) => number | null, isLab: boolean) => {
+          let top = 0; let middle = 0; let low = 0; let absent = 0;
+          const threshold = isLab ? { top: 30, middle: 20 } : { top: 18, middle: 12 };
+          rows.forEach((r: any) => {
+            const m = r.subjects[subId] || {};
+            const v = extractor(m);
+            if (v === null || v === undefined) { absent++; return; }
+            const val = Math.round(v);
+            if (val >= threshold.top) top++;
+            else if (val >= threshold.middle) middle++;
+            else low++;
+          });
+          return { top, middle, low, absent };
+        };
+
+        const extractor = reportType === "MID_I"
+          ? (m: any) => m.mid1
+          : reportType === "MID_II"
+            ? (m: any) => m.mid2
+            : (m: any) => m.internal;
+
+        const avgLabel = reportType === "MID_I" ? "Class Avg (MID-I)" : reportType === "MID_II" ? "Class Avg (MID-II)" : "Class Avg (Internal)";
+        const footerRows: any[] = [];
+
+        const avgRow: any[] = ["", "", avgLabel];
+        for (const sub of subjects) { avgRow.push(getSubjectAvg(sub.id, extractor)); }
+        footerRows.push(avgRow);
+
+        const topRow: any[] = ["", "", "Top (≥18 theory / ≥30 lab)"];
+        for (const sub of subjects) {
+          const isLab = sub.type?.toUpperCase() === "LAB";
+          topRow.push(getSubjectPerformers(sub.id, extractor, isLab).top);
+        }
+        footerRows.push(topRow);
+
+        const midRow: any[] = ["", "", "Middle (12-17 theory / 20-29 lab)"];
+        for (const sub of subjects) {
+          const isLab = sub.type?.toUpperCase() === "LAB";
+          midRow.push(getSubjectPerformers(sub.id, extractor, isLab).middle);
+        }
+        footerRows.push(midRow);
+
+        const lowRow: any[] = ["", "", "Low (<12 theory / <20 lab)"];
+        for (const sub of subjects) {
+          const isLab = sub.type?.toUpperCase() === "LAB";
+          lowRow.push(getSubjectPerformers(sub.id, extractor, isLab).low);
+        }
+        footerRows.push(lowRow);
+
+        const absentRow: any[] = ["", "", "Absentees"];
+        for (const sub of subjects) {
+          const isLab = sub.type?.toUpperCase() === "LAB";
+          absentRow.push(getSubjectPerformers(sub.id, extractor, isLab).absent);
+        }
+        footerRows.push(absentRow);
+
+        return footerRows;
+      };
+
+      const footerRows = buildClassStatsFooter();
+
       autoTable(doc, {
         head: headers,
         body: tableRows,
+        foot: footerRows.length > 0 ? footerRows : undefined,
         startY: tableStartY,
         margin: { left: margin, right: margin, bottom: 28 },
+        showFoot: "lastPage",
         styles: {
           fontSize: 8.5,
           cellPadding: 2.5,
           halign: "center",
           valign: "middle",
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
+          lineColor: [80, 80, 80],
+          lineWidth: 0.3,
           font: "helvetica",
           textColor: [40, 40, 40]
         },
@@ -887,14 +1170,28 @@ export default function FacultyMidExamPage() {
           textColor: [30, 41, 59],
           fontSize: 8,
           fontStyle: "bold",
-          lineWidth: 0.2,
-          lineColor: [180, 180, 180]
+          lineWidth: 0.4,
+          lineColor: [60, 60, 60]
         },
-        columnStyles: {
-          0: { cellWidth: 12, halign: "center" },
-          1: { cellWidth: 32, halign: "center", fontStyle: "bold" },
-          2: { cellWidth: 55, halign: "left" }
+        footStyles: {
+          fillColor: [240, 243, 246],
+          textColor: [30, 41, 59],
+          fontSize: 7.5,
+          fontStyle: "bold",
+          lineWidth: 0.3,
+          lineColor: [80, 80, 80]
         },
+        columnStyles: (() => {
+          const colStyles: any = {
+            0: { cellWidth: 12, halign: "center", fontSize: 8 },
+            1: { cellWidth: 32, halign: "center", fontStyle: "bold", fontSize: 10 },
+            2: { cellWidth: 45, halign: "left", fontSize: 7 }
+          };
+          for (let idx = 3; idx < 3 + subjects.length; idx++) {
+            colStyles[idx] = { fontSize: 10, fontStyle: "bold", halign: "center" };
+          }
+          return colStyles;
+        })(),
         theme: "grid"
       });
 
@@ -912,18 +1209,19 @@ export default function FacultyMidExamPage() {
           doc.line(margin, sigY, margin + 45, sigY);
           doc.text("Signature of the HOD", margin + 22.5, sigY + 5, { align: "center" });
 
-          doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
-          doc.text("Signature of the Director", 297 - margin - 22.5, sigY + 5, { align: "center" });
+          doc.line(pageWidth - margin - 45, sigY, pageWidth - margin, sigY);
+          doc.text("Signature of the Director", pageWidth - margin - 22.5, sigY + 5, { align: "center" });
         } else {
           if (i === totalPages) {
             doc.line(margin, sigY, margin + 45, sigY);
             doc.text("Signature of the Faculty", margin + 22.5, sigY + 5, { align: "center" });
 
-            doc.line(148 - 30, sigY, 148 + 30, sigY);
-            doc.text("Signature of the Faculty Coordinator", 148, sigY + 5, { align: "center" });
+            const midX = pageWidth / 2;
+            doc.line(midX - 30, sigY, midX + 30, sigY);
+            doc.text("Signature of the Faculty Coordinator", midX, sigY + 5, { align: "center" });
 
-            doc.line(297 - margin - 45, sigY, 297 - margin, sigY);
-            doc.text("Signature of the HOD", 297 - margin - 22.5, sigY + 5, { align: "center" });
+            doc.line(pageWidth - margin - 45, sigY, pageWidth - margin, sigY);
+            doc.text("Signature of the HOD", pageWidth - margin - 22.5, sigY + 5, { align: "center" });
           }
         }
       }
@@ -992,28 +1290,28 @@ export default function FacultyMidExamPage() {
       }
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10.5);
-      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", 40, 15, { align: "left" });
+      doc.setFontSize(9.5);
+      doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", 105, 15, { align: "center" });
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text("Rushikonda, Visakhapatnam - 530045.", 40, 20, { align: "left" });
+      doc.setFontSize(8);
+      doc.text("Rushikonda, Visakhapatnam - 530045.", 105, 20, { align: "center" });
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       const deptText = "DEPARTMENT OF " + (meta.department || "").toUpperCase();
-      const deptLines = doc.splitTextToSize(deptText, 210 - 40 - margin);
+      const deptLines = doc.splitTextToSize(deptText, 210 - 30 - margin * 2);
       let currentY = 25;
       deptLines.forEach((line: string) => {
-        doc.text(line, 40, currentY, { align: "left" });
+        doc.text(line, 105, currentY, { align: "center" });
         currentY += 4.5;
       });
 
-      doc.setFontSize(9.5);
+      doc.setFontSize(9);
       const subjectTitleText = `SUBJECT EVALUATION SHEET - ${subjectName.toUpperCase()} (${subjectCode})`;
-      const subjectTitleLines = doc.splitTextToSize(subjectTitleText, 210 - 40 - margin);
+      const subjectTitleLines = doc.splitTextToSize(subjectTitleText, 210 - 30 - margin * 2);
       subjectTitleLines.forEach((line: string) => {
-        doc.text(line, 40, currentY, { align: "left" });
+        doc.text(line, 105, currentY, { align: "center" });
         currentY += 4.5;
       });
       currentY -= 0.5;
@@ -1149,15 +1447,15 @@ export default function FacultyMidExamPage() {
         },
         columnStyles: {
           0: { cellWidth: 8, halign: "center" },
-          1: { cellWidth: 25, halign: "center", fontStyle: "bold" },
+          1: { cellWidth: 25, halign: "center", fontStyle: "bold", fontSize: 10 },
           2: { cellWidth: 45, halign: "left" },
-          3: { cellWidth: 15 },
-          4: { cellWidth: 15 },
-          5: { cellWidth: 15 },
-          6: { cellWidth: 15 },
-          7: { cellWidth: 17, fontStyle: "bold" },
-          8: { cellWidth: 15 },
-          9: { cellWidth: 16, fontStyle: "bold" }
+          3: { cellWidth: 15, fontSize: 10 },
+          4: { cellWidth: 15, fontSize: 10 },
+          5: { cellWidth: 15, fontSize: 10 },
+          6: { cellWidth: 15, fontSize: 10 },
+          7: { cellWidth: 17, fontStyle: "bold", fontSize: 10 },
+          8: { cellWidth: 15, fontSize: 10 },
+          9: { cellWidth: 16, fontStyle: "bold", fontSize: 10 }
         },
         theme: "grid"
       });
@@ -1275,6 +1573,731 @@ export default function FacultyMidExamPage() {
       showToast("Failed to load report", "error");
     } finally {
       setFetchingReport(false);
+    }
+  };
+
+  const buildClassReportPDFBuffer = (reportType: "MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL", data: any, logoBase64: string | null) => {
+    const isLandscape = reportType === "FINAL";
+    const pageWidth = isLandscape ? 297 : 210;
+    const doc = new jsPDF({
+      orientation: isLandscape ? "landscape" : "portrait",
+      unit: "mm",
+      format: "a4"
+    });
+    const meta = data.meta;
+    const subjects = (data.subjects || []).filter((sub: any) => {
+      const isLab = sub.type?.toUpperCase() === "LAB";
+      if (isLab) return reportType === "FINAL" ? true : showLabMarks;
+      return true;
+    });
+    const rows = data.rows || [];
+    const margin = 12;
+
+    if (logoBase64) {
+      const getImageType = (base64: string) => {
+        if (base64.startsWith("data:image/png")) return "PNG";
+        if (base64.startsWith("data:image/webp")) return "WEBP";
+        return "JPEG";
+      };
+      try {
+        doc.addImage(logoBase64, getImageType(logoBase64), 15, 10, 20, 20);
+      } catch (e) {
+        console.warn("Failed to add logo to PDF");
+      }
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(isLandscape ? 13 : 9.5);
+    doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", pageWidth / 2, 15, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(isLandscape ? 10 : 8);
+    doc.text("Rushikonda, Visakhapatnam - 530045.", pageWidth / 2, 20, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(isLandscape ? 11 : 9);
+    const deptText = "DEPARTMENT OF " + (meta.department || "").toUpperCase();
+    const deptLines = doc.splitTextToSize(deptText, pageWidth - 30 - margin * 2);
+    let currentY = 25;
+    deptLines.forEach((line: string) => {
+      doc.text(line, pageWidth / 2, currentY, { align: "center" });
+      currentY += 5;
+    });
+
+    doc.setFontSize(isLandscape ? 11 : 9);
+    let reportTitle = "";
+    if (reportType === "MID_I") reportTitle = "MID-I MARKS MEMO";
+    else if (reportType === "MID_II") reportTitle = "MID-II MARKS MEMO";
+    else if (reportType === "ASSIGNMENT") reportTitle = "ASSIGNMENTS MARKS MEMO";
+    else if (reportType === "FINAL") reportTitle = "FINAL INTERNAL MARKS MEMO";
+
+    doc.text(`${reportTitle} - B.TECH ${meta.year} YEAR / ${meta.semester} SEMESTER`, pageWidth / 2, currentY, { align: "center" });
+    currentY += 4;
+
+    doc.setLineWidth(0.2);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
+
+    const detailsY = currentY + 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(isLandscape ? 9.5 : 8.5);
+    doc.text(`Academic Year: ${meta.academicYear}`, margin, detailsY);
+    doc.text(`Section: ${meta.section}`, pageWidth - margin - 20, detailsY);
+
+    const tableStartY = detailsY + 6;
+
+    const headers = [["S.No", "Roll Number", "Student Name"]];
+    for (const sub of subjects) {
+      let colHeader = sub.shortName || sub.code;
+      const isLab = sub.type?.toUpperCase() === "LAB";
+      if (reportType === "MID_I") colHeader += isLab ? `\nMID I (50M)` : `\nMID I (30M)`;
+      else if (reportType === "MID_II") colHeader += isLab ? `\nMID II (50M)` : `\nMID II (30M)`;
+      else if (reportType === "ASSIGNMENT") colHeader += `\nASSIGN (10M)`;
+      else if (reportType === "FINAL") colHeader += isLab ? `\nFINAL (50M)` : `\nFINAL (30M)`;
+      headers[0].push(colHeader);
+    }
+    if (reportType === "FINAL") {
+      headers[0].push("TOTAL");
+    }
+
+    const tableRows = rows.map((r: any, idx: number) => {
+      const rowData = [
+        (idx + 1).toString(),
+        r.rollNumber,
+        r.name
+      ];
+
+      for (const sub of subjects) {
+        const marks = r.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+        let displayVal = "";
+        if (reportType === "MID_I") {
+          displayVal = marks.isMid1Absent ? "AB" : (marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB");
+        } else if (reportType === "MID_II") {
+          displayVal = marks.isMid2Absent ? "AB" : (marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB");
+        } else if (reportType === "ASSIGNMENT") {
+          displayVal = marks.assignment !== null ? Math.round(marks.assignment).toString() : "0";
+        } else if (reportType === "FINAL") {
+          displayVal = Math.round(marks.internal).toString();
+        }
+        rowData.push(displayVal);
+      }
+
+      if (reportType === "FINAL") {
+        let totalInternal = 0;
+        for (const sub of subjects) {
+          const marks = r.subjects[sub.id] || {};
+          totalInternal += marks.internal || 0;
+        }
+        rowData.push(Math.round(totalInternal).toString());
+      }
+
+      return rowData;
+    });
+
+    autoTable(doc, {
+      head: headers,
+      body: tableRows,
+      startY: tableStartY,
+      margin: { left: margin, right: margin, bottom: 28 },
+      styles: {
+        fontSize: reportType === "FINAL" ? 7 : 8,
+        cellPadding: reportType === "FINAL" ? 1.5 : 2,
+        halign: "center",
+        valign: "middle",
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+        font: "helvetica",
+        textColor: [40, 40, 40]
+      },
+      headStyles: {
+        fillColor: [240, 243, 246],
+        textColor: [30, 41, 59],
+        fontSize: reportType === "FINAL" ? 7 : 7.5,
+        fontStyle: "bold",
+        lineWidth: 0.2,
+        lineColor: [180, 180, 180]
+      },
+      columnStyles: (() => {
+        const colStyles: any = {
+          0: { cellWidth: reportType === "FINAL" ? 10 : 12, halign: "center", fontSize: 8 },
+          1: { cellWidth: reportType === "FINAL" ? 28 : 32, halign: "center", fontStyle: "bold", fontSize: 10 },
+          2: { cellWidth: reportType === "FINAL" ? 30 : 38, halign: "left", fontSize: 7 }
+        };
+        for (let idx = 3; idx < 3 + subjects.length; idx++) {
+          colStyles[idx] = { fontSize: 10, fontStyle: "bold", halign: "center" };
+        }
+        if (reportType === "FINAL") {
+          colStyles[3 + subjects.length] = { fontStyle: "bold", fillColor: [245, 247, 250], fontSize: 10, halign: "center" };
+        }
+        return colStyles;
+      })(),
+      theme: "grid"
+    });
+
+    const totalPages = (doc as any).internal.getNumberOfPages();
+    const pageHeight = doc.internal.pageSize.height;
+    const sigY = pageHeight - 18;
+
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+
+      if (reportType === "FINAL") {
+        doc.line(margin, sigY, margin + 45, sigY);
+        doc.text("Signature of the HOD", margin + 22.5, sigY + 5, { align: "center" });
+
+        doc.line(pageWidth - margin - 45, sigY, pageWidth - margin, sigY);
+        doc.text("Signature of the Director", pageWidth - margin - 22.5, sigY + 5, { align: "center" });
+      } else {
+        if (i === totalPages) {
+          doc.line(margin, sigY, margin + 45, sigY);
+          doc.text("Signature of the Faculty", margin + 22.5, sigY + 5, { align: "center" });
+
+          const midX = pageWidth / 2;
+          doc.line(midX - 30, sigY, midX + 30, sigY);
+          doc.text("Signature of the Faculty Coordinator", midX, sigY + 5, { align: "center" });
+
+          doc.line(pageWidth - margin - 45, sigY, pageWidth - margin, sigY);
+          doc.text("Signature of the HOD", pageWidth - margin - 22.5, sigY + 5, { align: "center" });
+        }
+      }
+    }
+
+    return doc.output("arraybuffer");
+  };
+
+  const buildSubjectReportPDFBuffer = (subjectId: string, subjectName: string, subjectCode: string, data: any, logoBase64: string | null) => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4"
+    });
+
+    const meta = data.meta;
+    const rows = data.rows || [];
+    const margin = 12;
+
+    if (logoBase64) {
+      const getImageType = (base64: string) => {
+        if (base64.startsWith("data:image/png")) return "PNG";
+        if (base64.startsWith("data:image/webp")) return "WEBP";
+        return "JPEG";
+      };
+      try {
+        doc.addImage(logoBase64, getImageType(logoBase64), 15, 10, 20, 20);
+      } catch (e) {
+        console.warn("Failed to add logo to PDF");
+      }
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(AUTONOMOUS)", 105, 15, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text("Rushikonda, Visakhapatnam - 530045.", 105, 20, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    const deptText = "DEPARTMENT OF " + (meta.department || "").toUpperCase();
+    const deptLines = doc.splitTextToSize(deptText, 210 - 30 - margin * 2);
+    let currentY = 25;
+    deptLines.forEach((line: string) => {
+      doc.text(line, 105, currentY, { align: "center" });
+      currentY += 4.5;
+    });
+
+    doc.setFontSize(9);
+    const subjectTitleText = `SUBJECT EVALUATION SHEET - ${subjectName.toUpperCase()} (${subjectCode})`;
+    const subjectTitleLines = doc.splitTextToSize(subjectTitleText, 210 - 30 - margin * 2);
+    subjectTitleLines.forEach((line: string) => {
+      doc.text(line, 105, currentY, { align: "center" });
+      currentY += 4.5;
+    });
+    currentY -= 0.5;
+
+    doc.setLineWidth(0.2);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, currentY, 210 - margin, currentY);
+
+    const detailsY = currentY + 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.text(`Academic Year: ${meta.academicYear}`, margin, detailsY);
+    doc.text(`Section: ${meta.section} (B.Tech ${meta.year} Yr / ${meta.semester} Sem)`, 210 - margin - 75, detailsY);
+
+    const tableStartY = detailsY + 6;
+
+    // Find the subject type in the list to determine if it is a Lab
+    const matchedSubject = (data.subjects || []).find((s: any) => s.id === subjectId);
+    const isLabPDF = matchedSubject?.type?.toUpperCase() === "LAB";
+
+    const headers = [
+      [
+        "S.No", 
+        "Roll Number", 
+        "Student Name", 
+        isLabPDF ? "MID-I\n(50M)" : "MID-I\n(30M)", 
+        isLabPDF ? "MID-I\n(50M)" : "MID-I\n(20M)", 
+        isLabPDF ? "MID-II\n(50M)" : "MID-II\n(30M)", 
+        isLabPDF ? "MID-II\n(50M)" : "MID-II\n(20M)", 
+        isLabPDF ? "MID Avg\n(50M)" : "MID Avg\n(20M)",
+        "Assign\n(10M)", 
+        isLabPDF ? "Final\n(50M)" : "Final\n(30M)"
+      ]
+    ];
+
+    const tableRows = rows.map((r: any, idx: number) => {
+      const marks = r.subjects[subjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
+      const m1 = marks.mid1Scaled;
+      const m2 = marks.mid2Scaled;
+      const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+      const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
+      
+      return [
+        (idx + 1).toString(),
+        r.rollNumber,
+        r.name,
+        marks.isMid1Absent ? "AB" : (marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB"),
+        marks.isMid1Absent ? "0" : (marks.mid1Scaled !== null ? Math.round(marks.mid1Scaled).toString() : "AB"),
+        marks.isMid2Absent ? "AB" : (marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB"),
+        marks.isMid2Absent ? "0" : (marks.mid2Scaled !== null ? Math.round(marks.mid2Scaled).toString() : "AB"),
+        midAvgVal !== null ? Math.round(midAvgVal).toString() : "AB",
+        marks.assignment !== null ? Math.round(marks.assignment).toString() : "0",
+        Math.round(marks.internal).toString()
+      ];
+    });
+
+    const getAvgPDF = (extractor: (marks: any) => number | null) => {
+      let sum = 0;
+      let count = 0;
+      rows.forEach((r: any) => {
+        const marks = r.subjects[subjectId] || {};
+        const val = extractor(marks);
+        if (val !== null && val !== undefined) {
+          sum += val;
+          count++;
+        }
+      });
+      return count > 0 ? (sum / count).toFixed(1) : "N/A";
+    };
+
+    const getColStatsPDF = (
+      extractor: (m: any) => number | null, 
+      maxMarks: number, 
+      isAbsentExtractor: (m: any) => boolean
+    ) => {
+      let countAbove = 0;
+      let countBetween = 0;
+      let countBelow = 0;
+      let countZero = 0;
+      let countAbsent = 0;
+
+      rows.forEach((r: any) => {
+        const marksObj = r.subjects[subjectId] || {};
+        const isAbsent = isAbsentExtractor(marksObj);
+        const val = extractor(marksObj);
+        
+        if (isAbsent) {
+          countAbsent++;
+        } else {
+          const numVal = Math.round(val ?? 0);
+          if (numVal === 0) {
+            countZero++;
+          }
+          const pct = (numVal / maxMarks) * 100;
+          if (pct >= 60) {
+            countAbove++;
+          } else if (pct >= 40) {
+            countBetween++;
+          } else {
+            countBelow++;
+          }
+        }
+      });
+
+      return { countAbove, countBetween, countBelow, countZero, countAbsent };
+    };
+
+    const pdfMaxMarks = isLabPDF ? 50 : 30;
+
+    const pdfStatsMid1 = getColStatsPDF((m) => m.mid1, pdfMaxMarks, (m) => m.isMid1Absent || m.mid1 === null || m.mid1 === undefined);
+    const pdfStatsMid2 = getColStatsPDF((m) => m.mid2, pdfMaxMarks, (m) => m.isMid2Absent || m.mid2 === null || m.mid2 === undefined);
+    const pdfStatsFinal = getColStatsPDF((m) => m.internal, pdfMaxMarks, (m) => m.internal === null || m.internal === undefined);
+
+    const footerRow = [
+      "",
+      "",
+      "Class Average",
+      getAvgPDF((m) => m.mid1),
+      "",
+      getAvgPDF((m) => m.mid2),
+      "",
+      "",
+      "",
+      getAvgPDF((m) => m.internal)
+    ];
+
+    const pdfAbove60Row = [
+      "",
+      "",
+      `Total No. of Students Above 60% ${isLabPDF ? "(30 and above)" : "(18 and above)"}`,
+      pdfStatsMid1.countAbove.toString(),
+      "",
+      pdfStatsMid2.countAbove.toString(),
+      "",
+      "",
+      "",
+      pdfStatsFinal.countAbove.toString()
+    ];
+
+    const pdfBetweenRow = [
+      "",
+      "",
+      `Total No. of Students Between 60% to 40% ${isLabPDF ? "(29 - 20 Marks)" : "(17 - 12 Marks)"}`,
+      pdfStatsMid1.countBetween.toString(),
+      "",
+      pdfStatsMid2.countBetween.toString(),
+      "",
+      "",
+      "",
+      pdfStatsFinal.countBetween.toString()
+    ];
+
+    const pdfBelowRow = [
+      "",
+      "",
+      `Total No. of Students Below 40% ${isLabPDF ? "(19 - 1 Marks)" : "(11 - 1 Marks)"}`,
+      pdfStatsMid1.countBelow.toString(),
+      "",
+      pdfStatsMid2.countBelow.toString(),
+      "",
+      "",
+      "",
+      pdfStatsFinal.countBelow.toString()
+    ];
+
+    const pdfZeroRow = [
+      "",
+      "",
+      "Total No. of Students With zero Marks",
+      pdfStatsMid1.countZero.toString(),
+      "",
+      pdfStatsMid2.countZero.toString(),
+      "",
+      "",
+      "",
+      pdfStatsFinal.countZero.toString()
+    ];
+
+    const pdfAbsentRow = [
+      "",
+      "",
+      "Total No. of Absentees",
+      pdfStatsMid1.countAbsent.toString(),
+      "",
+      pdfStatsMid2.countAbsent.toString(),
+      "",
+      "",
+      "",
+      pdfStatsFinal.countAbsent.toString()
+    ];
+
+    autoTable(doc, {
+      head: headers,
+      body: tableRows,
+      foot: [footerRow, pdfAbove60Row, pdfBetweenRow, pdfBelowRow, pdfZeroRow, pdfAbsentRow],
+      startY: tableStartY,
+      margin: { left: margin, right: margin },
+      styles: {
+        fontSize: 8.5,
+        cellPadding: 2,
+        halign: "center",
+        valign: "middle",
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+        font: "helvetica",
+        textColor: [40, 40, 40]
+      },
+      headStyles: {
+        fillColor: [240, 243, 246],
+        textColor: [30, 41, 59],
+        fontSize: 8,
+        fontStyle: "bold",
+        lineWidth: 0.2,
+        lineColor: [180, 180, 180]
+      },
+      footStyles: {
+        fillColor: [240, 243, 246],
+        textColor: [30, 41, 59],
+        fontSize: 8,
+        fontStyle: "bold",
+        lineWidth: 0.2,
+        lineColor: [180, 180, 180]
+      },
+      columnStyles: {
+        0: { cellWidth: 8, halign: "center" },
+        1: { cellWidth: 25, halign: "center", fontStyle: "bold", fontSize: 10 },
+        2: { cellWidth: 45, halign: "left" },
+        3: { cellWidth: 15, fontSize: 10 },
+        4: { cellWidth: 15, fontSize: 10 },
+        5: { cellWidth: 15, fontSize: 10 },
+        6: { cellWidth: 15, fontSize: 10 },
+        7: { cellWidth: 17, fontStyle: "bold", fontSize: 10 },
+        8: { cellWidth: 15, fontSize: 10 },
+        9: { cellWidth: 16, fontStyle: "bold", fontSize: 10 }
+      },
+      theme: "grid"
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY || 200;
+    const pageHeight = doc.internal.pageSize.height;
+
+    let sigY = finalY + 16;
+    if (sigY > pageHeight - 20) {
+      doc.addPage();
+      sigY = 30;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.line(margin, sigY, margin + 40, sigY);
+    doc.text("Signature of the Faculty", margin + 20, sigY + 5, { align: "center" });
+
+    doc.line(105 - 25, sigY, 105 + 25, sigY);
+    doc.text("Signature of the Faculty Coordinator", 105, sigY + 5, { align: "center" });
+
+    doc.line(210 - margin - 40, sigY, 210 - margin, sigY);
+    doc.text("Signature of the HOD", 210 - margin - 20, sigY + 5, { align: "center" });
+
+    return doc.output("arraybuffer");
+  };
+
+  const buildConsolidatedExcelBuffer = (data: any) => {
+    const wb = XLSX.utils.book_new();
+    const meta = data.meta;
+    const subjects = data.subjects || [];
+    const rows = data.rows || [];
+
+    const reportTypes: ("MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL")[] = ["MID_I", "MID_II", "ASSIGNMENT", "FINAL"];
+
+    reportTypes.forEach((reportType) => {
+      const sheetRows: any[] = [];
+      let title = "";
+      if (reportType === "MID_I") title = "MID-I MARKS MEMO";
+      else if (reportType === "MID_II") title = "MID-II MARKS MEMO";
+      else if (reportType === "ASSIGNMENT") title = "ASSIGNMENTS MARKS MEMO";
+      else if (reportType === "FINAL") title = "FINAL INTERNAL MARKS MEMO";
+
+      sheetRows.push([title]);
+      sheetRows.push([`Department: ${meta.department}`]);
+      sheetRows.push([`Academic Year: ${meta.academicYear} | B.Tech Year: ${meta.year} | Semester: ${meta.semester} | Section: ${meta.section}`]);
+      sheetRows.push([]);
+
+      const headers = ["S.No", "Roll Number", "Student Name"];
+      const filteredSubjects = subjects.filter((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        if (isLab) return reportType === "FINAL" ? true : showLabMarks;
+        return true;
+      });
+
+      filteredSubjects.forEach((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        let marksSuffix = "";
+        if (isLab) {
+          marksSuffix = reportType === "MID_I" ? "MID I 50M" : reportType === "MID_II" ? "MID II 50M" : reportType === "ASSIGNMENT" ? "Assign 10M" : "Final 50M";
+        } else {
+          marksSuffix = reportType === "MID_I" ? "MID I 30M" : reportType === "MID_II" ? "MID II 30M" : reportType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M";
+        }
+        headers.push(`${sub.shortName || sub.name} (${marksSuffix})`);
+      });
+
+      if (reportType === "FINAL") {
+        headers.push("Total Marks");
+      }
+      sheetRows.push(headers);
+
+      rows.forEach((row: any, idx: number) => {
+        const rowData: any[] = [idx + 1, row.rollNumber, row.name];
+        filteredSubjects.forEach((sub: any) => {
+          const marksObj = row.subjects[sub.id] || {};
+          let val: number | null = null;
+          let isAbsent = false;
+          if (reportType === "MID_I") {
+            val = marksObj.mid1;
+            isAbsent = marksObj.isMid1Absent;
+          } else if (reportType === "MID_II") {
+            val = marksObj.mid2;
+            isAbsent = marksObj.isMid2Absent;
+          } else if (reportType === "ASSIGNMENT") {
+            val = marksObj.assignment;
+          } else if (reportType === "FINAL") {
+            val = marksObj.internal;
+          }
+
+          if (isAbsent) {
+            rowData.push("AB");
+          } else {
+            rowData.push(val !== null && val !== undefined ? Math.round(val) : "");
+          }
+        });
+        if (reportType === "FINAL") {
+          const totalInternal = filteredSubjects.reduce((sum: number, sub: any) => {
+            const marks = row.subjects[sub.id] || {};
+            return sum + (marks.internal || 0);
+          }, 0);
+          rowData.push(Math.round(totalInternal));
+        }
+        sheetRows.push(rowData);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+      let sheetName = "";
+      if (reportType === "MID_I") sheetName = "MID_I Marks";
+      else if (reportType === "MID_II") sheetName = "MID_II Marks";
+      else if (reportType === "ASSIGNMENT") sheetName = "Assignment Marks";
+      else if (reportType === "FINAL") sheetName = "Final Internal Marks";
+
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    // Now add a sheet for each subject's detailed progression
+    subjects.forEach((sub: any) => {
+      const sheetRows: any[] = [];
+      sheetRows.push([`SUBJECT DETAILED EVALUATION SHEET`]);
+      sheetRows.push([`Department: ${meta.department}`]);
+      sheetRows.push([`Academic Year: ${meta.academicYear} | B.Tech Year: ${meta.year} | Semester: ${meta.semester} | Section: ${meta.section}`]);
+      sheetRows.push([`Subject: ${sub.name} (${sub.code})`]);
+      sheetRows.push([]);
+
+      const headers = ["S.No", "Roll Number", "Student Name", "MID-I (30M)", "MID-I (20M)", "MID-II (30M)", "MID-II (20M)", "MID Avg (20M)", "Assign (10M)", "Final (30M)"];
+      sheetRows.push(headers);
+
+      rows.forEach((row: any, idx: number) => {
+        const marksObj = row.subjects[sub.id] || {};
+        const m1 = marksObj.mid1Scaled;
+        const m2 = marksObj.mid2Scaled;
+        const available = [m1, m2].filter(v => v !== null && v !== undefined) as number[];
+        const midAvgVal = available.length > 0 ? available.reduce((a, b) => a + b, 0) / available.length : null;
+
+        const rowData: any[] = [idx + 1, row.rollNumber, row.name];
+        rowData.push(marksObj.isMid1Absent ? "AB" : (marksObj.mid1 !== null ? Math.round(marksObj.mid1) : ""));
+        rowData.push(marksObj.isMid1Absent ? 0 : (marksObj.mid1Scaled !== null ? Math.round(marksObj.mid1Scaled) : ""));
+        rowData.push(marksObj.isMid2Absent ? "AB" : (marksObj.mid2 !== null ? Math.round(marksObj.mid2) : ""));
+        rowData.push(marksObj.isMid2Absent ? 0 : (marksObj.mid2Scaled !== null ? Math.round(marksObj.mid2Scaled) : ""));
+        rowData.push(midAvgVal !== null ? Math.round(midAvgVal) : "");
+        rowData.push(marksObj.assignment !== null ? Math.round(marksObj.assignment) : "");
+        rowData.push(marksObj.internal !== null ? Math.round(marksObj.internal) : "");
+        sheetRows.push(rowData);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+      let sheetName = sub.shortName || sub.code;
+      if (sheetName.length > 30) {
+        sheetName = sheetName.substring(0, 30);
+      }
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    return excelBuffer;
+  };
+
+  const handleBulkDownload = async () => {
+    if (bulkDownloadScope === "CURRENT" && consolidatedSection === "ALL") {
+      showToast("Please select a specific Section in the Consolidated Report card or set scope to All Sections", "error");
+      return;
+    }
+    if (sections.length === 0) {
+      showToast("No sections available for the current department", "error");
+      return;
+    }
+
+    setBulkDownloading(true);
+    try {
+      showToast("Preparing bulk download...", "success");
+
+      const targetSections = bulkDownloadScope === "CURRENT"
+        ? [consolidatedSection]
+        : sections.map(s => s.id);
+
+      let logoBase64: string | null = null;
+      try {
+        const logoRes = await fetch("/logo.png");
+        if (logoRes.ok) {
+          const blob = await logoRes.blob();
+          logoBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch (e) {
+        console.error("Could not load logo for bulk report", e);
+      }
+
+      const fetchPromises = targetSections.map(async (secId) => {
+        const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${deptId}&year=${selectedYear}&semester=${selectedSem}&sectionId=${secId}`);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch data for section ${secId}`);
+        }
+        const data = await res.json();
+        return { secId, data };
+      });
+
+      const sectionsData = await Promise.all(fetchPromises);
+      const zip = new JSZip();
+
+      for (const { secId, data } of sectionsData) {
+        const secName = sections.find(s => s.id === secId)?.name || secId;
+        const secFolder = zip.folder(`Section_${secName}`);
+
+        if (!secFolder) continue;
+
+        const mid1PDFBuffer = buildClassReportPDFBuffer("MID_I", data, logoBase64);
+        const mid2PDFBuffer = buildClassReportPDFBuffer("MID_II", data, logoBase64);
+        const assignPDFBuffer = buildClassReportPDFBuffer("ASSIGNMENT", data, logoBase64);
+        const finalPDFBuffer = buildClassReportPDFBuffer("FINAL", data, logoBase64);
+
+        const deptCode = data.meta.departmentCode || "Dept";
+        const sectionNameStr = data.meta.section || "Sec";
+
+        secFolder.file(`MID_I_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, mid1PDFBuffer);
+        secFolder.file(`MID_II_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, mid2PDFBuffer);
+        secFolder.file(`Assignment_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, assignPDFBuffer);
+        secFolder.file(`Final_Internal_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, finalPDFBuffer);
+
+        // Subject-wise detailed report PDFs
+        const subjects = data.subjects || [];
+        for (const sub of subjects) {
+          const subjectPDFBuffer = buildSubjectReportPDFBuffer(sub.id, sub.name, sub.code, data, logoBase64);
+          const safeSubName = sub.name.replace(/[^a-zA-Z0-9]/g, "_");
+          secFolder.file(`Subject_Marks_Memo_${sub.code}_${safeSubName}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, subjectPDFBuffer);
+        }
+
+        const excelBuffer = buildConsolidatedExcelBuffer(data);
+        secFolder.file(`Consolidated_Marks_Report_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.xlsx`, excelBuffer);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(zipBlob);
+      const scopeName = bulkDownloadScope === "CURRENT"
+        ? `Section_${sections.find(s => s.id === consolidatedSection)?.name || "Current"}`
+        : "All_Sections";
+      link.download = `Bulk_Reports_${deptId}_Sem${selectedSem}_${scopeName}_${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast("Bulk download completed!", "success");
+    } catch (e) {
+      console.error(e);
+      showToast("Bulk download failed", "error");
+    } finally {
+      setBulkDownloading(false);
     }
   };
 
@@ -1759,60 +2782,95 @@ export default function FacultyMidExamPage() {
             </div>
 
             {role === "HOD" && (
-              <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-6">
-                <div>
-                  <h4 className="text-lg font-bold text-slate-900">Final Internal Marks Consolidated Report</h4>
-                  <p className="text-xs text-slate-500 font-medium">Generate final internal marks (Theory: 30, Lab: 50) for a single section or all sections combined in your department.</p>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {/* Final Internal Marks Consolidated Report */}
+                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 flex flex-col justify-between space-y-6">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900">Final Internal Marks Consolidated Report</h4>
+                    <p className="text-xs text-slate-500 font-medium">Generate final internal marks (Theory: 30, Lab: 50) for a single section or all sections combined in your department.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Year</label>
+                        <select
+                          value={selectedYear}
+                          onChange={e => setSelectedYear(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {[1, 2, 3, 4].map(y => (
+                            <option key={y} value={y}>Year {y}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Semester</label>
+                        <select
+                          value={selectedSem}
+                          onChange={e => setSelectedSem(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {[1, 2].map(s => (
+                            <option key={s} value={s}>Semester {s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Section</label>
+                        <select
+                          value={consolidatedSection}
+                          onChange={e => setConsolidatedSection(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="ALL">All Sections</option>
+                          {sections.map(s => (
+                            <option key={s.id} value={s.id}>Section {s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleViewConsolidatedReport}
+                      disabled={fetchingReport}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {fetchingReport && previewType === "FINAL" && !previewData?.subjects?.length ? <FaSpinner className="animate-spin" /> : <FaEye />} View Consolidated Report
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-4 items-end">
+                {/* Bulk Download Reports */}
+                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 flex flex-col justify-between space-y-6">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Year</label>
-                    <select
-                      value={selectedYear}
-                      onChange={e => setSelectedYear(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {[1, 2, 3, 4].map(y => (
-                        <option key={y} value={y}>Year {y}</option>
-                      ))}
-                    </select>
+                    <h4 className="text-lg font-bold text-slate-900">Bulk Download Reports</h4>
+                    <p className="text-xs text-slate-500 font-medium">Export a ZIP file containing class-wise PDF reports and a consolidated Excel sheet.</p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Semester</label>
-                    <select
-                      value={selectedSem}
-                      onChange={e => setSelectedSem(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {[1, 2].map(s => (
-                        <option key={s} value={s}>Semester {s}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Download Scope</label>
+                      <select
+                        value={bulkDownloadScope}
+                        onChange={e => setBulkDownloadScope(e.target.value as "CURRENT" | "ALL")}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="CURRENT">Current Section Only</option>
+                        <option value="ALL">All Sections in Department</option>
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 font-sans">Section</label>
-                    <select
-                      value={consolidatedSection}
-                      onChange={e => setConsolidatedSection(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    <button
+                      onClick={handleBulkDownload}
+                      disabled={fetchingReport || bulkDownloading}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-xs font-semibold text-white hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
                     >
-                      <option value="ALL">All Sections</option>
-                      {sections.map(s => (
-                        <option key={s.id} value={s.id}>Section {s.name}</option>
-                      ))}
-                    </select>
+                      {bulkDownloading ? <FaSpinner className="animate-spin" /> : <FaArchive />} Trigger Bulk Download
+                    </button>
                   </div>
-
-                  <button
-                    onClick={handleViewConsolidatedReport}
-                    disabled={fetchingReport}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
-                  >
-                    {fetchingReport && previewType === "FINAL" && !previewData?.subjects?.length ? <FaSpinner className="animate-spin" /> : <FaEye />} View Consolidated Report
-                  </button>
                 </div>
               </div>
             )}
@@ -2356,7 +3414,7 @@ export default function FacultyMidExamPage() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mid Exam Type</label>
                   <div className="flex gap-2">
-                    {(["MID_I", "MID_II"] as const).map(examType => (
+                    {(["MID_I", "MID_II", "FINAL", "COMPARISON"] as const).map(examType => (
                       <button
                         key={examType}
                         onClick={() => setSelectedAnalysisExamType(examType)}
@@ -2366,7 +3424,7 @@ export default function FacultyMidExamPage() {
                             : "bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        {examType === "MID_I" ? "MID - I" : "MID - II"}
+                        {examType === "MID_I" ? "MID - I" : examType === "MID_II" ? "MID - II" : examType === "FINAL" ? "FINAL INTERNAL" : "COMPARATIVE VIEW"}
                       </button>
                     ))}
                   </div>
@@ -2388,221 +3446,806 @@ export default function FacultyMidExamPage() {
                 <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
                   <div>
                     <h4 className="text-lg font-bold text-slate-800">
-                      {analysisData.metadata.year} Year {analysisData.metadata.semester} Sem {analysisData.metadata.examType === "MID_I" ? "I Mid" : "II Mid"} Analysis (AY: {analysisData.metadata.academicYear})
+                      {analysisData.isComparison ? (
+                        `Comparative Mid Exam Analysis (AY: ${analysisData.metadata.academicYear})`
+                      ) : (
+                        `${analysisData.metadata.year} Year ${analysisData.metadata.semester} Sem ${analysisData.metadata.examType === "MID_I" ? "I Mid" : (analysisData.metadata.examType === "MID_II" ? "II Mid" : "Final Internal")} Analysis (AY: ${analysisData.metadata.academicYear})`
+                      )}
                     </h4>
                     <p className="text-xs text-slate-500">
                       Branch: {analysisData.metadata.department} ({analysisData.metadata.departmentCode}) | Section: {analysisData.metadata.section}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={downloadAnalysisExcel}
-                      className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm animate-pulse-subtle"
-                    >
-                      <FaFileExcel size={12} /> Export Excel
-                    </button>
-                    <button
-                      onClick={() => generateAnalysisPDF(analysisData)}
-                      className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
-                    >
-                      <FaDownload size={12} /> Download PDF
-                    </button>
-                  </div>
+                  {!analysisData.isComparison && (
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={downloadAnalysisExcel}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm animate-pulse-subtle"
+                      >
+                        <FaFileExcel size={12} /> Export Excel
+                      </button>
+                      <button
+                        onClick={() => generateAnalysisPDF(analysisData)}
+                        className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
+                      >
+                        <FaDownload size={12} /> Download PDF
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Table 1: Subject-wise Mid Analysis */}
-                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
-                  <h4 className="text-md font-bold text-slate-800">Subject-wise Performance & Difficulty Analysis</h4>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
-                          <th className="px-4 py-3 text-center border-r border-slate-200">S.No</th>
-                          <th className="px-4 py-3 border-r border-slate-200">Subject Code</th>
-                          <th className="px-4 py-3 border-r border-slate-200">Subject Name</th>
-                          <th className="px-4 py-3 text-center border-r border-slate-200">Strength</th>
-                          <th className="px-4 py-3 text-center border-r border-slate-200">Absentees</th>
-                          <th className="px-4 py-3 text-center border-r border-slate-200 font-bold">Average Marks</th>
-                          <th className="px-4 py-3 text-center border-r border-slate-200">Gap</th>
-                          <th className="px-4 py-3 text-center border-r border-slate-200">Diff Index (%)</th>
-                          <th className="px-4 py-3 text-center border-r border-slate-200">Insight</th>
-                          <th className="px-4 py-3 text-center">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
-                        {analysisData.subjectAnalysis.map((sub: any) => (
-                          <tr key={sub.subjectId} className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 text-center border-r border-slate-200">{sub.sNo}</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-mono">{sub.subjectCode}</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-medium">{sub.subjectName}</td>
-                            <td className="px-4 py-3 text-center border-r border-slate-200">{sub.classStrength}</td>
-                            <td className="px-4 py-3 text-center border-r border-slate-200 text-red-600 font-semibold">{sub.absentees}</td>
-                            <td className="px-4 py-3 text-center border-r border-slate-200 font-bold text-slate-900">{sub.average}</td>
-                            <td className="px-4 py-3 text-center border-r border-slate-200">{sub.gap}</td>
-                            <td className="px-4 py-3 text-center border-r border-slate-200 font-semibold">{sub.difficultyIndex}%</td>
-                            <td className="px-4 py-3 text-center border-r border-slate-200">
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                sub.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
-                                sub.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                "bg-red-100 text-red-700"
-                              }`}>
-                                {sub.insight}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                sub.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
-                                sub.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                "bg-red-100 text-red-700"
-                              }`}>
-                                {sub.remarks}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                {analysisData.isComparison ? (
+                  <div className="space-y-6">
+                    {/* Comparative Performer Levels */}
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-2 border-t-4 border-emerald-500">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top Performers (&ge;18)</h4>
+                        <div className="flex items-end justify-between border-b border-slate-100 pb-1.5 pt-1">
+                          <span className="text-xs text-slate-500 font-medium">MID - I</span>
+                          <span className="text-xl font-extrabold text-emerald-600">{analysisData.mid1.performance.top}</span>
+                        </div>
+                        <div className="flex items-end justify-between border-b border-slate-100 pb-1.5 pt-1.5">
+                          <span className="text-xs text-slate-500 font-medium">MID - II</span>
+                          <span className="text-xl font-extrabold text-emerald-600">{analysisData.mid2.performance.top}</span>
+                        </div>
+                        <div className="flex items-end justify-between pt-1.5">
+                          <span className="text-xs text-slate-500 font-medium">FINAL INTERNAL</span>
+                          <span className="text-xl font-extrabold text-emerald-700">{analysisData.final.performance.top}</span>
+                        </div>
+                      </div>
 
-                {/* Grid for Table 2 & Matrix */}
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                  {/* Table 2: Performance Levels */}
-                  <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 md:col-span-1">
-                    <h4 className="text-md font-bold text-slate-800">Performance Levels</h4>
-                    <div className="overflow-hidden rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
-                            <th className="px-4 py-3 border-r border-slate-200">Performance Category</th>
-                            <th className="px-4 py-3 text-center">Count</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
-                          <tr className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 border-r border-slate-200 font-medium text-emerald-700">Top Performers (&ge;18)</td>
-                            <td className="px-4 py-3 text-center font-bold">{analysisData.performance.top}</td>
-                          </tr>
-                          <tr className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 border-r border-slate-200 font-medium text-amber-700">Middle Performers (12-17.9)</td>
-                            <td className="px-4 py-3 text-center font-bold">{analysisData.performance.middle}</td>
-                          </tr>
-                          <tr className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 border-r border-slate-200 font-medium text-red-700">Low Performers (&lt;12)</td>
-                            <td className="px-4 py-3 text-center font-bold">{analysisData.performance.low}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-2 border-t-4 border-amber-500">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Middle Performers (12-17.9)</h4>
+                        <div className="flex items-end justify-between border-b border-slate-100 pb-1.5 pt-1">
+                          <span className="text-xs text-slate-500 font-medium">MID - I</span>
+                          <span className="text-xl font-extrabold text-amber-600">{analysisData.mid1.performance.middle}</span>
+                        </div>
+                        <div className="flex items-end justify-between border-b border-slate-100 pb-1.5 pt-1.5">
+                          <span className="text-xs text-slate-500 font-medium">MID - II</span>
+                          <span className="text-xl font-extrabold text-amber-600">{analysisData.mid2.performance.middle}</span>
+                        </div>
+                        <div className="flex items-end justify-between pt-1.5">
+                          <span className="text-xs text-slate-500 font-medium">FINAL INTERNAL</span>
+                          <span className="text-xl font-extrabold text-amber-700">{analysisData.final.performance.middle}</span>
+                        </div>
+                      </div>
 
-                  {/* Table 3: Matrix */}
-                  <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 md:col-span-2">
-                    <h4 className="text-md font-bold text-slate-800">Attendance vs Performance Correlation Matrix</h4>
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
-                            <th className="px-4 py-3 text-left border-r border-slate-200">Attendance / Performance</th>
-                            <th className="px-4 py-3 border-r border-slate-200">Top Performers (&ge;18)</th>
-                            <th className="px-4 py-3 border-r border-slate-200">Middle Performers (12-17.9)</th>
-                            <th className="px-4 py-3">Low Performers (&lt;12)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 text-slate-700 text-center font-bold">
-                          <tr className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">High Attendance (&ge;75%)</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.highAttHighPerf}</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.highAttMediumPerf}</td>
-                            <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.highAttLowPerf}</td>
-                          </tr>
-                          <tr className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">Medium Attendance (65%-74.9%)</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.mediumAttHighPerf}</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.mediumAttMediumPerf}</td>
-                            <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.mediumAttLowPerf}</td>
-                          </tr>
-                          <tr className="hover:bg-slate-50/50">
-                            <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">Low Attendance (&lt;65%)</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.lowAttHighPerf}</td>
-                            <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.lowAttMediumPerf}</td>
-                            <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.lowAttLowPerf}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-2 border-t-4 border-red-500">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Low Performers (&lt;12)</h4>
+                        <div className="flex items-end justify-between border-b border-slate-100 pb-1.5 pt-1">
+                          <span className="text-xs text-slate-500 font-medium">MID - I</span>
+                          <span className="text-xl font-extrabold text-red-500">{analysisData.mid1.performance.low}</span>
+                        </div>
+                        <div className="flex items-end justify-between border-b border-slate-100 pb-1.5 pt-1.5">
+                          <span className="text-xs text-slate-500 font-medium">MID - II</span>
+                          <span className="text-xl font-extrabold text-red-500">{analysisData.mid2.performance.low}</span>
+                        </div>
+                        <div className="flex items-end justify-between pt-1.5">
+                          <span className="text-xs text-slate-500 font-medium">FINAL INTERNAL</span>
+                          <span className="text-xl font-extrabold text-red-600">{analysisData.final.performance.low}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Visual Charts */}
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  {/* Attendance vs Performance Stacked Bar Chart */}
-                  <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
-                    <h4 className="text-md font-bold text-slate-800">Attendance vs Performance Distribution</h4>
-                    <div className="h-80 w-full text-xs">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={[
-                            {
-                              name: "High Att (>=75%)",
-                              "Top Performer": analysisData.matrix.highAttHighPerf,
-                              "Middle Performer": analysisData.matrix.highAttMediumPerf,
-                              "Low Performer": analysisData.matrix.highAttLowPerf,
-                            },
-                            {
-                              name: "Medium Att (65%-74.9%)",
-                              "Top Performer": analysisData.matrix.mediumAttHighPerf,
-                              "Middle Performer": analysisData.matrix.mediumAttMediumPerf,
-                              "Low Performer": analysisData.matrix.mediumAttLowPerf,
-                            },
-                            {
-                              name: "Low Att (<65%)",
-                              "Top Performer": analysisData.matrix.lowAttHighPerf,
-                              "Middle Performer": analysisData.matrix.lowAttMediumPerf,
-                              "Low Performer": analysisData.matrix.lowAttLowPerf,
-                            },
-                          ]}
-                          margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <RechartsTooltip />
-                          <RechartsLegend />
-                          <Bar dataKey="Top Performer" stackId="a" fill="#10b981" />
-                          <Bar dataKey="Middle Performer" stackId="a" fill="#f59e0b" />
-                          <Bar dataKey="Low Performer" stackId="a" fill="#ef4444" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
+                    {/* Comparative Theory Subject Table */}
+                    {comparativeTheorySubjects.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-800">Subject-wise Comparison (Theory Subjects)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-12">S.No</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-28">Subject Code</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200">Subject Name</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Average Marks</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Diff Index (%)</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Absentees</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Insight</th>
+                                <th className="px-3 py-3" colSpan={3}>Remarks</th>
+                              </tr>
+                              <tr className="bg-slate-100/50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
+                                <th className="border-r border-slate-200" colSpan={3}></th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5">FINAL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold text-center">
+                              {comparativeTheorySubjects.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectCode} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-3 text-left border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  
+                                  <td className="px-1 py-3 border-r border-slate-200 text-slate-900">{sub.mid1.average}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-slate-900">{sub.mid2.average}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-blue-700">{sub.final.average}</td>
 
-                  {/* Subject-wise Analysis Grouped Bar Chart */}
-                  <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
-                    <h4 className="text-md font-bold text-slate-800">Subject Performance & Difficulty Index</h4>
-                    <div className="h-80 w-full text-xs">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={analysisData.subjectAnalysis.map((item: any) => ({
-                            name: item.subjectCode || item.subjectName,
-                            Average: item.average,
-                            Gap: item.gap,
-                            "Diff Index (%)": item.difficultyIndex,
-                          }))}
-                          margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <RechartsTooltip />
-                          <RechartsLegend />
-                          <Bar dataKey="Average" fill="#3b82f6" />
-                          <Bar dataKey="Gap" fill="#f59e0b" />
-                          <Bar dataKey="Diff Index (%)" fill="#ef4444" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                                  <td className="px-1 py-3 border-r border-slate-200">{sub.mid1.difficultyIndex}%</td>
+                                  <td className="px-1 py-3 border-r border-slate-200">{sub.mid2.difficultyIndex}%</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-blue-700">{sub.final.difficultyIndex}%</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid1.absentees}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid2.absentees}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.final.absentees}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid1.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid1.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid1.insight === "N/A" || !sub.mid1.insight ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid1.insight || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid2.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid2.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid2.insight === "N/A" || !sub.mid2.insight ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid2.insight || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.final.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.final.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.final.insight === "N/A" || !sub.final.insight ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.final.insight || "N/A"}
+                                    </span>
+                                  </td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid1.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid1.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid1.remarks === "N/A" || !sub.mid1.remarks ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid1.remarks || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid2.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid2.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid2.remarks === "N/A" || !sub.mid2.remarks ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid2.remarks || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.final.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.final.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.final.remarks === "N/A" || !sub.final.remarks ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.final.remarks || "N/A"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Comparative Lab Subject Table */}
+                    {comparativeLabSubjects.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-800">Subject-wise Comparison (Labs / Practicals)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-12">S.No</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-28">Subject Code</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200">Subject Name</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Average Marks</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Diff Index (%)</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Absentees</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Insight</th>
+                                <th className="px-3 py-3" colSpan={3}>Remarks</th>
+                              </tr>
+                              <tr className="bg-slate-100/50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
+                                <th className="border-r border-slate-200" colSpan={3}></th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5">FINAL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold text-center">
+                              {comparativeLabSubjects.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectCode} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-3 text-left border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  
+                                  <td className="px-1 py-3 border-r border-slate-200 text-slate-900">{sub.mid1.average}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-slate-900">{sub.mid2.average}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-blue-700">{sub.final.average}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200">{sub.mid1.difficultyIndex}%</td>
+                                  <td className="px-1 py-3 border-r border-slate-200">{sub.mid2.difficultyIndex}%</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-blue-700">{sub.final.difficultyIndex}%</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid1.absentees}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid2.absentees}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.final.absentees}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid1.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid1.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid1.insight === "N/A" || !sub.mid1.insight ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid1.insight || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid2.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid2.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid2.insight === "N/A" || !sub.mid2.insight ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid2.insight || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.final.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.final.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.final.insight === "N/A" || !sub.final.insight ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.final.insight || "N/A"}
+                                    </span>
+                                  </td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid1.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid1.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid1.remarks === "N/A" || !sub.mid1.remarks ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid1.remarks || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.mid2.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.mid2.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.mid2.remarks === "N/A" || !sub.mid2.remarks ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.mid2.remarks || "N/A"}
+                                    </span>
+                                  </td>
+                                  <td className="px-1 py-3">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.final.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.final.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      sub.final.remarks === "N/A" || !sub.final.remarks ? "text-slate-400" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.final.remarks || "N/A"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Comparative Subject-wise Performer counts (Theory) */}
+                    {comparativeTheorySubjects.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-800">Subject-wise Performance Levels (Theory Subjects)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-12">S.No</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-28">Subject Code</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200">Subject Name</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Top Performers (&ge;18)</th>
+                                  <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Middle Performers (12-17.9)</th>
+                                  <th className="px-3 py-3" colSpan={3}>Low Performers (&lt;12)</th>
+                              </tr>
+                              <tr className="bg-slate-100/50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
+                                <th className="border-r border-slate-200" colSpan={3}></th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5">FINAL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold text-center">
+                              {comparativeTheorySubjects.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectCode} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-3 text-left border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  
+                                  <td className="px-1 py-3 border-r border-slate-200 text-emerald-600">{sub.mid1.performance?.top ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-emerald-600">{sub.mid2.performance?.top ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-emerald-700">{sub.final.performance?.top ?? 0}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200 text-amber-600">{sub.mid1.performance?.middle ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-amber-600">{sub.mid2.performance?.middle ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-amber-700">{sub.final.performance?.middle ?? 0}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid1.performance?.low ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid2.performance?.low ?? 0}</td>
+                                  <td className="px-1 py-3 text-red-600">{sub.final.performance?.low ?? 0}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Comparative Subject-wise Performer counts (Labs) */}
+                    {comparativeLabSubjects.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-800">Subject-wise Performance Levels (Labs / Practicals)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-12">S.No</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-28">Subject Code</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200">Subject Name</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Top Performers (&ge;30)</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Middle Performers (20-29.9)</th>
+                                <th className="px-3 py-3" colSpan={3}>Low Performers (&lt;20)</th>
+                              </tr>
+                              <tr className="bg-slate-100/50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
+                                <th className="border-r border-slate-200" colSpan={3}></th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5">FINAL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold text-center">
+                              {comparativeLabSubjects.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectCode} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-3 text-left border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                                  <td className="px-3 py-3 text-left border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  
+                                  <td className="px-1 py-3 border-r border-slate-200 text-emerald-600">{sub.mid1.performance?.top ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-emerald-600">{sub.mid2.performance?.top ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-emerald-700">{sub.final.performance?.top ?? 0}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200 text-amber-600">{sub.mid1.performance?.middle ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-amber-600">{sub.mid2.performance?.middle ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-amber-700">{sub.final.performance?.middle ?? 0}</td>
+
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid1.performance?.low ?? 0}</td>
+                                  <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid2.performance?.low ?? 0}</td>
+                                  <td className="px-1 py-3 text-red-600">{sub.final.performance?.low ?? 0}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Comparative Lab Detailed Analysis (Avg, Gap, Difficulty, etc.) */}
+                    {comparativeLabSubjects.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-800">Subject-wise Performance &amp; Difficulty Analysis – Labs (Comparison)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-10">S.No</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200 w-24">Code</th>
+                                <th className="px-3 py-3 text-left border-r border-slate-200">Subject Name</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Average Marks</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Gap</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Diff Index (%)</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Absentees</th>
+                                <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Insight</th>
+                                <th className="px-3 py-3" colSpan={3}>Remarks</th>
+                              </tr>
+                              <tr className="bg-slate-100/50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
+                                <th className="border-r border-slate-200" colSpan={3}></th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
+                                <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
+                                <th className="px-1 py-1.5">FINAL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 text-center">
+                              {comparativeLabSubjects.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectCode} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-2 text-left border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-3 py-2 text-left border-r border-slate-200 font-mono font-bold">{sub.subjectCode}</td>
+                                  <td className="px-3 py-2 text-left border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 font-bold">{sub.mid1.average ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 font-bold">{sub.mid2.average ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 font-bold">{sub.final.average ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200">{sub.mid1.gap ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200">{sub.mid2.gap ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200">{sub.final.gap ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 font-semibold">{sub.mid1.difficultyIndex !== "N/A" ? `${sub.mid1.difficultyIndex}%` : "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 font-semibold">{sub.mid2.difficultyIndex !== "N/A" ? `${sub.mid2.difficultyIndex}%` : "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 font-semibold">{sub.final.difficultyIndex !== "N/A" ? `${sub.final.difficultyIndex}%` : "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 text-red-600">{sub.mid1.absentees ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 text-red-600">{sub.mid2.absentees ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200 text-red-600">{sub.final.absentees ?? "N/A"}</td>
+                                  <td className="px-1 py-2 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.mid1.insight === "Good" ? "bg-emerald-100 text-emerald-700" : sub.mid1.insight === "Moderate" ? "bg-amber-100 text-amber-700" : !sub.mid1.insight ? "text-slate-400" : "bg-red-100 text-red-700"}`}>{sub.mid1.insight || "N/A"}</span>
+                                  </td>
+                                  <td className="px-1 py-2 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.mid2.insight === "Good" ? "bg-emerald-100 text-emerald-700" : sub.mid2.insight === "Moderate" ? "bg-amber-100 text-amber-700" : !sub.mid2.insight ? "text-slate-400" : "bg-red-100 text-red-700"}`}>{sub.mid2.insight || "N/A"}</span>
+                                  </td>
+                                  <td className="px-1 py-2 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.final.insight === "Good" ? "bg-emerald-100 text-emerald-700" : sub.final.insight === "Moderate" ? "bg-amber-100 text-amber-700" : !sub.final.insight ? "text-slate-400" : "bg-red-100 text-red-700"}`}>{sub.final.insight || "N/A"}</span>
+                                  </td>
+                                  <td className="px-1 py-2 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.mid1.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" : sub.mid1.remarks === "Moderate" ? "bg-amber-100 text-amber-700" : !sub.mid1.remarks ? "text-slate-400" : "bg-red-100 text-red-700"}`}>{sub.mid1.remarks || "N/A"}</span>
+                                  </td>
+                                  <td className="px-1 py-2 border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.mid2.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" : sub.mid2.remarks === "Moderate" ? "bg-amber-100 text-amber-700" : !sub.mid2.remarks ? "text-slate-400" : "bg-red-100 text-red-700"}`}>{sub.mid2.remarks || "N/A"}</span>
+                                  </td>
+                                  <td className="px-1 py-2">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.final.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" : sub.final.remarks === "Moderate" ? "bg-amber-100 text-amber-700" : !sub.final.remarks ? "text-slate-400" : "bg-red-100 text-red-700"}`}>{sub.final.remarks || "N/A"}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <>
+                    {/* Table 1.1: Subject-wise Mid Analysis (Theory) */}
+                    {theoryAnalysis.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-md font-bold text-slate-800">Subject-wise Performance & Difficulty Analysis (Theory)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 text-center border-r border-slate-200">S.No</th>
+                                <th className="px-4 py-3 border-r border-slate-200">Subject Code</th>
+                                <th className="px-4 py-3 border-r border-slate-200">Subject Name</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Strength</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Absentees</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200 font-bold">Average Marks</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Gap</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Diff Index (%)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Insight</th>
+                                <th className="px-4 py-3 text-center">Remarks</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
+                              {theoryAnalysis.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectId} className="hover:bg-slate-50/50">
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-4 py-3 border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                                  <td className="px-4 py-3 border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">{sub.classStrength}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200 text-red-600 font-semibold">{sub.absentees}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200 font-bold text-slate-900">{sub.average}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">{sub.gap}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200 font-semibold">{sub.difficultyIndex}%</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.insight}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.remarks}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Table 1.2: Subject-wise Mid Analysis (Labs) */}
+                    {labAnalysis.length > 0 && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-md font-bold text-slate-800">Subject-wise Performance & Difficulty Analysis (Labs / Practicals)</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 text-center border-r border-slate-200">S.No</th>
+                                <th className="px-4 py-3 border-r border-slate-200">Subject Code</th>
+                                <th className="px-4 py-3 border-r border-slate-200">Subject Name</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Strength</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Absentees</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200 font-bold">Average Marks</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Gap</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Diff Index (%)</th>
+                                <th className="px-4 py-3 text-center border-r border-slate-200">Insight</th>
+                                <th className="px-4 py-3 text-center">Remarks</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
+                              {labAnalysis.map((sub: any, idx: number) => (
+                                <tr key={sub.subjectId} className="hover:bg-slate-50/50">
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">{idx + 1}</td>
+                                  <td className="px-4 py-3 border-r border-slate-200 font-mono">{sub.subjectCode}</td>
+                                  <td className="px-4 py-3 border-r border-slate-200 font-medium">{sub.subjectName}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">{sub.classStrength}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200 text-red-600 font-semibold">{sub.absentees}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200 font-bold text-slate-900">{sub.average}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">{sub.gap}</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200 font-semibold">{sub.difficultyIndex}%</td>
+                                  <td className="px-4 py-3 text-center border-r border-slate-200">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.insight}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      sub.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
+                                      sub.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
+                                      "bg-red-100 text-red-700"
+                                    }`}>
+                                      {sub.remarks}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Grid for Table 2 & Matrix */}
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                      {/* Table 2: Performance Levels */}
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 md:col-span-1">
+                        <h4 className="text-md font-bold text-slate-800">Performance Levels</h4>
+                        <div className="overflow-hidden rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                                <th className="px-4 py-3 border-r border-slate-200">Performance Category</th>
+                                <th className="px-4 py-3 text-center">Count</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 font-bold">
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="px-4 py-3 border-r border-slate-200 font-medium text-emerald-700">Top Performers (&ge;18)</td>
+                                <td className="px-4 py-3 text-center font-bold">{analysisData.performance.top}</td>
+                              </tr>
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="px-4 py-3 border-r border-slate-200 font-medium text-amber-700">Middle Performers (12-17.9)</td>
+                                <td className="px-4 py-3 text-center font-bold">{analysisData.performance.middle}</td>
+                              </tr>
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="px-4 py-3 border-r border-slate-200 font-medium text-red-700">Low Performers (&lt;12)</td>
+                                <td className="px-4 py-3 text-center font-bold">{analysisData.performance.low}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Table 3: Matrix */}
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 md:col-span-2">
+                        <h4 className="text-md font-bold text-slate-800">Attendance vs Performance Correlation Matrix</h4>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
+                                <th className="px-4 py-3 text-left border-r border-slate-200">Attendance / Performance</th>
+                                <th className="px-4 py-3 border-r border-slate-200">Top Performers (&ge;18)</th>
+                                <th className="px-4 py-3 border-r border-slate-200">Middle Performers (12-17.9)</th>
+                                <th className="px-4 py-3">Low Performers (&lt;12)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-slate-700 text-center font-bold">
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">High Attendance (&ge;75%)</td>
+                                <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.highAttHighPerf}</td>
+                                <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.highAttMediumPerf}</td>
+                                <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.highAttLowPerf}</td>
+                              </tr>
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">Medium Attendance (65%-74.9%)</td>
+                                <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.mediumAttHighPerf}</td>
+                                <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.mediumAttMediumPerf}</td>
+                                <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.mediumAttLowPerf}</td>
+                              </tr>
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="px-4 py-3 text-left border-r border-slate-200 font-medium">Low Attendance (&lt;65%)</td>
+                                <td className="px-4 py-3 border-r border-slate-200 font-bold text-emerald-600">{analysisData.matrix.lowAttHighPerf}</td>
+                                <td className="px-4 py-3 border-r border-slate-200 font-bold text-amber-600">{analysisData.matrix.lowAttMediumPerf}</td>
+                                <td className="px-4 py-3 font-bold text-red-600">{analysisData.matrix.lowAttLowPerf}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Visual Charts */}
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      {/* Attendance vs Performance Stacked Bar Chart */}
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-md font-bold text-slate-800">Attendance vs Performance Distribution</h4>
+                        <div className="h-80 w-full text-xs">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={[
+                                {
+                                  name: "High Att (>=75%)",
+                                  "Top Performer": analysisData.matrix.highAttHighPerf,
+                                  "Middle Performer": analysisData.matrix.highAttMediumPerf,
+                                  "Low Performer": analysisData.matrix.highAttLowPerf,
+                                },
+                                {
+                                  name: "Medium Att (65%-74.9%)",
+                                  "Top Performer": analysisData.matrix.mediumAttHighPerf,
+                                  "Middle Performer": analysisData.matrix.mediumAttMediumPerf,
+                                  "Low Performer": analysisData.matrix.mediumAttLowPerf,
+                                },
+                                {
+                                  name: "Low Att (<65%)",
+                                  "Top Performer": analysisData.matrix.lowAttHighPerf,
+                                  "Middle Performer": analysisData.matrix.lowAttMediumPerf,
+                                  "Low Performer": analysisData.matrix.lowAttLowPerf,
+                                },
+                              ]}
+                              margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="name" />
+                              <YAxis />
+                              <RechartsTooltip />
+                              <RechartsLegend />
+                              <Bar dataKey="Top Performer" stackId="a" fill="#10b981" />
+                              <Bar dataKey="Middle Performer" stackId="a" fill="#f59e0b" />
+                              <Bar dataKey="Low Performer" stackId="a" fill="#ef4444" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Subject-wise Analysis Grouped Bar Chart */}
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <h4 className="text-md font-bold text-slate-800">Subject Performance & Difficulty Index</h4>
+                        <div className="h-80 w-full text-xs">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={analysisData.subjectAnalysis.map((item: any) => ({
+                                name: item.subjectCode || item.subjectName,
+                                Average: item.average,
+                                Gap: item.gap,
+                                "Diff Index (%)": item.difficultyIndex,
+                              }))}
+                              margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="name" />
+                              <YAxis />
+                              <RechartsTooltip />
+                              <RechartsLegend />
+                              <Bar dataKey="Average" fill="#3b82f6" />
+                              <Bar dataKey="Gap" fill="#f59e0b" />
+                              <Bar dataKey="Diff Index (%)" fill="#ef4444" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Notes & Formulas Card */}
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5 shadow-sm space-y-2">
+                  <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+                    <FaInfoCircle /> Note on Performance Metrics & Formulas
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    To help analyze the academic standards and evaluation difficulty, the following metrics are computed:
+                  </p>
+                  <ul className="text-xs text-slate-600 list-disc list-inside space-y-1.5 pl-2">
+                    <li>
+                      <span className="font-semibold text-slate-800">Gap:</span> Calculated as <code className="bg-blue-100/50 px-1.5 py-0.5 rounded font-mono text-blue-800 text-[10px]">Max Marks - Average Marks</code>. This represents the average points missed by the class. A smaller gap indicates mastery of the topic.
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-800">Diff Index (%):</span> Calculated as <code className="bg-blue-100/50 px-1.5 py-0.5 rounded font-mono text-blue-800 text-[10px]">(Average Marks / Max Marks) * 100</code>.
+                      <ul className="list-disc pl-5 mt-1 space-y-0.5 text-slate-500">
+                        <li><span className="font-medium text-slate-700">&ge; 60%:</span> <span className="text-emerald-700 font-semibold">Easy</span> (Good understanding, high score)</li>
+                        <li><span className="font-medium text-slate-700">40% - 59.9%:</span> <span className="text-amber-700 font-semibold">Moderate</span> (Average scores, standard difficulty)</li>
+                        <li><span className="font-medium text-slate-700">&lt; 40%:</span> <span className="text-red-700 font-semibold">Difficult</span> (Poor scores, requires review or student support)</li>
+                      </ul>
+                    </li>
+                  </ul>
                 </div>
               </div>
             )}

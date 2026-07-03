@@ -182,11 +182,13 @@ export async function POST(req: NextRequest) {
               examType: paper.examType,
               marksObtained: isAbsent ? 0 : total,
               maxMarks: paper.totalMarks,
+              isAbsent: isAbsent,
               recordedById: session.user.id,
             },
             update: {
               marksObtained: isAbsent ? 0 : total,
               maxMarks: paper.totalMarks,
+              isAbsent: isAbsent,
               recordedById: session.user.id,
               updatedAt: new Date(),
             }

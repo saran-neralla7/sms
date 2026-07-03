@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateStudentTotal } from "@/lib/mid-exam-calc";
+import { calculateStudentTotal, calculateInternalMarks } from "@/lib/mid-exam-calc";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -73,12 +73,12 @@ export async function GET(req: NextRequest) {
     const subjectIds = filteredSubjects.map(s => s.id);
 
     // 2. Fetch papers for these subjects, section, academic year and examType
-    const papers = await prisma.midExamPaper.findMany({
+    let papers = await prisma.midExamPaper.findMany({
       where: {
         subjectId: { in: subjectIds },
         sectionId,
         academicYearId,
-        examType,
+        examType: examType === "FINAL" ? undefined : examType,
       },
       include: {
         subject: true,
@@ -132,6 +132,25 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    // Fetch internal marks and assignment marks if FINAL
+    const [internalMarks, assignmentMarks] = examType === "FINAL" ? await Promise.all([
+      prisma.internalMark.findMany({
+        where: {
+          academicYearId,
+          studentId: { in: studentIds },
+          subjectId: { in: subjectIds }
+        }
+      }),
+      prisma.assignmentMark.findMany({
+        where: {
+          academicYearId, departmentId, year, semester,
+          sectionId,
+          studentId: { in: studentIds },
+          isDraft: false,
+        }
+      })
+    ]) : [[], []];
+
     // 5. Fetch attendance records for this section in the semester
     const attendanceRecords = await prisma.attendanceHistory.findMany({
       where: {
@@ -181,35 +200,139 @@ export async function GET(req: NextRequest) {
     // Map paperId -> studentId -> { totalMarks, isAbsent }
     const paperStudentTotals: Record<string, Record<string, { total: number; isAbsent: boolean }>> = {};
 
-    papers.forEach(paper => {
-      paperStudentTotals[paper.id] = {};
-      const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
-
-      students.forEach(student => {
-        const studentEntries = marksEntries.filter(e => e.paperId === paper.id && e.studentId === student.id);
-        
-        // If there are no entries for this student, check if other students have entries.
-        // If nobody has entries for this paper, it means the exam hasn't been conducted/entered.
-        const hasAnyEntriesForPaper = marksEntries.some(e => e.paperId === paper.id);
-        if (!hasAnyEntriesForPaper) {
-          return;
-        }
-
-        const isAbsent = studentEntries.length > 0 ? studentEntries.some(e => e.isAbsent) : true;
-        
-        const marksMap: Record<string, number | null> = {};
-        studentEntries.forEach(e => {
-          marksMap[e.subQuestionId] = e.marksObtained;
-        });
-
-        const { total } = calculateStudentTotal(paper.questions, paperChoiceGroups, marksMap, isAbsent);
-
-        paperStudentTotals[paper.id][student.id] = {
-          total: isAbsent ? 0 : total,
-          isAbsent
+    if (examType === "FINAL") {
+      const mockPapers: any[] = filteredSubjects.map(sub => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        return {
+          id: sub.id,
+          subjectId: sub.id,
+          subject: sub,
+          totalMarks: isLab ? 50 : 30
         };
       });
-    });
+
+      mockPapers.forEach(mockPaper => {
+        const subject = mockPaper.subject;
+        const isLab = subject.type?.toUpperCase() === "LAB";
+        paperStudentTotals[mockPaper.id] = {};
+
+        students.forEach(student => {
+          let mid1Marks: number | null = null;
+          let mid1Max = 30;
+          let mid2Marks: number | null = null;
+          let mid2Max = 30;
+          let isMid1Absent = false;
+          let isMid2Absent = false;
+
+          if (isLab) {
+            const labMark = internalMarks.find(m => m.studentId === student.id && m.subjectId === subject.id && m.examType === "LAB");
+            mid1Marks = labMark?.marksObtained ?? null;
+            mid1Max = labMark?.maxMarks ?? 50;
+            isMid1Absent = labMark?.isAbsent ?? false;
+          } else {
+            const mid1Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_I");
+            const mid2Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_II");
+
+            const getPaperTotal = (paper: any, type: "MID_I" | "MID_II") => {
+              if (!paper) {
+                const fallback = internalMarks.find(m => m.studentId === student.id && m.subjectId === subject.id && m.examType === type);
+                return fallback ? { total: fallback.marksObtained, isAbsent: fallback.isAbsent, max: fallback.maxMarks } : null;
+              }
+
+              const paperEntries = marksEntries.filter(e => e.paperId === paper.id && e.studentId === student.id);
+              const hasSubmitted = marksEntries.some(e => e.paperId === paper.id);
+
+              if (!hasSubmitted) {
+                const fallback = internalMarks.find(m => m.studentId === student.id && m.subjectId === subject.id && m.examType === type);
+                return fallback ? { total: fallback.marksObtained, isAbsent: fallback.isAbsent, max: fallback.maxMarks } : null;
+              }
+
+              const isAbsent = paperEntries.some(e => e.isAbsent);
+              const marksMap: Record<string, number | null> = {};
+              for (const e of paperEntries) {
+                marksMap[e.subQuestionId] = e.marksObtained;
+              }
+
+              const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
+              const { total } = calculateStudentTotal(paper.questions, paperChoiceGroups, marksMap, isAbsent);
+
+              return {
+                total: isAbsent ? 0 : total,
+                isAbsent: isAbsent,
+                max: paper.totalMarks
+              };
+            };
+
+            const mid1Result = getPaperTotal(mid1Paper, "MID_I");
+            if (mid1Result) {
+              mid1Marks = mid1Result.total;
+              mid1Max = mid1Result.max;
+              isMid1Absent = mid1Result.isAbsent;
+            }
+
+            const mid2Result = getPaperTotal(mid2Paper, "MID_II");
+            if (mid2Result) {
+              mid2Marks = mid2Result.total;
+              mid2Max = mid2Result.max;
+              isMid2Absent = mid2Result.isAbsent;
+            }
+          }
+
+          const assign = assignmentMarks.find(m => m.studentId === student.id && m.subjectId === subject.id);
+          const assignMarks = assign?.marksObtained ?? null;
+
+          const internalTotal = calculateInternalMarks({
+            mid1Total: mid1Marks,
+            mid2Total: mid2Marks,
+            mid1MaxMarks: mid1Max,
+            mid2MaxMarks: mid2Max,
+            mid1ScaledTo: 20,
+            mid2ScaledTo: 20,
+            assignmentMarks: assignMarks,
+            assignmentMax: 10,
+            internalMax: isLab ? 50 : 30,
+            subjectType: isLab ? "LAB" : "THEORY",
+          });
+
+          // A student is considered absent for FINAL only if they were absent for both mids
+          const isAbsent = isLab ? isMid1Absent : (isMid1Absent && isMid2Absent);
+
+          paperStudentTotals[mockPaper.id][student.id] = {
+            total: internalTotal,
+            isAbsent: isAbsent
+          };
+        });
+      });
+
+      papers = mockPapers;
+    } else {
+      papers.forEach(paper => {
+        paperStudentTotals[paper.id] = {};
+        const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
+
+        students.forEach(student => {
+          const studentEntries = marksEntries.filter(e => e.paperId === paper.id && e.studentId === student.id);
+          const hasAnyEntriesForPaper = marksEntries.some(e => e.paperId === paper.id);
+          if (!hasAnyEntriesForPaper) {
+            return;
+          }
+
+          const isAbsent = studentEntries.length > 0 ? studentEntries.some(e => e.isAbsent) : true;
+          
+          const marksMap: Record<string, number | null> = {};
+          studentEntries.forEach(e => {
+            marksMap[e.subQuestionId] = e.marksObtained;
+          });
+
+          const { total } = calculateStudentTotal(paper.questions, paperChoiceGroups, marksMap, isAbsent);
+
+          paperStudentTotals[paper.id][student.id] = {
+            total: isAbsent ? 0 : total,
+            isAbsent
+          };
+        });
+      });
+    }
 
     // 8. Compute subject-wise statistics
     const subjectAnalysis = papers.map((paper, idx) => {
@@ -232,18 +355,39 @@ export async function GET(req: NextRequest) {
       const insight = difficultyIndex >= 60 ? "Good" : difficultyIndex >= 40 ? "Moderate" : "Poor";
       const remarks = difficultyIndex >= 60 ? "Easy" : difficultyIndex >= 40 ? "Moderate" : "Difficult";
 
+      let top = 0;
+      let middle = 0;
+      let low = 0;
+
+      if (paper.totalMarks > 0) {
+        totalsList.forEach(t => {
+          if (!t.isAbsent) {
+            const pct = (t.total / paper.totalMarks) * 100;
+            if (pct >= 60) top++;
+            else if (pct >= 40) middle++;
+            else low++;
+          }
+        });
+      }
+
       return {
         sNo: idx + 1,
         subjectId: paper.subjectId,
         subjectName: paper.subject.name,
         subjectCode: paper.subject.code,
+        subjectType: paper.subject.type,
         classStrength: strength,
         absentees,
         average,
         gap,
         difficultyIndex,
         insight,
-        remarks
+        remarks,
+        performance: {
+          top,
+          middle,
+          low
+        }
       };
     });
 

@@ -150,11 +150,15 @@ export async function GET(req: NextRequest) {
         let mid2Marks: number | null = null;
         let mid2Max = 30;
 
+        let isMid1Absent = false;
+        let isMid2Absent = false;
+
         if (isLab) {
           // For labs, fetch from InternalMark where examType is "LAB"
           const labMark = internalMarks.find(m => m.studentId === student.id && m.subjectId === subject.id && m.examType === "LAB");
           mid1Marks = labMark?.marksObtained ?? null;
           mid1Max = labMark?.maxMarks ?? 50;
+          isMid1Absent = labMark?.isAbsent ?? false;
         } else {
           // For theory: MID_I and MID_II papers (ensure we match the student's section!)
           const mid1Paper = papers.find(p => p.subjectId === subject.id && p.examType === "MID_I" && p.sectionId === student.sectionId);
@@ -164,7 +168,7 @@ export async function GET(req: NextRequest) {
             if (!paper) {
               // Fallback to internalMark if paper doesn't exist
               const fallback = internalMarks.find(m => m.studentId === student.id && m.subjectId === subject.id && m.examType === examType);
-              return fallback ? { total: fallback.marksObtained, max: fallback.maxMarks } : null;
+              return fallback ? { total: fallback.marksObtained, isAbsent: fallback.isAbsent, max: fallback.maxMarks } : null;
             }
 
             const paperEntries = marksEntries.filter(e => e.paperId === paper.id && e.studentId === student.id);
@@ -173,7 +177,7 @@ export async function GET(req: NextRequest) {
             if (!hasSubmitted) {
               // Fallback to internalMark if it exists
               const fallback = internalMarks.find(m => m.studentId === student.id && m.subjectId === subject.id && m.examType === examType);
-              return fallback ? { total: fallback.marksObtained, max: fallback.maxMarks } : null;
+              return fallback ? { total: fallback.marksObtained, isAbsent: fallback.isAbsent, max: fallback.maxMarks } : null;
             }
 
             const isAbsent = paperEntries.some(e => e.isAbsent);
@@ -187,6 +191,7 @@ export async function GET(req: NextRequest) {
 
             return {
               total: isAbsent ? 0 : total,
+              isAbsent: isAbsent,
               max: paper.totalMarks
             };
           };
@@ -195,12 +200,14 @@ export async function GET(req: NextRequest) {
           if (mid1Result) {
             mid1Marks = mid1Result.total;
             mid1Max = mid1Result.max;
+            isMid1Absent = mid1Result.isAbsent;
           }
 
           const mid2Result = getPaperTotal(mid2Paper, "MID_II");
           if (mid2Result) {
             mid2Marks = mid2Result.total;
             mid2Max = mid2Result.max;
+            isMid2Absent = mid2Result.isAbsent;
           }
         }
 
@@ -226,7 +233,9 @@ export async function GET(req: NextRequest) {
 
         subjectData[subject.id] = {
           mid1: mid1Marks,
+          isMid1Absent,
           mid2: mid2Marks,
+          isMid2Absent,
           mid1Scaled,
           mid2Scaled,
           assignment: assignMarks,

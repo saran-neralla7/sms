@@ -638,9 +638,9 @@ export default function MarksGridPage() {
                     }`}
                   >
                     {/* Student Info */}
-                    <td className="sticky left-0 bg-white hover:bg-slate-50/50 px-3 py-2 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-100">
-                      <p className="font-semibold text-slate-900 text-xs truncate max-w-[130px]" title={row.name}>{row.name}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">{row.rollNumber}</p>
+                    <td className="sticky left-0 bg-white hover:bg-slate-50/50 px-3 py-2 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-100" title={row.name}>
+                      <p className="font-bold text-slate-900 text-sm font-mono leading-tight">{row.rollNumber}</p>
+                      <p className="text-[10px] text-slate-500 truncate max-w-[130px] leading-tight">{row.name}</p>
                     </td>
 
                     {/* Absent Toggle Button */}

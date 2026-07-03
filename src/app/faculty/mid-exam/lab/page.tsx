@@ -205,9 +205,9 @@ function LabMarksContent() {
                   key={row.studentId}
                   className="flex items-center justify-between p-4 hover:bg-slate-50/50 transition-colors"
                 >
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-900 text-sm">{row.name}</p>
-                    <p className="text-xs text-slate-500 font-mono">{row.rollNumber}</p>
+                  <div className="flex-1" title={row.name}>
+                    <p className="font-bold text-slate-900 text-sm font-mono leading-tight">{row.rollNumber}</p>
+                    <p className="text-xs text-slate-500 truncate max-w-[200px] leading-tight">{row.name}</p>
                   </div>
 
                   <div className="flex items-center gap-4">

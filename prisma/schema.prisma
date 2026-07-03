@@ -454,6 +454,7 @@ model InternalMark {
   examType       String   @default("MID_I") // MID_I or MID_II
   marksObtained  Float
   maxMarks       Float    @default(30)
+  isAbsent       Boolean  @default(false)
   recordedById   String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
