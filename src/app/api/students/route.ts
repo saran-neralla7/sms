@@ -34,9 +34,13 @@ export async function GET(request: Request) {
     const skip = isAll ? 0 : (page - 1) * limit;
     const take = isAll ? undefined : limit;
 
-    const where: any = { isAlumni: false }; // exclude alumni by default
     const showAlumni = searchParams.get("showAlumni") === "true";
-    if (showAlumni) delete where.isAlumni; // allow viewing alumni when explicitly requested
+    const showLeftCollege = searchParams.get("showLeftCollege") === "true";
+
+    const where: any = {
+        isAlumni: showAlumni,
+        isLeftCollege: showLeftCollege
+    };
 
     if (year) where.year = year;
     if (semester) where.semester = semester;
@@ -225,6 +229,9 @@ export async function POST(request: Request) {
                     departmentId: body.departmentId,
                     regulationId: regulationId,
                     batchId: body.batchId || null,
+                    isDetained: body.isDetained || false,
+                    isLeftCollege: body.isLeftCollege || false,
+                    originalBatchId: body.originalBatchId || null,
                     isLateralEntry: body.isLateralEntry || false,
                     // Extended Fields
                     hallTicketNumber: body.hallTicketNumber || null,
@@ -263,6 +270,7 @@ export async function POST(request: Request) {
                     regulationId: regulationId,
                     batchId: body.batchId || null,
                     isDetained: body.isDetained || false,
+                    isLeftCollege: body.isLeftCollege || false,
                     isLateralEntry: body.isLateralEntry || false,
                     originalBatchId: body.originalBatchId || null,
                     // Extended Fields

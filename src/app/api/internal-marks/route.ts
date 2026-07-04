@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
             departmentId,
             year: year,
             semester: semester,
-            isAlumni: false
+            isAlumni: false,
+            isLeftCollege: false
         };
         if (sectionId) {
             studentWhere.sectionId = sectionId;

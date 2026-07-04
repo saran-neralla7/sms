@@ -62,7 +62,8 @@ export async function GET(request: Request) {
             students = await prisma.student.findMany({
                 where: {
                     rollNumber: { in: Array.from(activeRollNumbers) },
-                    isAlumni: false
+                    isAlumni: false,
+                    isLeftCollege: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }
@@ -74,7 +75,8 @@ export async function GET(request: Request) {
                     semester,
                     sectionId,
                     departmentId: departmentId || undefined,
-                    isAlumni: false
+                    isAlumni: false,
+                    isLeftCollege: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }

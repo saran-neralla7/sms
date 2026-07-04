@@ -108,6 +108,7 @@ model Student {
   batchId               String?
   isDetained            Boolean              @default(false)
   isAlumni              Boolean              @default(false)
+  isLeftCollege         Boolean              @default(false)
   alumniId              String? // links to Alumni.id after graduation
   originalBatchId       String?
   labBatchId            String?

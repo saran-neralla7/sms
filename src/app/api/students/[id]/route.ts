@@ -134,6 +134,7 @@ export async function PUT(
                 regulationId: body.regulationId,
                 batchId: body.batchId || null,
                 isDetained: body.isDetained || false,
+                isLeftCollege: body.isLeftCollege || false,
                 originalBatchId: body.originalBatchId || null,
                 hallTicketNumber: body.hallTicketNumber || null,
                 eamcetRank: body.eamcetRank || null,

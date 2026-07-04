@@ -956,11 +956,11 @@ export default function AdminMidExamDashboard() {
           body: theoryRows,
           startY: currentY,
           margin: { left: margin, right: margin },
-          styles: { fontSize: 8.5, halign: "center", cellPadding: 2, lineColor: [80, 80, 80], lineWidth: 0.3 },
+          styles: { fontSize: 8.5, halign: "center", cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.3 },
           columnStyles: {
             2: { halign: "left" }
           },
-          headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [60, 60, 60] }
+          headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] }
         });
 
         currentY = (doc as any).lastAutoTable.finalY + 6;
@@ -988,18 +988,19 @@ export default function AdminMidExamDashboard() {
           body: labRows,
           startY: currentY,
           margin: { left: margin, right: margin },
-          styles: { fontSize: 8.5, halign: "center", cellPadding: 2, lineColor: [80, 80, 80], lineWidth: 0.3 },
+          styles: { fontSize: 8.5, halign: "center", cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.3 },
           columnStyles: {
             2: { halign: "left" }
           },
-          headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [60, 60, 60] }
+          headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] }
         });
 
         currentY = (doc as any).lastAutoTable.finalY + 6;
       }
 
       // Table 2: Student Counts by Performance Levels
-      let nextY = currentY + 2;
+      doc.addPage();
+      let nextY = 20;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10.5);
       doc.text("2. Student Distribution by Performance Levels", margin, nextY);
@@ -1016,11 +1017,11 @@ export default function AdminMidExamDashboard() {
         body: perfRows,
         startY: nextY + 3,
         margin: { left: margin, right: margin },
-        styles: { fontSize: 8.5, halign: "center", cellPadding: 2.5, lineColor: [80, 80, 80], lineWidth: 0.3 },
+        styles: { fontSize: 8.5, halign: "center", cellPadding: 2.5, lineColor: [0, 0, 0], lineWidth: 0.3 },
         columnStyles: {
           0: { halign: "left", fontStyle: "bold" }
         },
-        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [60, 60, 60] }
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] }
       });
 
       // Table 3: Correlation Matrix
@@ -1044,11 +1045,11 @@ export default function AdminMidExamDashboard() {
         body: matrixRows,
         startY: nextY + 3,
         margin: { left: margin, right: margin },
-        styles: { fontSize: 8.5, halign: "center", cellPadding: 2.5, lineColor: [80, 80, 80], lineWidth: 0.3 },
+        styles: { fontSize: 8.5, halign: "center", cellPadding: 2.5, lineColor: [0, 0, 0], lineWidth: 0.3 },
         columnStyles: {
           0: { halign: "left", fontStyle: "bold" }
         },
-        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [60, 60, 60] }
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] }
       });
 
       // Footer
@@ -1384,87 +1385,104 @@ export default function AdminMidExamDashboard() {
 
     // Build footer analysis rows for MID_I, MID_II, FINAL
     const buildClassStatsFooter = () => {
-      if (reportType === "ASSIGNMENT") return [];
-      const theorySubjectsForStats = subjects.filter((s: any) => s.type?.toUpperCase() !== "LAB");
-      const labSubjectsForStats = subjects.filter((s: any) => s.type?.toUpperCase() === "LAB");
+      if ((reportType as string) === "ASSIGNMENT" || reportType === "FINAL") return [];
 
-      const getSubjectAvg = (subId: string, extractor: (m: any) => number | null) => {
-        let sum = 0; let count = 0;
+      const getSubjectStatsForFooter = (subId: string, isLab: boolean) => {
+        let sum = 0;
+        let count = 0;
+        let countAbove = 0;
+        let countBetween = 0;
+        let countBelow = 0;
+        let countZero = 0;
+        let countAbsent = 0;
+
+        const maxMarks = (reportType as string) === "ASSIGNMENT" ? 10 : (isLab ? 50 : 30);
+
         rows.forEach((r: any) => {
           const m = r.subjects[subId] || {};
-          const v = extractor(m);
-          if (v !== null && v !== undefined && !isNaN(v)) { sum += v; count++; }
-        });
-        return count > 0 ? (sum / count).toFixed(1) : "N/A";
-      };
+          let val: number | null = null;
+          let isAbsent = false;
 
-      const getSubjectPerformers = (subId: string, extractor: (m: any) => number | null, isLab: boolean) => {
-        let top = 0; let middle = 0; let low = 0; let absent = 0;
-        const threshold = isLab ? { top: 30, middle: 20 } : { top: 18, middle: 12 };
-        rows.forEach((r: any) => {
-          const m = r.subjects[subId] || {};
-          const v = extractor(m);
-          if (v === null || v === undefined) { absent++; return; }
-          const val = Math.round(v);
-          if (val >= threshold.top) top++;
-          else if (val >= threshold.middle) middle++;
-          else low++;
+          if (reportType === "MID_I") {
+            val = m.mid1;
+            isAbsent = m.isMid1Absent || val === null || val === undefined;
+          } else if (reportType === "MID_II") {
+            val = m.mid2;
+            isAbsent = m.isMid2Absent || val === null || val === undefined;
+          } else if ((reportType as string) === "ASSIGNMENT") {
+            val = m.assignment;
+            isAbsent = val === null || val === undefined;
+          } else if ((reportType as string) === "FINAL") {
+            val = m.internal;
+            isAbsent = val === null || val === undefined;
+          }
+
+          if (isAbsent) {
+            countAbsent++;
+          } else {
+            const numVal = Math.round(val ?? 0);
+            sum += numVal;
+            count++;
+
+            if (numVal === 0) {
+              countZero++;
+            }
+
+            const pct = (numVal / maxMarks) * 100;
+            if (pct >= 60) {
+              countAbove++;
+            } else if (pct >= 40) {
+              countBetween++;
+            } else {
+              countBelow++;
+            }
+          }
         });
-        return { top, middle, low, absent };
+
+        const average = count > 0 ? (sum / count).toFixed(1) : "N/A";
+        return { average, countAbove, countBetween, countBelow, countZero, countAbsent };
       };
 
       const footerRows: any[] = [];
-      const avgLabel = reportType === "MID_I" ? "Class Avg (MID-I)" : reportType === "MID_II" ? "Class Avg (MID-II)" : "Class Avg (Internal)";
-      const extractor = reportType === "MID_I"
-        ? (m: any) => m.mid1
-        : reportType === "MID_II"
-          ? (m: any) => m.mid2
-          : (m: any) => m.internal;
+      const statsList = subjects.map((sub: any) => {
+        const isLab = sub.type?.toUpperCase() === "LAB";
+        return getSubjectStatsForFooter(sub.id, isLab);
+      });
 
-      const avgRow: any[] = ["", "", avgLabel];
-      for (const sub of subjects) {
-        avgRow.push(getSubjectAvg(sub.id, extractor));
-      }
-      if (reportType === "FINAL") avgRow.push("");
+      // 1. Column Average
+      const avgRow = ["", "", "COLUMN AVERAGE"];
+      statsList.forEach((s: any) => avgRow.push(s.average));
+      if ((reportType as string) === "FINAL") avgRow.push("");
       footerRows.push(avgRow);
 
-      const topLabel = reportType === "MID_I" || reportType === "MID_II" ? "Top (≥18 theory / ≥30 lab)" : "Top (≥18 theory / ≥30 lab)";
-      const topRow: any[] = ["", "", topLabel];
-      for (const sub of subjects) {
-        const isLab = sub.type?.toUpperCase() === "LAB";
-        const p = getSubjectPerformers(sub.id, extractor, isLab);
-        topRow.push(p.top);
-      }
-      if (reportType === "FINAL") topRow.push("");
-      footerRows.push(topRow);
+      // 2. Above 60%
+      const aboveRow = ["", "", "Total No. of Students Above 60% (18 and above)"];
+      statsList.forEach((s: any) => aboveRow.push(s.countAbove.toString()));
+      if ((reportType as string) === "FINAL") aboveRow.push("");
+      footerRows.push(aboveRow);
 
-      const midLabel = "Middle (12-17 theory / 20-29 lab)";
-      const midRow: any[] = ["", "", midLabel];
-      for (const sub of subjects) {
-        const isLab = sub.type?.toUpperCase() === "LAB";
-        const p = getSubjectPerformers(sub.id, extractor, isLab);
-        midRow.push(p.middle);
-      }
-      if (reportType === "FINAL") midRow.push("");
-      footerRows.push(midRow);
+      // 3. Between 60% to 40%
+      const betweenRow = ["", "", "Total No. of Students Between 60% to 40% (17 - 12 Marks)"];
+      statsList.forEach((s: any) => betweenRow.push(s.countBetween.toString()));
+      if ((reportType as string) === "FINAL") betweenRow.push("");
+      footerRows.push(betweenRow);
 
-      const lowLabel = "Low (<12 theory / <20 lab)";
-      const lowRow: any[] = ["", "", lowLabel];
-      for (const sub of subjects) {
-        const isLab = sub.type?.toUpperCase() === "LAB";
-        const p = getSubjectPerformers(sub.id, extractor, isLab);
-        lowRow.push(p.low);
-      }
-      if (reportType === "FINAL") lowRow.push("");
-      footerRows.push(lowRow);
+      // 4. Below 40%
+      const belowRow = ["", "", "Total No. of Students Below 40% (11 - 1 Marks)"];
+      statsList.forEach((s: any) => belowRow.push(s.countBelow.toString()));
+      if ((reportType as string) === "FINAL") belowRow.push("");
+      footerRows.push(belowRow);
 
-      const absentRow: any[] = ["", "", "Absentees"];
-      for (const sub of subjects) {
-        const isLab = sub.type?.toUpperCase() === "LAB";
-        const p = getSubjectPerformers(sub.id, extractor, isLab);
-        absentRow.push(p.absent);
-      }
-      if (reportType === "FINAL") absentRow.push("");
+      // 5. Zero Marks
+      const zeroRow = ["", "", "Total No. of Students With zero Marks"];
+      statsList.forEach((s: any) => zeroRow.push(s.countZero.toString()));
+      if ((reportType as string) === "FINAL") zeroRow.push("");
+      footerRows.push(zeroRow);
+
+      // 6. Absentees
+      const absentRow = ["", "", "Total No. of Absentees"];
+      statsList.forEach((s: any) => absentRow.push(s.countAbsent.toString()));
+      if ((reportType as string) === "FINAL") absentRow.push("");
       footerRows.push(absentRow);
 
       return footerRows;
@@ -1484,7 +1502,7 @@ export default function AdminMidExamDashboard() {
         cellPadding: reportType === "FINAL" ? 1.5 : 2,
         halign: "center",
         valign: "middle",
-        lineColor: [80, 80, 80],
+        lineColor: [0, 0, 0],
         lineWidth: 0.3,
         font: "helvetica",
         textColor: [40, 40, 40]
@@ -1495,15 +1513,15 @@ export default function AdminMidExamDashboard() {
         fontSize: reportType === "FINAL" ? 7 : 7.5,
         fontStyle: "bold",
         lineWidth: 0.4,
-        lineColor: [60, 60, 60]
+        lineColor: [0, 0, 0]
       },
       footStyles: {
         fillColor: [240, 243, 246],
         textColor: [30, 41, 59],
         fontSize: reportType === "FINAL" ? 6.5 : 7.5,
         fontStyle: "bold",
-        lineWidth: 0.3,
-        lineColor: [80, 80, 80]
+        lineWidth: 0.4,
+        lineColor: [0, 0, 0]
       },
       columnStyles: (() => {
         const colStyles: any = {
@@ -1799,13 +1817,14 @@ export default function AdminMidExamDashboard() {
       foot: [footerRow, pdfAbove60Row, pdfBetweenRow, pdfBelowRow, pdfZeroRow, pdfAbsentRow],
       startY: tableStartY,
       margin: { left: margin, right: margin },
+      showFoot: "lastPage",
       styles: {
         fontSize: 8.5,
         cellPadding: 2,
         halign: "center",
         valign: "middle",
-        lineColor: [200, 200, 200],
-        lineWidth: 0.1,
+        lineColor: [0, 0, 0],
+        lineWidth: 0.3,
         font: "helvetica",
         textColor: [40, 40, 40]
       },
@@ -1814,16 +1833,16 @@ export default function AdminMidExamDashboard() {
         textColor: [30, 41, 59],
         fontSize: 8,
         fontStyle: "bold",
-        lineWidth: 0.2,
-        lineColor: [180, 180, 180]
+        lineWidth: 0.4,
+        lineColor: [0, 0, 0]
       },
       footStyles: {
         fillColor: [240, 243, 246],
         textColor: [30, 41, 59],
         fontSize: 8,
         fontStyle: "bold",
-        lineWidth: 0.2,
-        lineColor: [180, 180, 180]
+        lineWidth: 0.4,
+        lineColor: [0, 0, 0]
       },
       columnStyles: {
         0: { cellWidth: 8, halign: "center" },
@@ -2490,19 +2509,127 @@ export default function AdminMidExamDashboard() {
         return rowData;
       });
 
+      const buildClassStatsFooter = () => {
+        if ((reportType as string) === "ASSIGNMENT" || reportType === "FINAL") return [];
+
+        const getSubjectStatsForFooter = (subId: string, isLab: boolean) => {
+          let sum = 0;
+          let count = 0;
+          let countAbove = 0;
+          let countBetween = 0;
+          let countBelow = 0;
+          let countZero = 0;
+          let countAbsent = 0;
+
+          const maxMarks = (reportType as string) === "ASSIGNMENT" ? 10 : (isLab ? 50 : 30);
+
+          rows.forEach((r: any) => {
+            const m = r.subjects[subId] || {};
+            let val: number | null = null;
+            let isAbsent = false;
+
+            if (reportType === "MID_I") {
+              val = m.mid1;
+              isAbsent = m.isMid1Absent || val === null || val === undefined;
+            } else if (reportType === "MID_II") {
+              val = m.mid2;
+              isAbsent = m.isMid2Absent || val === null || val === undefined;
+            } else if ((reportType as string) === "ASSIGNMENT") {
+              val = m.assignment;
+              isAbsent = val === null || val === undefined;
+            } else if ((reportType as string) === "FINAL") {
+              val = m.internal;
+              isAbsent = val === null || val === undefined;
+            }
+
+            if (isAbsent) {
+              countAbsent++;
+            } else {
+              const numVal = Math.round(val ?? 0);
+              sum += numVal;
+              count++;
+
+              if (numVal === 0) {
+                countZero++;
+              }
+
+              const pct = (numVal / maxMarks) * 100;
+              if (pct >= 60) {
+                countAbove++;
+              } else if (pct >= 40) {
+                countBetween++;
+              } else {
+                countBelow++;
+              }
+            }
+          });
+
+          const average = count > 0 ? (sum / count).toFixed(1) : "N/A";
+          return { average, countAbove, countBetween, countBelow, countZero, countAbsent };
+        };
+
+        const footerRows: any[] = [];
+        const statsList = subjects.map((sub: any) => {
+          const isLab = sub.type?.toUpperCase() === "LAB";
+          return getSubjectStatsForFooter(sub.id, isLab);
+        });
+
+        // 1. Column Average
+        const avgRow = ["", "", "COLUMN AVERAGE"];
+        statsList.forEach((s: any) => avgRow.push(s.average));
+        if ((reportType as string) === "FINAL") avgRow.push("");
+        footerRows.push(avgRow);
+
+        // 2. Above 60%
+        const aboveRow = ["", "", "Total No. of Students Above 60% (18 and above)"];
+        statsList.forEach((s: any) => aboveRow.push(s.countAbove.toString()));
+        if ((reportType as string) === "FINAL") aboveRow.push("");
+        footerRows.push(aboveRow);
+
+        // 3. Between 60% to 40%
+        const betweenRow = ["", "", "Total No. of Students Between 60% to 40% (17 - 12 Marks)"];
+        statsList.forEach((s: any) => betweenRow.push(s.countBetween.toString()));
+        if ((reportType as string) === "FINAL") betweenRow.push("");
+        footerRows.push(betweenRow);
+
+        // 4. Below 40%
+        const belowRow = ["", "", "Total No. of Students Below 40% (11 - 1 Marks)"];
+        statsList.forEach((s: any) => belowRow.push(s.countBelow.toString()));
+        if ((reportType as string) === "FINAL") belowRow.push("");
+        footerRows.push(belowRow);
+
+        // 5. Zero Marks
+        const zeroRow = ["", "", "Total No. of Students With zero Marks"];
+        statsList.forEach((s: any) => zeroRow.push(s.countZero.toString()));
+        if ((reportType as string) === "FINAL") zeroRow.push("");
+        footerRows.push(zeroRow);
+
+        // 6. Absentees
+        const absentRow = ["", "", "Total No. of Absentees"];
+        statsList.forEach((s: any) => absentRow.push(s.countAbsent.toString()));
+        if ((reportType as string) === "FINAL") absentRow.push("");
+        footerRows.push(absentRow);
+
+        return footerRows;
+      };
+
+      const footerRows = buildClassStatsFooter();
+
       // AutoTable styles
       autoTable(doc, {
         head: headers,
         body: tableRows,
+        foot: footerRows.length > 0 ? footerRows : undefined,
         startY: tableStartY,
         margin: { left: margin, right: margin, bottom: 28 },
+        showFoot: "lastPage",
         styles: {
           fontSize: reportType === "FINAL" ? 7 : 8,
           cellPadding: reportType === "FINAL" ? 1.5 : 2,
           halign: "center",
           valign: "middle",
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.3,
           font: "helvetica",
           textColor: [40, 40, 40]
         },
@@ -2511,8 +2638,16 @@ export default function AdminMidExamDashboard() {
           textColor: [30, 41, 59],
           fontSize: reportType === "FINAL" ? 7 : 7.5,
           fontStyle: "bold",
-          lineWidth: 0.2,
-          lineColor: [180, 180, 180]
+          lineWidth: 0.4,
+          lineColor: [0, 0, 0]
+        },
+        footStyles: {
+          fillColor: [240, 243, 246],
+          textColor: [30, 41, 59],
+          fontSize: reportType === "FINAL" ? 6.5 : 7.5,
+          fontStyle: "bold",
+          lineWidth: 0.4,
+          lineColor: [0, 0, 0]
         },
         columnStyles: (() => {
           const colStyles: any = {
@@ -2880,13 +3015,14 @@ export default function AdminMidExamDashboard() {
         foot: [footerRow, pdfAbove60Row, pdfBetweenRow, pdfBelowRow, pdfZeroRow, pdfAbsentRow],
         startY: tableStartY,
         margin: { left: margin, right: margin },
+        showFoot: "lastPage",
         styles: {
           fontSize: 8.5,
           cellPadding: 2,
           halign: "center",
           valign: "middle",
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.3,
           font: "helvetica",
           textColor: [40, 40, 40]
         },
@@ -2895,16 +3031,16 @@ export default function AdminMidExamDashboard() {
           textColor: [30, 41, 59],
           fontSize: 8,
           fontStyle: "bold",
-          lineWidth: 0.2,
-          lineColor: [180, 180, 180]
+          lineWidth: 0.4,
+          lineColor: [0, 0, 0]
         },
         footStyles: {
           fillColor: [240, 243, 246],
           textColor: [30, 41, 59],
           fontSize: 8,
           fontStyle: "bold",
-          lineWidth: 0.2,
-          lineColor: [180, 180, 180]
+          lineWidth: 0.4,
+          lineColor: [0, 0, 0]
         },
         columnStyles: {
           0: { cellWidth: 8, halign: "center" },
@@ -4615,130 +4751,6 @@ export default function AdminMidExamDashboard() {
                         </div>
                       )}
 
-                      {/* Comparative Lab Subject Table */}
-                      {comparativeLabSubjects.length > 0 && (
-                        <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
-                          <h4 className="text-sm font-bold text-slate-800">Subject-wise Comparison (Labs / Practicals)</h4>
-                          <div className="overflow-x-auto rounded-xl border border-slate-200">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-center">
-                                  <th className="px-3 py-3 text-left border-r border-slate-200 w-12">S.No</th>
-                                  <th className="px-3 py-3 text-left border-r border-slate-200 w-28">Subject Code</th>
-                                  <th className="px-3 py-3 text-left border-r border-slate-200">Subject Name</th>
-                                  <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Average Marks</th>
-                                  <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Diff Index (%)</th>
-                                  <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Absentees</th>
-                                  <th className="px-3 py-3 border-r border-slate-200" colSpan={3}>Insight</th>
-                                  <th className="px-3 py-3" colSpan={3}>Remarks</th>
-                                </tr>
-                                <tr className="bg-slate-100/50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
-                                  <th className="border-r border-slate-200" colSpan={3}></th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">FINAL</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-I</th>
-                                  <th className="px-1 py-1.5 border-r border-slate-200">MID-II</th>
-                                  <th className="px-1 py-1.5">FINAL</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-200 text-slate-700 font-bold text-center">
-                                {comparativeLabSubjects.map((sub: any, idx: number) => (
-                                  <tr key={sub.subjectCode} className="hover:bg-slate-50/50">
-                                    <td className="px-3 py-3 text-left border-r border-slate-200">{idx + 1}</td>
-                                    <td className="px-3 py-3 text-left border-r border-slate-200 font-mono">{sub.subjectCode}</td>
-                                    <td className="px-3 py-3 text-left border-r border-slate-200 font-medium">{sub.subjectName}</td>
-                                    
-                                    <td className="px-1 py-3 border-r border-slate-200 text-slate-900">{sub.mid1.average}</td>
-                                    <td className="px-1 py-3 border-r border-slate-200 text-slate-900">{sub.mid2.average}</td>
-                                    <td className="px-1 py-3 border-r border-slate-200 text-blue-700">{sub.final.average}</td>
-
-                                    <td className="px-1 py-3 border-r border-slate-200">{sub.mid1.difficultyIndex}%</td>
-                                    <td className="px-1 py-3 border-r border-slate-200">{sub.mid2.difficultyIndex}%</td>
-                                    <td className="px-1 py-3 border-r border-slate-200 text-blue-700">{sub.final.difficultyIndex}%</td>
-
-                                    <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid1.absentees}</td>
-                                    <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.mid2.absentees}</td>
-                                    <td className="px-1 py-3 border-r border-slate-200 text-red-500">{sub.final.absentees}</td>
-
-                                    <td className="px-1 py-3 border-r border-slate-200">
-                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                        sub.mid1.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
-                                        sub.mid1.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                        sub.mid1.insight === "N/A" || !sub.mid1.insight ? "text-slate-400" :
-                                        "bg-red-100 text-red-700"
-                                      }`}>
-                                        {sub.mid1.insight || "N/A"}
-                                      </span>
-                                    </td>
-                                    <td className="px-1 py-3 border-r border-slate-200">
-                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                        sub.mid2.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
-                                        sub.mid2.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                        sub.mid2.insight === "N/A" || !sub.mid2.insight ? "text-slate-400" :
-                                        "bg-red-100 text-red-700"
-                                      }`}>
-                                        {sub.mid2.insight || "N/A"}
-                                      </span>
-                                    </td>
-                                    <td className="px-1 py-3 border-r border-slate-200">
-                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                        sub.final.insight === "Good" ? "bg-emerald-100 text-emerald-700" :
-                                        sub.final.insight === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                        sub.final.insight === "N/A" || !sub.final.insight ? "text-slate-400" :
-                                        "bg-red-100 text-red-700"
-                                      }`}>
-                                        {sub.final.insight || "N/A"}
-                                      </span>
-                                    </td>
-
-                                    <td className="px-1 py-3 border-r border-slate-200">
-                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                        sub.mid1.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
-                                        sub.mid1.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                        sub.mid1.remarks === "N/A" || !sub.mid1.remarks ? "text-slate-400" :
-                                        "bg-red-100 text-red-700"
-                                      }`}>
-                                        {sub.mid1.remarks || "N/A"}
-                                      </span>
-                                    </td>
-                                    <td className="px-1 py-3 border-r border-slate-200">
-                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                        sub.mid2.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
-                                        sub.mid2.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                        sub.mid2.remarks === "N/A" || !sub.mid2.remarks ? "text-slate-400" :
-                                        "bg-red-100 text-red-700"
-                                      }`}>
-                                        {sub.mid2.remarks || "N/A"}
-                                      </span>
-                                    </td>
-                                    <td className="px-1 py-3">
-                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                        sub.final.remarks === "Easy" ? "bg-emerald-100 text-emerald-700" :
-                                        sub.final.remarks === "Moderate" ? "bg-amber-100 text-amber-700" :
-                                        sub.final.remarks === "N/A" || !sub.final.remarks ? "text-slate-400" :
-                                        "bg-red-100 text-red-700"
-                                      }`}>
-                                        {sub.final.remarks || "N/A"}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
                       {/* Comparative Subject-wise Performer counts (Theory) */}
                       {comparativeTheorySubjects.length > 0 && (
                         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
@@ -4846,11 +4858,10 @@ export default function AdminMidExamDashboard() {
                            </div>
                          </div>
                        )}
-
                        {/* Comparative Lab Detailed Analysis (Avg, Gap, Difficulty, etc.) */}
                        {comparativeLabSubjects.length > 0 && (
                          <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
-                           <h4 className="text-sm font-bold text-slate-800">Subject-wise Performance & Difficulty Analysis – Labs (Comparison)</h4>
+                           <h4 className="text-sm font-bold text-slate-800">Subject-wise Comparison (Labs / Practicals)</h4>
                            <div className="overflow-x-auto rounded-xl border border-slate-200">
                              <table className="w-full text-left text-xs border-collapse">
                                <thead>

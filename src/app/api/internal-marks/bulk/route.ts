@@ -83,7 +83,7 @@ export async function POST(request: Request) {
 
         // Fetch students to map roll numbers to student IDs
         const students = await prisma.student.findMany({
-            where: { departmentId, year, semester, sectionId, isAlumni: false },
+            where: { departmentId, year, semester, sectionId, isAlumni: false, isLeftCollege: false },
             select: { id: true, rollNumber: true }
         });
 

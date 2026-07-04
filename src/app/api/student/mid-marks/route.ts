@@ -11,9 +11,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
     }
 
-    const email = session.user.email;
-    const student = await prisma.student.findFirst({
-      where: { emailId: email }
+    const username = (session.user as any).username;
+    const student = await prisma.student.findUnique({
+      where: { rollNumber: username }
     });
 
     if (!student) {

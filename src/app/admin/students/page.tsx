@@ -97,6 +97,7 @@ export default function StudentsPage() {
 
     // Search State
     const [searchTerm, setSearchTerm] = useState(searchParams?.get("q") || "");
+    const currentTab = searchParams?.get("tab") || "active";
     // The original loading state for fetchStudents is now replaced by the new `loading` state,
     // but its initial value was `false`. The new `loading` state starts as `true`.
     // I will keep the original `loading` state for filters as it was, assuming it's distinct.
@@ -125,7 +126,8 @@ export default function StudentsPage() {
         batchId: "", // Added batchId
         isDetained: false,
         isLateralEntry: false,
-        originalBatchId: ""
+        originalBatchId: "",
+        isLeftCollege: false
     });
 
     const fetchDepartments = async () => {
@@ -215,6 +217,18 @@ export default function StudentsPage() {
             if (section) query.set("sectionId", section);
             if (filterDepartmentId) query.set("departmentId", filterDepartmentId);
 
+            const tab = searchParams?.get("tab") || "active";
+            if (tab === "alumni") {
+                query.set("showAlumni", "true");
+                query.set("showLeftCollege", "false");
+            } else if (tab === "left") {
+                query.set("showAlumni", "false");
+                query.set("showLeftCollege", "true");
+            } else {
+                query.set("showAlumni", "false");
+                query.set("showLeftCollege", "false");
+            }
+
             // Search & Pagination
             if (searchTerm) query.set("q", searchTerm);
             query.set("page", page.toString());
@@ -250,7 +264,7 @@ export default function StudentsPage() {
     useEffect(() => {
         // Reset to page 1 when filters change (except page itself)
         setPage(1);
-    }, [year, semester, section, filterDepartmentId, searchTerm, limit]);
+    }, [year, semester, section, filterDepartmentId, searchTerm, limit, currentTab]);
 
     useEffect(() => {
         fetchDepartments();
@@ -262,7 +276,7 @@ export default function StudentsPage() {
     useEffect(() => {
         fetchStudents();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, year, semester, section, filterDepartmentId, searchTerm, limit]);
+    }, [page, year, semester, section, filterDepartmentId, searchTerm, limit, currentTab]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -284,7 +298,7 @@ export default function StudentsPage() {
                 const successMessage = editingStudent ? "Student updated successfully" : "Student created successfully";
                 setStatus({ type: "success", message: successMessage });
                 setEditingStudent(null);
-                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "" });
+                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "", isLeftCollege: false });
                 fetchStudents();
                 setTimeout(() => {
                     setIsModalOpen(false);
@@ -371,7 +385,7 @@ export default function StudentsPage() {
 
     const openAddModal = () => {
         setEditingStudent(null);
-        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "" }); // Reset
+        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "", isLeftCollege: false }); // Reset
         setIsModalOpen(true);
     };
 
@@ -389,7 +403,8 @@ export default function StudentsPage() {
             batchId: student.batchId || "",
             isDetained: student.isDetained || false,
             isLateralEntry: student.isLateralEntry || false,
-            originalBatchId: student.originalBatchId || ""
+            originalBatchId: student.originalBatchId || "",
+            isLeftCollege: (student as any).isLeftCollege || false
         });
         setIsModalOpen(true);
     };
@@ -868,6 +883,40 @@ export default function StudentsPage() {
                 </div>
             </div>
 
+            {/* Tabs Selector */}
+            <div className="mb-6 flex gap-2 border-b border-slate-200">
+                <button
+                    onClick={() => updateFilters("tab", "active")}
+                    className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors duration-200 ${
+                        currentTab === "active"
+                            ? "border-blue-600 text-blue-600"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    Active Students
+                </button>
+                <button
+                    onClick={() => updateFilters("tab", "left")}
+                    className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors duration-200 ${
+                        currentTab === "left"
+                            ? "border-red-600 text-red-600"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    Left College
+                </button>
+                <button
+                    onClick={() => updateFilters("tab", "alumni")}
+                    className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors duration-200 ${
+                        currentTab === "alumni"
+                            ? "border-purple-600 text-purple-600"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    Alumni
+                </button>
+            </div>
+
             <div className={`mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) ? "sm:grid-cols-4" : "sm:grid-cols-3"
                 }`}>
                 {/* Admin Only Department Filter */}
@@ -1185,6 +1234,20 @@ export default function StudentsPage() {
                         />
                         <label htmlFor="isDetainedCheck" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
                             Is Detained Student?
+                        </label>
+                    </div>
+
+                    {/* Left College Logic */}
+                    <div className="flex items-center gap-2 mt-4 ml-1">
+                        <input
+                            type="checkbox"
+                            checked={formData.isLeftCollege}
+                            onChange={(e) => setFormData({ ...formData, isLeftCollege: e.target.checked })}
+                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                            id="isLeftCollegeCheck"
+                        />
+                        <label htmlFor="isLeftCollegeCheck" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
+                            Left College? (Deactivates login)
                         </label>
                     </div>
 

@@ -102,7 +102,7 @@ export default function TimetablesPage() {
                 const newGridData: Record<string, any[]> = {};
 
                 fetchedTimetable.forEach((entry: any) => {
-                    const key = `${entry.dayOfWeek}-${entry.periodId}`;
+                    const key = `${entry.dayOfWeek}:${entry.periodId}`;
                     if (!newGridData[key]) {
                         newGridData[key] = [];
                     }
@@ -129,7 +129,7 @@ export default function TimetablesPage() {
     };
 
     const handleCellChange = (day: number, periodId: string, index: number, type: "subjectId" | "labBatchId" | "isLunch" | "remove" | "add", value?: any) => {
-        const key = `${day}-${periodId}`;
+        const key = `${day}:${periodId}`;
         setGridData((prev) => {
             const currentBlocks = prev[key] && prev[key].length > 0 
                 ? [...prev[key]] 
@@ -176,7 +176,7 @@ export default function TimetablesPage() {
                 // Filter out entirely empty blocks
                 const validBlocks = blocks.filter(b => b.subjectId || b.isLunch);
                 if (validBlocks.length > 0) {
-                    const [dayStr, periodId] = key.split("-");
+                    const [dayStr, periodId] = key.split(":");
                     entries.push({
                         dayOfWeek: parseInt(dayStr, 10),
                         periodId,
@@ -363,7 +363,7 @@ export default function TimetablesPage() {
                                                 {day.name}
                                             </td>
                                             {periods.map((period) => {
-                                                const key = `${day.id}-${period.id}`;
+                                                const key = `${day.id}:${period.id}`;
                                                 // Default to a single empty block if no data exists
                                                 const cellBlocks = gridData[key] && gridData[key].length > 0
                                                     ? gridData[key]

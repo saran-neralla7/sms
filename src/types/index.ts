@@ -28,6 +28,7 @@ export interface Student {
     batchId?: string | null;
     batch?: { id: string; name: string };
     isDetained?: boolean;
+    isLeftCollege?: boolean;
     isLateralEntry?: boolean;
     originalBatchId?: string | null;
     originalBatch?: { id: string; name: string };

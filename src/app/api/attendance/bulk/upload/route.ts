@@ -76,16 +76,34 @@ export async function POST(request: Request) {
 
             // Date Fill Forward Logic
             if (rawDate) {
-                // Parse New Date
+                // Parse New Date timezone-independently
                 try {
                     if (typeof rawDate === 'number') {
-                        lastValidDate = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
+                        // Excel serial date number
+                        const utcDate = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
+                        lastValidDate = new Date(Date.UTC(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate()));
                     } else {
-                        const parts = String(rawDate).split(/[-/.]/);
-                        if (parts.length === 3 && parts[2].length === 4) {
-                            lastValidDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                        const dateStr = String(rawDate).trim();
+                        const match1 = dateStr.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/); // DD-MM-YYYY
+                        const match2 = dateStr.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/); // YYYY-MM-DD
+                        if (match1) {
+                            const year = parseInt(match1[3], 10);
+                            const month = parseInt(match1[2], 10) - 1;
+                            const day = parseInt(match1[1], 10);
+                            lastValidDate = new Date(Date.UTC(year, month, day));
+                        } else if (match2) {
+                            const year = parseInt(match2[1], 10);
+                            const month = parseInt(match2[2], 10) - 1;
+                            const day = parseInt(match2[3], 10);
+                            lastValidDate = new Date(Date.UTC(year, month, day));
                         } else {
-                            lastValidDate = new Date(String(rawDate));
+                            const d = new Date(dateStr);
+                            if (isNaN(d.getTime())) throw new Error("Invalid Date");
+                            if (dateStr.includes("T") || dateStr.includes("Z") || dateStr.includes("+")) {
+                                lastValidDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+                            } else {
+                                lastValidDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                            }
                         }
                     }
                     if (isNaN(lastValidDate.getTime())) throw new Error("Invalid Date");
@@ -127,8 +145,15 @@ export async function POST(request: Request) {
                     continue;
                 }
 
-                // Fuzzy match allowed, but MUST find a matching subject
-                const subject = validSubjects.find(s => s.name.toLowerCase().includes(subjStr) || s.code.toLowerCase().includes(subjStr));
+                // Strip anything inside parentheses (e.g. batch/section tags) and clean special chars for fuzzy matching
+                const cleanSubjStr = subjStr.replace(/\(.*?\)/g, "").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+
+                const subject = validSubjects.find(s => {
+                    const dbName = s.name.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+                    const dbCode = s.code.toLowerCase().trim();
+                    return dbName.includes(cleanSubjStr) || cleanSubjStr.includes(dbName) || dbCode.includes(cleanSubjStr) || cleanSubjStr.includes(dbCode);
+                });
+
                 if (!subject) {
                     errors.push(`Column ${j + 1}: Subject '${rawSubject}' does not match any valid subject for this class.`);
                     continue;
@@ -195,7 +220,9 @@ export async function POST(request: Request) {
                 departmentId,
                 year,
                 semester,
-                sectionId
+                sectionId,
+                isAlumni: false,
+                isLeftCollege: false
             },
             select: { rollNumber: true, name: true }
         });

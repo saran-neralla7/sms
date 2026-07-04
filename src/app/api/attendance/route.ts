@@ -110,7 +110,8 @@ export async function POST(request: Request) {
                 departmentId,
                 year: String(year),
                 semester: String(semester),
-                isAlumni: false  // exclude alumni from attendance
+                isAlumni: false,  // exclude alumni from attendance
+                isLeftCollege: false
             },
             select: { rollNumber: true, sectionId: true, name: true, mobile: true, studentContactNumber: true }
         });

@@ -38,7 +38,9 @@ export async function GET(request: Request) {
                 sectionId,
                 departmentId,
                 year,
-                semester
+                semester,
+                isAlumni: false,
+                isLeftCollege: false
             },
             orderBy: { rollNumber: "asc" },
             select: { rollNumber: true, name: true }

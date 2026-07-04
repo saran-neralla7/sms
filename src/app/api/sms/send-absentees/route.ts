@@ -55,7 +55,8 @@ export async function POST(request: Request) {
                 year: historyRecord.year,
                 semester: historyRecord.semester,
                 sectionId: historyRecord.sectionId,
-                isAlumni: false
+                isAlumni: false,
+                isLeftCollege: false
             }
         });
 

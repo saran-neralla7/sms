@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
         semester,
         sectionId,
         isAlumni: false,
+        isLeftCollege: false,
       },
       select: {
         id: true,

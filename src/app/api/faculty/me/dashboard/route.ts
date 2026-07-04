@@ -70,7 +70,8 @@ export async function GET(req: NextRequest) {
                         semester: m.subject.semester,
                         sectionId: m.sectionId,
                         isDetained: false,
-                        isAlumni: false
+                        isAlumni: false,
+                        isLeftCollege: false
                     },
                     select: {
                         id: true,

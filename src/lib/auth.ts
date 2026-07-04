@@ -27,6 +27,16 @@ export const authOptions: NextAuthOptions = {
                     return null;
                 }
 
+                if (user.role === "STUDENT") {
+                    const student = await prisma.student.findUnique({
+                        where: { rollNumber: user.username }
+                    });
+                    if (student?.isLeftCollege) {
+                        await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Deactivated: Left College" });
+                        throw new Error("Your account has been deactivated as you have left the college.");
+                    }
+                }
+
                 const isPasswordValid = await bcrypt.compare(
                     credentials.password,
                     user.password

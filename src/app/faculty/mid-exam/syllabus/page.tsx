@@ -1075,8 +1075,8 @@ function SyllabusConfigContent() {
           cellPadding: 2,
           halign: "center",
           valign: "middle",
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.3,
           font: "helvetica",
           textColor: [40, 40, 40]
         },
@@ -1085,8 +1085,8 @@ function SyllabusConfigContent() {
           textColor: [30, 41, 59],
           fontSize: 8.5,
           fontStyle: "bold",
-          lineWidth: 0.2,
-          lineColor: [180, 180, 180]
+          lineWidth: 0.4,
+          lineColor: [0, 0, 0]
         },
         theme: "grid"
       });
@@ -1153,8 +1153,8 @@ function SyllabusConfigContent() {
           cellPadding: 2,
           halign: "left",
           valign: "middle",
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.3,
           font: "helvetica",
           textColor: [40, 40, 40]
         },
@@ -1163,8 +1163,8 @@ function SyllabusConfigContent() {
           textColor: [30, 41, 59],
           fontSize: 8.5,
           fontStyle: "bold",
-          lineWidth: 0.2,
-          lineColor: [180, 180, 180]
+          lineWidth: 0.4,
+          lineColor: [0, 0, 0]
         },
         columnStyles: {
           0: { cellWidth: 20, halign: "center", fontStyle: "bold" }

@@ -431,8 +431,8 @@ export default function ReportsPage() {
                             body: tableRows,
                             startY: 70,
                             theme: "plain",
-                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.1 },
-                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.1, lineColor: [0, 0, 0] },
+                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.3 },
+                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] },
                             columnStyles: {
                                 0: { cellWidth: 30 },
                                 1: { cellWidth: 60 },
@@ -449,8 +449,8 @@ export default function ReportsPage() {
                             body: tableRows,
                             startY: 70,
                             theme: "plain",
-                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.1 },
-                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.1, lineColor: [0, 0, 0] },
+                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.3 },
+                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] },
                             columnStyles: {
                                 0: { cellWidth: 30 },
                                 1: { cellWidth: 60 },

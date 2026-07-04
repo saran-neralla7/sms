@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
         sectionId: paper.sectionId,
         departmentId: paper.subject.departmentId,
         isAlumni: false,
+        isLeftCollege: false,
       },
       select: { id: true, rollNumber: true, name: true },
       orderBy: { rollNumber: "asc" }
