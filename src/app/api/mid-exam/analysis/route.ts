@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch academic class details
     const [students, academicYear, department, section, subjects] = await Promise.all([
       prisma.student.findMany({
-        where: { departmentId, year, semester, sectionId, isAlumni: false, isLeftCollege: false },
+        where: { departmentId, year, semester, sectionId, isAlumni: false, isLeftCollege: false, isDetained: false },
         select: { id: true, rollNumber: true, name: true },
         orderBy: { rollNumber: "asc" }
       }),

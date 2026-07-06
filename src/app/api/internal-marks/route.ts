@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
             year: year,
             semester: semester,
             isAlumni: false,
-            isLeftCollege: false
+            isLeftCollege: false,
+            isDetained: false
         };
         if (sectionId) {
             studentWhere.sectionId = sectionId;

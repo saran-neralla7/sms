@@ -63,7 +63,8 @@ export async function GET(request: Request) {
                 where: {
                     rollNumber: { in: Array.from(activeRollNumbers) },
                     isAlumni: false,
-                    isLeftCollege: false
+                    isLeftCollege: false,
+                    isDetained: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }
@@ -76,7 +77,8 @@ export async function GET(request: Request) {
                     sectionId,
                     departmentId: departmentId || undefined,
                     isAlumni: false,
-                    isLeftCollege: false
+                    isLeftCollege: false,
+                    isDetained: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }

@@ -25,7 +25,7 @@ export default function AcademicYearSelector({ years, currentYearId }: Props) {
         const newYearId = e.target.value;
         // set cookie
         document.cookie = `academic-year-id=${newYearId}; path=/; max-age=31536000`; // 1 year
-        router.refresh(); // Refresh server components to pick up new cookie
+        window.location.reload();
     };
 
     if (years.length === 0) return null;

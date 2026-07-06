@@ -23,6 +23,7 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
     const [departments, setDepartments] = useState<any[]>([]);
     const [sections, setSections] = useState<any[]>([]);
     const [regulations, setRegulations] = useState<any[]>([]);
+    const [batches, setBatches] = useState<any[]>([]);
 
     const [formData, setFormData] = useState<any>({});
 
@@ -40,8 +41,16 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                 certificatesSubmitted: student.certificatesSubmitted ? "true" : "false",
                 departmentId: student.departmentId || "",
                 sectionId: student.sectionId || "",
+                batchId: student.batchId || "",
                 // If student has no regulation, we will try to set R22 once regulations load
                 regulationId: student.regulationId || "",
+                isDetained: student.isDetained || false,
+                originalBatchId: student.originalBatchId || "",
+                detainedYear: student.detainedYear || student.year,
+                detainedSemester: student.detainedSemester || student.semester,
+                rejoinedYear: student.rejoinedYear || "",
+                rejoinedSemester: student.rejoinedSemester || "",
+                isRejoining: false,
             });
             setStatus({ type: null, message: "" }); // Clear status on open
             fetchDropdowns();
@@ -50,14 +59,16 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
 
     const fetchDropdowns = async () => {
         try {
-            const [deptRes, secRes, regRes] = await Promise.all([
+            const [deptRes, secRes, regRes, batchRes] = await Promise.all([
                 fetch("/api/departments"),
                 fetch("/api/sections"),
-                fetch("/api/regulations")
+                fetch("/api/regulations"),
+                fetch("/api/batches")
             ]);
 
             if (deptRes.ok) setDepartments(await deptRes.json());
             if (secRes.ok) setSections(await secRes.json());
+            if (batchRes.ok) setBatches(await batchRes.json());
             if (regRes.ok) {
                 const regs = await regRes.json();
                 setRegulations(regs);
@@ -93,7 +104,7 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
             // Alternatively, strict allowlist or strict deletelist.
             // Delete list is safer for now.
             const {
-                department, section, regulation, subjects, downloads, user,
+                department, section, regulation, subjects, downloads, user, batch, originalBatch,
                 // Exclude other relations if any
                 ...cleanedData
             } = formData;
@@ -105,10 +116,19 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                 regulationId: cleanedData.regulationId || undefined,
                 departmentId: cleanedData.departmentId || undefined,
                 sectionId: cleanedData.sectionId || undefined,
+                batchId: cleanedData.batchId || undefined,
                 // Fix Date fields: Empty string "" must be null for Prisma DateTime?
                 dateOfBirth: cleanedData.dateOfBirth ? new Date(cleanedData.dateOfBirth).toISOString() : null,
                 dateOfReporting: cleanedData.dateOfReporting ? new Date(cleanedData.dateOfReporting).toISOString() : null,
+                isDetained: formData.isRejoining ? false : formData.isDetained,
+                year: formData.isRejoining ? formData.rejoinedYear : formData.year,
+                semester: formData.isRejoining ? formData.rejoinedSemester : formData.semester,
+                detainedYear: formData.isDetained ? formData.detainedYear : null,
+                detainedSemester: formData.isDetained ? formData.detainedSemester : null,
+                rejoinedYear: formData.isRejoining ? formData.rejoinedYear : (formData.rejoinedYear || null),
+                rejoinedSemester: formData.isRejoining ? formData.rejoinedSemester : (formData.rejoinedSemester || null)
             };
+            delete (payload as any).isRejoining;
 
             const res = await fetch(`/api/students/${student.id}`, {
                 method: "PUT",
@@ -190,6 +210,115 @@ export default function EditStudentModal({ isOpen, onClose, student, onSuccess }
                                     options={regulations.map((r: any) => ({ value: r.id, label: r.name }))}
                                 />
                                 <Input label="Hall Ticket" value={formData.hallTicketNumber} onChange={(v) => handleChange("hallTicketNumber", v)} />
+                                <Select
+                                    label="Batch"
+                                    value={formData.batchId}
+                                    onChange={(v) => handleChange("batchId", v)}
+                                    options={batches.map((b: any) => ({ value: b.id, label: b.name }))}
+                                />
+                                
+                                <div className="md:col-span-2 space-y-4 border-t border-slate-100 pt-4">
+                                    {/* Detention Status Info & Toggle */}
+                                    {student?.isDetained && (
+                                        <div className="rounded-lg bg-orange-50 border border-orange-200 p-4 text-xs text-orange-800">
+                                            Currently Detained in Year <strong>{student.detainedYear || student.year}</strong>, Sem <strong>{student.detainedSemester || student.semester}</strong>. (Original Batch: <strong>{(student.originalBatch as any)?.name || "N/A"}</strong>)
+                                        </div>
+                                    )}
+
+                                    {student?.isDetained ? (
+                                        <div className="flex items-center gap-2 mt-4 ml-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.isRejoining || false}
+                                                onChange={(e) => handleChange("isRejoining", e.target.checked)}
+                                                className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                                                id="isRejoiningCheckModal"
+                                            />
+                                            <label htmlFor="isRejoiningCheckModal" className="text-sm font-semibold text-slate-800 select-none cursor-pointer">
+                                                Rejoin Student?
+                                            </label>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2 mt-4 ml-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.isDetained || false}
+                                                onChange={(e) => handleChange("isDetained", e.target.checked)}
+                                                className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                                id="isDetainedCheckModal"
+                                            />
+                                            <label htmlFor="isDetainedCheckModal" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
+                                                Is Detained Student?
+                                            </label>
+                                        </div>
+                                    )}
+
+                                    {!student?.isDetained && formData.isDetained && (
+                                        <div className="bg-orange-50/50 p-4 rounded-md border border-orange-100 space-y-4">
+                                            <p className="text-xs text-orange-700 mb-2">
+                                                <strong>Note:</strong> Specify the Year and Semester when the student is detained.
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Select
+                                                    label="Detention Year"
+                                                    value={formData.detainedYear}
+                                                    onChange={(v) => handleChange("detainedYear", v)}
+                                                    options={[1, 2, 3, 4]}
+                                                />
+                                                <Select
+                                                    label="Detention Semester"
+                                                    value={formData.detainedSemester}
+                                                    onChange={(v) => handleChange("detainedSemester", v)}
+                                                    options={[1, 2]}
+                                                />
+                                            </div>
+                                            <Select
+                                                label="Original Batch (History)"
+                                                value={formData.originalBatchId}
+                                                onChange={(v) => handleChange("originalBatchId", v)}
+                                                options={batches.map((b: any) => ({ value: b.id, label: b.name }))}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {student?.isDetained && formData.isRejoining && (
+                                        <div className="bg-green-50 p-4 rounded-md border border-green-100 space-y-4">
+                                            <p className="text-xs text-green-700 mb-2">
+                                                <strong>Rejoin Details:</strong> Specify the Year, Semester, Batch and Section where the student is rejoining.
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Select
+                                                    label="Rejoined Year"
+                                                    value={formData.rejoinedYear}
+                                                    onChange={(v) => handleChange("rejoinedYear", v)}
+                                                    options={[1, 2, 3, 4]}
+                                                    required
+                                                />
+                                                <Select
+                                                    label="Rejoined Semester"
+                                                    value={formData.rejoinedSemester}
+                                                    onChange={(v) => handleChange("rejoinedSemester", v)}
+                                                    options={[1, 2]}
+                                                    required
+                                                />
+                                            </div>
+                                            <Select
+                                                label="New Operational Batch"
+                                                value={formData.batchId}
+                                                onChange={(v) => handleChange("batchId", v)}
+                                                options={batches.map((b: any) => ({ value: b.id, label: b.name }))}
+                                                required
+                                            />
+                                            <Select
+                                                label="New Section"
+                                                value={formData.sectionId}
+                                                onChange={(v) => handleChange("sectionId", v)}
+                                                options={filteredSections.map((s: any) => ({ value: s.id, label: s.name }))}
+                                                required
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 

@@ -204,6 +204,9 @@ export default function DashboardPage() {
         color: "bg-indigo-50 text-indigo-600"
       }
     ];
+    if (role === "SMS_USER") {
+      modules = modules.filter(m => m.title !== "My Teaching Diary" && m.title !== "Reports");
+    }
   }
 
   return (

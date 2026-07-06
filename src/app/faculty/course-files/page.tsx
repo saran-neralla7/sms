@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaBook, FaCalendarAlt, FaFileAlt, FaSpinner, FaUpload, FaTrash, FaCheckCircle,
   FaArrowLeft, FaExclamationTriangle, FaPlus, FaSave, FaListOl, FaGraduationCap,
-  FaTimes
+  FaTimes, FaColumns, FaCompress, FaExpand
 } from "react-icons/fa";
 import Link from "next/link";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -18,6 +18,337 @@ interface Mapping {
   section: { id: string; name: string };
   academicYear: { id: string; name: string };
 }
+
+interface RubricItem {
+  description: string;
+  marks: number;
+}
+
+interface StructuredScheme {
+  version: number;
+  type: "structured";
+  rubrics: Record<string, RubricItem[]>;
+}
+
+function parseSchemeText(text: string): StructuredScheme | null {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && parsed.type === "structured" && parsed.rubrics) {
+      return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function parseLecturePlan(dbValue: any) {
+  const defaultPlan = [
+    { unit: "Unit I", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit II", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit III", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit IV", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit V", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] }
+  ];
+
+  if (!dbValue || !Array.isArray(dbValue) || dbValue.length === 0) {
+    return defaultPlan;
+  }
+
+  // Check if it's already in the new format (array of unit-grouped objects)
+  if (dbValue[0] && 'topics' in dbValue[0]) {
+    const plan = [...defaultPlan];
+    dbValue.forEach((unitData: any) => {
+      const uIdx = plan.findIndex(p => p.unit.toLowerCase() === (unitData.unit || "").toLowerCase());
+      if (uIdx !== -1) {
+        plan[uIdx] = {
+          unit: plan[uIdx].unit,
+          title: unitData.title || "",
+          references: unitData.references || "",
+          topics: Array.isArray(unitData.topics) && unitData.topics.length > 0
+            ? unitData.topics.map((t: any) => ({
+                topic: t.topic || "",
+                plannedPeriods: parseInt(t.plannedPeriods) || 1
+              }))
+            : [{ topic: "", plannedPeriods: 1 }]
+        };
+      }
+    });
+    return plan;
+  }
+
+  // It's in the old flat format, group it
+  const plan = [
+    { unit: "Unit I", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit II", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit III", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit IV", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit V", title: "", references: "", topics: [] as any[] }
+  ];
+
+  dbValue.forEach((row: any) => {
+    const unitName = row.unit || "Unit I";
+    let target = plan.find(u => u.unit.toLowerCase() === unitName.toLowerCase());
+    if (!target) {
+      target = { unit: unitName, title: "", references: "", topics: [] as any[] };
+      plan.push(target);
+    }
+    
+    const topicText = row.topic || "";
+    // Check if this row was acting as a unit header
+    const isHeaderRow = topicText.toLowerCase().includes("unit") && (topicText.includes(":") || topicText.includes("-"));
+    
+    if (isHeaderRow) {
+      const splitChar = topicText.includes(":") ? ":" : "-";
+      const parts = topicText.split(splitChar);
+      target.title = parts.slice(1).join(splitChar).trim();
+      target.references = row.aid || "";
+    } else {
+      if (topicText.trim()) {
+        target.topics.push({
+          topic: topicText,
+          plannedPeriods: parseInt(row.plannedPeriods) || 1
+        });
+      }
+    }
+  });
+
+  // Ensure each unit has at least one topic row
+  plan.forEach(u => {
+    if (u.topics.length === 0) {
+      u.topics.push({ topic: "", plannedPeriods: 1 });
+    }
+  });
+
+  return plan;
+}
+
+const StructuredSchemeEditor: React.FC<{
+  examType: "MID_I" | "MID_II";
+  paper: any;
+  schemeText: string;
+  onChange: (val: string) => void;
+}> = ({ examType, paper, schemeText, onChange }) => {
+  const [mode, setMode] = useState<"structured" | "free">("free");
+  const [rubrics, setRubrics] = useState<Record<string, RubricItem[]>>({});
+
+  useEffect(() => {
+    const parsed = parseSchemeText(schemeText);
+    if (parsed) {
+      setMode("structured");
+      setRubrics(parsed.rubrics || {});
+    } else {
+      if (schemeText.trim() !== "") {
+        setMode("free");
+      } else if (paper) {
+        setMode("structured");
+        const initialRubrics: Record<string, RubricItem[]> = {};
+        paper.questions?.forEach((q: any) => {
+          q.subQuestions?.forEach((sq: any) => {
+            const key = `${q.questionNo}_${sq.subLabel}`;
+            initialRubrics[key] = [{ description: "", marks: sq.maxMarks || 0 }];
+          });
+        });
+        setRubrics(initialRubrics);
+      } else {
+        setMode("free");
+      }
+    }
+  }, [schemeText, paper]);
+
+  const updateRubricItems = (key: string, items: RubricItem[]) => {
+    const updated = { ...rubrics, [key]: items };
+    setRubrics(updated);
+    onChange(JSON.stringify({ version: 1, type: "structured", rubrics: updated }));
+  };
+
+  const addRow = (key: string) => {
+    const items = rubrics[key] ? [...rubrics[key]] : [];
+    items.push({ description: "", marks: 0 });
+    updateRubricItems(key, items);
+  };
+
+  const removeRow = (key: string, index: number) => {
+    const items = rubrics[key] ? [...rubrics[key]] : [];
+    if (items.length > 1) {
+      items.splice(index, 1);
+      updateRubricItems(key, items);
+    }
+  };
+
+  const handleChange = (key: string, index: number, field: keyof RubricItem, value: any) => {
+    const items = rubrics[key] ? [...rubrics[key]] : [];
+    if (items[index]) {
+      if (field === "marks") {
+        items[index].marks = parseInt(value) || 0;
+      } else {
+        items[index].description = value;
+      }
+      updateRubricItems(key, items);
+    }
+  };
+
+  if (!paper) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-xs font-semibold">
+          ⚠️ No {examType === "MID_I" ? "MID-I" : "MID-II"} exam question paper has been registered or mapped for this subject.
+          Please upload or map a question paper to enable the structured scheme builder, or type/paste free-text rubrics below.
+        </div>
+        <textarea
+          rows={6}
+          value={schemeText}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter scheme of evaluation in free text..."
+          className="w-full rounded-xl border border-slate-300 p-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500 font-mono"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 border border-slate-200 p-4 rounded-xl bg-slate-50/10">
+      <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+        <span className="font-bold text-xs text-slate-700 uppercase">{examType === "MID_I" ? "MID-I" : "MID-II"} Rubrics Builder</span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm("Switch to Free Text Mode? This may clear structured layout if you write new text.")) {
+                setMode("free");
+                onChange("");
+              }
+            }}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              mode === "free"
+                ? "bg-teal-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            Free Text Mode
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("structured");
+              const initialRubrics: Record<string, RubricItem[]> = {};
+              paper.questions?.forEach((q: any) => {
+                q.subQuestions?.forEach((sq: any) => {
+                  const key = `${q.questionNo}_${sq.subLabel}`;
+                  initialRubrics[key] = [{ description: "", marks: sq.maxMarks || 0 }];
+                });
+              });
+              setRubrics(initialRubrics);
+              onChange(JSON.stringify({ version: 1, type: "structured", rubrics: initialRubrics }));
+            }}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              mode === "structured"
+                ? "bg-teal-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            Question-wise Mode
+          </button>
+        </div>
+      </div>
+
+      {mode === "free" ? (
+        <textarea
+          rows={8}
+          value={schemeText}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter scheme of evaluation in free text..."
+          className="w-full rounded-xl border border-slate-300 p-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500 font-mono"
+        />
+      ) : (
+        <div className="flex flex-col gap-6">
+          {paper.questions?.map((q: any) => (
+            <div key={q.id || q.questionNo} className="border border-slate-100 rounded-xl p-3 bg-white shadow-sm">
+              <h5 className="font-extrabold text-slate-800 text-xs uppercase mb-3 pb-1 border-b border-slate-100">
+                Question {q.questionNo}
+              </h5>
+              
+              <div className="flex flex-col gap-4">
+                {q.subQuestions?.map((sq: any) => {
+                  const key = `${q.questionNo}_${sq.subLabel}`;
+                  const items = rubrics[key] || [{ description: "", marks: sq.maxMarks || 0 }];
+                  const totalAllotted = items.reduce((sum, item) => sum + (item.marks || 0), 0);
+                  const isTotalMismatch = totalAllotted !== sq.maxMarks;
+
+                  return (
+                    <div key={sq.id || sq.subLabel} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start border-b border-dashed border-slate-100 pb-3 last:border-b-0 last:pb-0">
+                      <div className="md:col-span-4 flex flex-col gap-1">
+                        <span className="font-bold text-xs text-teal-850">
+                          ({sq.subLabel}) {sq.questionText || "Sub-question details"}
+                        </span>
+                        <div className="flex gap-2 flex-wrap text-[10px] font-semibold text-slate-400">
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded">CO{sq.coMapping}</span>
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded">{sq.btLevel}</span>
+                          <span className="bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">Max: {sq.maxMarks}M</span>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-8 flex flex-col gap-2">
+                        {items.map((item, index) => (
+                          <div key={index} className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => handleChange(key, index, "description", e.target.value)}
+                              placeholder="e.g. Diagram / Formula / Derivation steps..."
+                              className="flex-grow rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            />
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                value={item.marks}
+                                onChange={(e) => handleChange(key, index, "marks", e.target.value)}
+                                placeholder="Marks"
+                                className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-bold text-center text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                min={0}
+                                max={sq.maxMarks}
+                              />
+                              <span className="text-[10px] font-bold text-slate-400">M</span>
+                            </div>
+                            {items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeRow(key, index)}
+                                className="text-red-500 hover:text-red-700 p-1 text-xs font-bold cursor-pointer"
+                                title="Remove rubric detail row"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        
+                        <div className="flex justify-between items-center mt-1 flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => addRow(key)}
+                            className="text-[11px] text-teal-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            + Add Rubric Row
+                          </button>
+                          
+                          {isTotalMismatch && (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              ⚠️ Rubric total ({totalAllotted}M) mismatch with Max Marks ({sq.maxMarks}M)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function FacultyCourseFilesPage() {
   const { data: session, status } = useSession();
@@ -34,7 +365,18 @@ export default function FacultyCourseFilesPage() {
 
   // Forms inputs
   const [teachingSupportText, setTeachingSupportText] = useState("");
-  const [lecturePlan, setLecturePlan] = useState<{ unit: string; topic: string; plannedPeriods: number; actualDate: string; aid: string }[]>([]);
+  const [lecturePlan, setLecturePlan] = useState<{
+    unit: string;
+    title: string;
+    references: string;
+    topics: { topic: string; plannedPeriods: number }[];
+  }[]>([
+    { unit: "Unit I", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit II", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit III", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit IV", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+    { unit: "Unit V", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] }
+  ]);
   const [assignmentQuestions, setAssignmentQuestions] = useState<{ unit: string; questions: string[] }[]>([
     { unit: "Unit I", questions: ["", ""] },
     { unit: "Unit II", questions: ["", ""] },
@@ -43,6 +385,17 @@ export default function FacultyCourseFilesPage() {
     { unit: "Unit V", questions: ["", ""] }
   ]);
   const [remedialClasses, setRemedialClasses] = useState<{ date: string; topics: string; studentRolls: string[] }[]>([]);
+
+  // Direct text/evaluation scheme states
+  const [mid1SchemeText, setMid1SchemeText] = useState("");
+  const [mid2SchemeText, setMid2SchemeText] = useState("");
+  const [tentativeCompletionDate, setTentativeCompletionDate] = useState("");
+
+  // Cloning modal states
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloneSourceMappingId, setCloneSourceMappingId] = useState("");
+  const [cloneMid1Text, setCloneMid1Text] = useState(true);
+  const [cloneMid2Text, setCloneMid2Text] = useState(true);
 
   // Files paths
   const [academicCalendarPath, setAcademicCalendarPath] = useState("");
@@ -59,7 +412,8 @@ export default function FacultyCourseFilesPage() {
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   // Active section inside the checklist for input editing
-  const [activeFormTab, setActiveFormTab] = useState<"lecture" | "assignments" | "remedial" | "support" | "uploads">("lecture");
+  const [activeFormTab, setActiveFormTab] = useState<"lecture" | "assignments" | "remedial" | "support" | "uploads" | "schemes">("lecture");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Loading indicator for file uploads
   const [uploadingFile, setUploadingFile] = useState<string | null>(null);
@@ -85,6 +439,95 @@ export default function FacultyCourseFilesPage() {
         showToast("Failed to load academic years", "error");
       });
   }, []);
+
+  // Helper to update a unit title
+  const handleUnitTitleChange = (unitIdx: number, title: string) => {
+    const copy = [...lecturePlan];
+    copy[unitIdx].title = title;
+    setLecturePlan(copy);
+  };
+
+  // Helper to update unit references
+  const handleUnitReferencesChange = (unitIdx: number, references: string) => {
+    const copy = [...lecturePlan];
+    copy[unitIdx].references = references;
+    setLecturePlan(copy);
+  };
+
+  // Helper to update a topic's field
+  const handleTopicChange = (unitIdx: number, topicIdx: number, field: "topic" | "plannedPeriods", val: any) => {
+    const copy = [...lecturePlan];
+    if (field === "plannedPeriods") {
+      copy[unitIdx].topics[topicIdx].plannedPeriods = parseInt(val) || 0;
+    } else {
+      copy[unitIdx].topics[topicIdx].topic = val;
+    }
+    setLecturePlan(copy);
+  };
+
+  // Helper to add a topic to a unit
+  const handleAddTopic = (unitIdx: number) => {
+    const copy = [...lecturePlan];
+    copy[unitIdx].topics.push({ topic: "", plannedPeriods: 1 });
+    setLecturePlan(copy);
+  };
+
+  // Helper to remove a topic from a unit
+  const handleRemoveTopic = (unitIdx: number, topicIdx: number) => {
+    const copy = [...lecturePlan];
+    copy[unitIdx].topics.splice(topicIdx, 1);
+    if (copy[unitIdx].topics.length === 0) {
+      copy[unitIdx].topics.push({ topic: "", plannedPeriods: 1 });
+    }
+    setLecturePlan(copy);
+  };
+
+  // Auto-calculated totals
+  const getUnitHours = (unit: typeof lecturePlan[0]) => {
+    return unit.topics.reduce((sum, t) => sum + (t.plannedPeriods || 0), 0);
+  };
+
+  const getGrandTotalHours = () => {
+    return lecturePlan.reduce((sum, u) => sum + getUnitHours(u), 0);
+  };
+
+  // Handler to clone scheme of evaluation from another mapping
+  const handleCloneScheme = async () => {
+    if (!cloneSourceMappingId) return;
+    const sourceMapping = mappings.find(m => m.id === cloneSourceMappingId);
+    if (!sourceMapping) return;
+    
+    try {
+      const res = await fetch(
+        `/api/course-files?academicYearId=${sourceMapping.academicYear.id}&departmentId=${sourceMapping.subject.departmentId}&year=${sourceMapping.subject.year}&semester=${sourceMapping.subject.semester}&sectionId=${sourceMapping.section.id}&subjectId=${sourceMapping.subject.id}`
+      );
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      const cf = data.courseFile;
+      if (cf) {
+        let clonedCount = 0;
+        if (cloneMid1Text && cf.mid1SchemeText) {
+          setMid1SchemeText(cf.mid1SchemeText);
+          clonedCount++;
+        }
+        if (cloneMid2Text && cf.mid2SchemeText) {
+          setMid2SchemeText(cf.mid2SchemeText);
+          clonedCount++;
+        }
+        if (clonedCount > 0) {
+          showToast("Scheme of Evaluation cloned successfully! (Click 'Save Changes' to save)", "success");
+        } else {
+          showToast("Source course file has no scheme of evaluation text to clone.", "error");
+        }
+      } else {
+        showToast("No course file found for the source subject.", "error");
+      }
+      setShowCloneModal(false);
+    } catch (err: any) {
+      showToast("Failed to clone scheme: " + err.message, "error");
+    }
+  };
 
   // Fetch mappings when Academic Year changes
   useEffect(() => {
@@ -121,7 +564,11 @@ export default function FacultyCourseFilesPage() {
       const cf = data.courseFile;
       if (cf) {
         setTeachingSupportText(cf.teachingSupportText || "");
-        setLecturePlan(cf.lecturePlan || []);
+        setLecturePlan(parseLecturePlan(cf.lecturePlan));
+        setMid1SchemeText(cf.mid1SchemeText || "");
+        setMid2SchemeText(cf.mid2SchemeText || "");
+        setTentativeCompletionDate(cf.tentativeCompletionDate || "");
+        
         if (cf.assignmentQuestions && Array.isArray(cf.assignmentQuestions)) {
           setAssignmentQuestions(cf.assignmentQuestions);
         } else {
@@ -141,7 +588,11 @@ export default function FacultyCourseFilesPage() {
       } else {
         // Reset inputs
         setTeachingSupportText("");
-        setLecturePlan([]);
+        setLecturePlan(parseLecturePlan(null));
+        setMid1SchemeText("");
+        setMid2SchemeText("");
+        setTentativeCompletionDate("");
+
         setAssignmentQuestions([
           { unit: "Unit I", questions: ["", ""] },
           { unit: "Unit II", questions: ["", ""] },
@@ -186,7 +637,10 @@ export default function FacultyCourseFilesPage() {
           academicCalendarPath,
           mid1SchemePath,
           mid2SchemePath,
-          prevPapersPaths
+          prevPapersPaths,
+          mid1SchemeText,
+          mid2SchemeText,
+          tentativeCompletionDate
         })
       });
       const data = await res.json();
@@ -352,6 +806,8 @@ export default function FacultyCourseFilesPage() {
 
   const { slowLearners, progressStudents } = getSlowLearnersData();
 
+  const hasLecturePlan = lecturePlan.some(u => u.topics.some(t => t.topic.trim() !== ""));
+
   // Helper to detect missing/pending items
   const getPendingItems = () => {
     const pending: string[] = [];
@@ -360,17 +816,17 @@ export default function FacultyCourseFilesPage() {
       if (!cfData.subject?.syllabus?.objectives) pending.push("Course Objectives & Outcomes");
       if (!cfData.coPoMappings?.length) pending.push("CO-PO Mappings");
       if (!academicCalendarPath) pending.push("Academic Calendar Upload");
-      if (!lecturePlan.length) pending.push("Lecture Plan entries");
+      if (!hasLecturePlan) pending.push("Lecture Plan entries");
       if (!cfData.students?.length) pending.push("Registered Student Roster");
       if (!cfData.timetable?.length) pending.push("Faculty Timetable mapping");
       if (teachingSupportText.trim().length <= 10) pending.push("Teaching Support Material details");
       if (!assignmentQuestions.some(q => q.questions.some(qn => qn.trim().length > 2))) pending.push("Assignment Questions");
       if (!cfData.mid1Paper) pending.push("I Mid Exam Question Paper");
-      if (!mid1SchemePath) pending.push("I Mid Exam Scheme of Evaluation");
+      if (!mid1SchemePath && !mid1SchemeText) pending.push("I Mid Exam Scheme of Evaluation");
       if (!cfData.mid1Marks?.length) pending.push("I Mid Exam Marks List");
       if (!remedialClasses.length) pending.push("Remedial Classes & Logs");
       if (!cfData.mid2Paper) pending.push("II Mid Exam Question Paper");
-      if (!mid2SchemePath) pending.push("II Mid Exam Scheme of Evaluation");
+      if (!mid2SchemePath && !mid2SchemeText) pending.push("II Mid Exam Scheme of Evaluation");
       if (!cfData.mid2Marks?.length) pending.push("II Mid Exam Marks List");
       if (!cfData.internalMarks?.length) pending.push("Final Sessional Marks (OBE)");
       if (!prevPapersPaths.length) pending.push("Previous Semester Question Papers");
@@ -411,7 +867,7 @@ export default function FacultyCourseFilesPage() {
     // 4. Academic Calendar - Manual Upload
     if (academicCalendarPath) completedCount++;
     // 5. Lecture Plan & Text Books - Auto (Text books) & Manual (Lecture plan has rows)
-    if (lecturePlan.length > 0) completedCount++;
+    if (hasLecturePlan) completedCount++;
     // 6. Student List - Auto
     if (cfData.students?.length > 0) completedCount++;
     // 7. Timetable - Auto
@@ -422,8 +878,8 @@ export default function FacultyCourseFilesPage() {
     if (assignmentQuestions.some(q => q.questions.some(qn => qn.trim().length > 2))) completedCount++;
     // 10. Mid 1 paper - Auto
     if (cfData.mid1Paper) completedCount++;
-    // 11. Mid 1 scheme - Manual
-    if (mid1SchemePath) completedCount++;
+    // 11. Mid 1 scheme - Manual (Text or Path)
+    if (mid1SchemePath || mid1SchemeText) completedCount++;
     // 12. Mid 1 marks - Auto
     if (cfData.mid1Marks?.length > 0) completedCount++;
     // 13. Slow learners - Auto
@@ -432,8 +888,8 @@ export default function FacultyCourseFilesPage() {
     if (remedialClasses.length > 0) completedCount++;
     // 15. Mid 2 paper - Auto
     if (cfData.mid2Paper) completedCount++;
-    // 16. Mid 2 scheme - Manual
-    if (mid2SchemePath) completedCount++;
+    // 16. Mid 2 scheme - Manual (Text or Path)
+    if (mid2SchemePath || mid2SchemeText) completedCount++;
     // 17. Mid 2 marks - Auto
     if (cfData.mid2Marks?.length > 0) completedCount++;
     // 18. Slow learners progress - Auto
@@ -555,7 +1011,8 @@ export default function FacultyCourseFilesPage() {
           /* WORKSPACE VIEW */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Left Column: Progress & Checklist */}
-            <div className="lg:col-span-5 flex flex-col gap-6">
+            {!isSidebarCollapsed && (
+              <div className="lg:col-span-5 flex flex-col gap-6">
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -673,7 +1130,7 @@ export default function FacultyCourseFilesPage() {
                   {/* 5 */}
                   <li className="flex justify-between items-center py-2.5 px-2 hover:bg-slate-50 rounded-lg">
                     <span className="text-slate-600 font-medium">5. Lecture Plan & Text Books</span>
-                    {lecturePlan.length > 0 ? (
+                    {hasLecturePlan ? (
                       <span className="text-blue-600 font-semibold flex items-center gap-1">✅ Completed</span>
                     ) : (
                       <span className="text-amber-500 font-semibold flex items-center gap-1">⚠️ Missing Table</span>
@@ -719,10 +1176,12 @@ export default function FacultyCourseFilesPage() {
                   {/* 11 */}
                   <li className="flex justify-between items-center py-2.5 px-2 hover:bg-slate-50 rounded-lg">
                     <span className="text-slate-600 font-medium">11. I Mid Scheme of Evaluation</span>
-                    {mid1SchemePath ? (
+                    {mid1SchemeText ? (
+                      <span className="text-blue-600 font-semibold flex items-center gap-1">🟢 Text Added</span>
+                    ) : mid1SchemePath ? (
                       <span className="text-blue-600 font-semibold flex items-center gap-1">✅ Uploaded</span>
                     ) : (
-                      <span className="text-amber-500 font-semibold flex items-center gap-1">⚠️ Missing Upload</span>
+                      <span className="text-amber-500 font-semibold flex items-center gap-1">⚠️ Missing</span>
                     )}
                   </li>
                   {/* 12 */}
@@ -767,10 +1226,12 @@ export default function FacultyCourseFilesPage() {
                   {/* 16 */}
                   <li className="flex justify-between items-center py-2.5 px-2 hover:bg-slate-50 rounded-lg">
                     <span className="text-slate-600 font-medium">16. II Mid Scheme of Evaluation</span>
-                    {mid2SchemePath ? (
+                    {mid2SchemeText ? (
+                      <span className="text-blue-600 font-semibold flex items-center gap-1">🟢 Text Added</span>
+                    ) : mid2SchemePath ? (
                       <span className="text-blue-600 font-semibold flex items-center gap-1">✅ Uploaded</span>
                     ) : (
-                      <span className="text-amber-500 font-semibold flex items-center gap-1">⚠️ Missing Upload</span>
+                      <span className="text-amber-500 font-semibold flex items-center gap-1">⚠️ Missing</span>
                     )}
                   </li>
                   {/* 17 */}
@@ -830,9 +1291,10 @@ export default function FacultyCourseFilesPage() {
                 </ul>
               </div>
             </div>
+            )}
 
             {/* Right Column: Dynamic Form Editors */}
-            <div className="lg:col-span-7 flex flex-col gap-6">
+            <div className={`${isSidebarCollapsed ? "lg:col-span-12" : "lg:col-span-7"} flex flex-col gap-6`}>
               {fetchingCf ? (
                 <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm flex flex-col justify-center items-center gap-4">
                   <FaSpinner className="h-8 w-8 text-teal-600 animate-spin" />
@@ -841,163 +1303,257 @@ export default function FacultyCourseFilesPage() {
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                   {/* Tabs header */}
-                  <div className="flex border-b border-slate-100 bg-slate-50/50">
-                    <button
-                      onClick={() => setActiveFormTab("lecture")}
-                      className={`flex-1 py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "lecture" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-                    >
-                      Lecture Plan
-                    </button>
-                    <button
-                      onClick={() => setActiveFormTab("assignments")}
-                      className={`flex-1 py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "assignments" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-                    >
-                      Assignments
-                    </button>
-                    <button
-                      onClick={() => setActiveFormTab("remedial")}
-                      className={`flex-1 py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "remedial" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-                    >
-                      Remedial Logs
-                    </button>
-                    <button
-                      onClick={() => setActiveFormTab("support")}
-                      className={`flex-1 py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "support" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-                    >
-                      Support Materials
-                    </button>
-                    <button
-                      onClick={() => setActiveFormTab("uploads")}
-                      className={`flex-1 py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "uploads" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-                    >
-                      File Uploads
-                    </button>
+                  <div className="flex border-b border-slate-100 bg-slate-50/50 flex-wrap items-center justify-between">
+                    <div className="flex flex-wrap flex-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                        className="px-4 py-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 bg-slate-100/50 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer"
+                        title={isSidebarCollapsed ? "Show Sidebar & Checklist" : "Hide Sidebar & Expand Editor"}
+                      >
+                        {isSidebarCollapsed ? (
+                          <>
+                            <FaExpand className="h-3 w-3 text-teal-600 animate-pulse" />
+                            <span className="text-teal-700 font-bold uppercase tracking-wider">Show Checklist</span>
+                          </>
+                        ) : (
+                          <>
+                            <FaCompress className="h-3 w-3 text-slate-500" />
+                            <span className="text-slate-600 font-semibold uppercase tracking-wider">Maximize Editor</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveFormTab("lecture")}
+                        className={`flex-1 min-w-[120px] py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "lecture" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Lecture Plan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFormTab("assignments")}
+                        className={`flex-1 min-w-[120px] py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "assignments" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Assignments
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFormTab("remedial")}
+                        className={`flex-1 min-w-[120px] py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "remedial" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Remedial Logs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFormTab("support")}
+                        className={`flex-1 min-w-[120px] py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "support" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Support Materials
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFormTab("schemes")}
+                        className={`flex-1 min-w-[120px] py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "schemes" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                      >
+                        Evaluation Schemes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFormTab("uploads")}
+                        className={`flex-1 min-w-[120px] py-4 text-xs sm:text-sm font-bold border-b-2 transition-all ${activeFormTab === "uploads" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                      >
+                        File Uploads
+                      </button>
+                    </div>
+
+                    {isSidebarCollapsed && (
+                      <div className="flex items-center gap-2 px-4 py-2 border-l border-slate-100 bg-slate-50/10 self-stretch flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handlePrintClick}
+                          className="flex justify-center items-center gap-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold px-3 py-1.5 text-xs transition-colors shadow-sm cursor-pointer"
+                        >
+                          <FaFileAlt className="h-3 w-3" /> Print Booklet
+                        </button>
+                        <button
+                          onClick={handleSave}
+                          disabled={saving}
+                          className="flex justify-center items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 text-xs transition-colors shadow-sm disabled:opacity-60"
+                        >
+                          {saving ? <FaSpinner className="h-3 w-3 animate-spin" /> : <FaSave className="h-3 w-3" />}
+                          Save Changes
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tab Contents */}
                   <div className="p-6">
                     {/* 1. LECTURE PLAN */}
                     {activeFormTab === "lecture" && (
-                      <div>
-                        <div className="flex justify-between items-center mb-4">
+                      <div className="flex flex-col gap-6">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-100 flex-wrap gap-2">
                           <h4 className="font-bold text-slate-800 text-md">Unit-wise Lecture Plan Periods</h4>
+                          <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                            Total Subject Hours: {getGrandTotalHours()}
+                          </span>
+                        </div>
+
+                        {lecturePlan.map((u, uIdx) => {
+                          const unitHours = getUnitHours(u);
+                          return (
+                            <div key={u.unit} className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-4">
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                <span className="font-bold text-slate-800 text-sm">{u.unit} Configuration</span>
+                                <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                  Unit Total: {unitHours} hours
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Unit Title</label>
+                                  <input
+                                    type="text"
+                                    value={u.title}
+                                    onChange={(e) => handleUnitTitleChange(uIdx, e.target.value)}
+                                    placeholder="e.g. Thermodynamics, Electromagnetism"
+                                    className="w-full rounded-lg border border-slate-300 p-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">References (Textbooks, Chapters, etc.)</label>
+                                  <input
+                                    type="text"
+                                    value={u.references}
+                                    onChange={(e) => handleUnitReferencesChange(uIdx, e.target.value)}
+                                    placeholder="e.g. T1(Ch.19,20 & 21), T2(Ch.17,19 & 21)"
+                                    className="w-full rounded-lg border border-slate-300 p-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-[10px] font-bold text-slate-500">Topics & Details</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddTopic(uIdx)}
+                                    className="flex items-center gap-1 text-[10px] font-semibold bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 px-2 py-1 rounded transition-colors cursor-pointer"
+                                  >
+                                    <FaPlus className="h-2 w-2" /> Add Topic
+                                  </button>
+                                </div>
+
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                  <table className="min-w-full text-xs text-left text-slate-600">
+                                    <thead className="bg-slate-50/50 text-slate-600 uppercase font-bold border-b border-slate-200">
+                                      <tr>
+                                        <th className="px-3 py-1.5 w-10">S.No</th>
+                                        <th className="px-3 py-1.5 w-full">Topic Details / Syllabus covered</th>
+                                        <th className="px-3 py-1.5 text-center w-24">No. of Hours</th>
+                                        <th className="px-3 py-1.5 text-center w-12">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {u.topics.map((t, tIdx) => (
+                                        <tr key={tIdx} className="hover:bg-slate-50/30">
+                                          <td className="px-3 py-1 text-slate-400 font-semibold">{tIdx + 1}</td>
+                                          <td className="px-3 py-1">
+                                            <input
+                                              type="text"
+                                              value={t.topic}
+                                              onChange={(e) => handleTopicChange(uIdx, tIdx, "topic", e.target.value)}
+                                              placeholder="Enter topic details..."
+                                              className="w-full border-b border-transparent hover:border-slate-200 focus:border-teal-500 py-1 bg-transparent text-xs font-semibold text-slate-700 outline-none"
+                                            />
+                                          </td>
+                                          <td className="px-3 py-1 text-center">
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              value={t.plannedPeriods}
+                                              onChange={(e) => handleTopicChange(uIdx, tIdx, "plannedPeriods", e.target.value)}
+                                              className="w-16 rounded border border-slate-200 text-center py-0.5 text-xs font-semibold text-slate-700 bg-white"
+                                            />
+                                          </td>
+                                          <td className="px-3 py-1 text-center">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveTopic(uIdx, tIdx)}
+                                              className="text-red-500 hover:text-red-700 cursor-pointer"
+                                            >
+                                              <FaTrash className="h-3 w-3" />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Tentative Completion Date Input */}
+                        <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div>
+                            <h5 className="font-bold text-slate-800 text-xs">Tentative Syllabus Completion Date</h5>
+                            <p className="text-[10px] text-slate-400">Enter the planned syllabus completion date (e.g. 27.01.2024).</p>
+                          </div>
+                          <input
+                            type="text"
+                            value={tentativeCompletionDate}
+                            onChange={(e) => setTentativeCompletionDate(e.target.value)}
+                            placeholder="e.g. 27.01.2024"
+                            className="w-48 rounded-lg border border-slate-300 p-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 5. EVALUATION SCHEMES */}
+                    {activeFormTab === "schemes" && (
+                      <div className="flex flex-col gap-6">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-100 flex-wrap gap-2">
+                          <h4 className="font-bold text-slate-800 text-md">Mid Exam Schemes of Evaluation</h4>
                           <button
-                            onClick={() => setLecturePlan([...lecturePlan, { unit: "Unit I", topic: "", plannedPeriods: 1, actualDate: "", aid: "Chalk & Board" }])}
-                            className="flex items-center gap-1 text-xs font-semibold bg-teal-50 text-teal-700 px-3 py-1.5 rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors"
+                            type="button"
+                            onClick={() => {
+                              setShowCloneModal(true);
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-semibold bg-blue-50 text-blue-700 px-3.5 py-2 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
                           >
-                            <FaPlus className="h-3 w-3" /> Add Topic Row
+                            <FaFileAlt className="h-3.5 w-3.5" /> Clone Scheme of Evaluation
                           </button>
                         </div>
 
-                        {lecturePlan.length === 0 ? (
-                          <div className="text-center py-8 text-slate-500 border border-dashed border-slate-200 rounded-xl">
-                            No lecture topics entered yet. Click "Add Topic Row" to begin.
+                        <div className="grid grid-cols-1 gap-6">
+                          <div className="flex flex-col gap-2">
+                            <label className="font-bold text-slate-700 text-xs">MID-I Scheme of Evaluation Rubrics / Solutions</label>
+                            <span className="text-[10px] text-slate-400 font-medium">Configure detailed question-wise step marks/rubrics or type free text.</span>
+                            <StructuredSchemeEditor
+                              examType="MID_I"
+                              paper={cfData?.mid1Paper}
+                              schemeText={mid1SchemeText}
+                              onChange={setMid1SchemeText}
+                            />
                           </div>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs text-left text-slate-600 border border-slate-200 rounded-xl">
-                              <thead className="bg-slate-50 text-slate-700 uppercase font-semibold">
-                                <tr>
-                                  <th className="px-3 py-2 border-b">Unit</th>
-                                  <th className="px-3 py-2 border-b">Topic / Details</th>
-                                  <th className="px-3 py-2 border-b">Periods</th>
-                                  <th className="px-3 py-2 border-b">Actual Date</th>
-                                  <th className="px-3 py-2 border-b">Teaching Aid</th>
-                                  <th className="px-3 py-2 border-b text-center">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {lecturePlan.map((row, idx) => (
-                                  <tr key={idx} className="hover:bg-slate-50/50">
-                                    <td className="px-3 py-1.5 border-b">
-                                      <select
-                                        value={row.unit}
-                                        onChange={(e) => {
-                                          const copy = [...lecturePlan];
-                                          copy[idx].unit = e.target.value;
-                                          setLecturePlan(copy);
-                                        }}
-                                        className="rounded border border-slate-300 p-1"
-                                      >
-                                        <option value="Unit I">Unit I</option>
-                                        <option value="Unit II">Unit II</option>
-                                        <option value="Unit III">Unit III</option>
-                                        <option value="Unit IV">Unit IV</option>
-                                        <option value="Unit V">Unit V</option>
-                                      </select>
-                                    </td>
-                                    <td className="px-3 py-1.5 border-b">
-                                      <input
-                                        type="text"
-                                        value={row.topic}
-                                        onChange={(e) => {
-                                          const copy = [...lecturePlan];
-                                          copy[idx].topic = e.target.value;
-                                          setLecturePlan(copy);
-                                        }}
-                                        className="w-full rounded border border-slate-300 p-1 font-medium"
-                                        placeholder="Topic details..."
-                                      />
-                                    </td>
-                                    <td className="px-3 py-1.5 border-b">
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={row.plannedPeriods}
-                                        onChange={(e) => {
-                                          const copy = [...lecturePlan];
-                                          copy[idx].plannedPeriods = parseInt(e.target.value) || 1;
-                                          setLecturePlan(copy);
-                                        }}
-                                        className="w-16 rounded border border-slate-300 p-1 text-center"
-                                      />
-                                    </td>
-                                    <td className="px-3 py-1.5 border-b">
-                                      <input
-                                        type="date"
-                                        value={row.actualDate}
-                                        onChange={(e) => {
-                                          const copy = [...lecturePlan];
-                                          copy[idx].actualDate = e.target.value;
-                                          setLecturePlan(copy);
-                                        }}
-                                        className="rounded border border-slate-300 p-1"
-                                      />
-                                    </td>
-                                    <td className="px-3 py-1.5 border-b">
-                                      <select
-                                        value={row.aid}
-                                        onChange={(e) => {
-                                          const copy = [...lecturePlan];
-                                          copy[idx].aid = e.target.value;
-                                          setLecturePlan(copy);
-                                        }}
-                                        className="rounded border border-slate-300 p-1"
-                                      >
-                                        <option value="Chalk & Board">Chalk & Board</option>
-                                        <option value="PPT Projector">PPT Projector</option>
-                                        <option value="Online Virtual Lab">Online Virtual Lab</option>
-                                        <option value="Mixed (Board + Projector)">Mixed Mode</option>
-                                      </select>
-                                    </td>
-                                    <td className="px-3 py-1.5 border-b text-center">
-                                      <button
-                                        onClick={() => {
-                                          const copy = [...lecturePlan];
-                                          copy.splice(idx, 1);
-                                          setLecturePlan(copy);
-                                        }}
-                                        className="text-red-600 hover:text-red-800"
-                                      >
-                                        <FaTrash className="h-3.5 w-3.5" />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+
+                          <div className="flex flex-col gap-2">
+                            <label className="font-bold text-slate-700 text-xs">MID-II Scheme of Evaluation Rubrics / Solutions</label>
+                            <span className="text-[10px] text-slate-400 font-medium">Configure detailed question-wise step marks/rubrics or type free text.</span>
+                            <StructuredSchemeEditor
+                              examType="MID_II"
+                              paper={cfData?.mid2Paper}
+                              schemeText={mid2SchemeText}
+                              onChange={setMid2SchemeText}
+                            />
                           </div>
-                        )}
+                        </div>
                       </div>
                     )}
 
@@ -1577,6 +2133,109 @@ export default function FacultyCourseFilesPage() {
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm"
                 >
                   Yes, Continue to Print
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Clone Scheme of Evaluation Modal */}
+      <AnimatePresence>
+        {showCloneModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+            onClick={() => setShowCloneModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white border border-slate-200 shadow-2xl rounded-2xl w-full max-w-lg overflow-hidden flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                    <FaFileAlt className="text-blue-600 h-5 w-5" />
+                    Clone Scheme of Evaluation
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">
+                    Copy the evaluation scheme rubrics text from another course file.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCloneModal(false)}
+                  className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-100 transition-colors"
+                >
+                  <FaTimes className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 flex flex-col gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1.5">Select Source Course File</label>
+                  <select
+                    value={cloneSourceMappingId}
+                    onChange={(e) => setCloneSourceMappingId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  >
+                    <option value="">Select subject / section...</option>
+                    {mappings.filter(m => m.id !== selectedMapping?.id).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.subject.name} ({m.subject.code}) - Sec {m.section.name} [{m.academicYear.name}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="text-xs font-bold text-slate-500 block">Select Schemes to Clone</label>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cloneMid1Text}
+                        onChange={(e) => setCloneMid1Text(e.target.checked)}
+                        className="rounded text-teal-600 focus:ring-teal-500 h-4 w-4"
+                      />
+                      MID-I Scheme of Evaluation
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cloneMid2Text}
+                        onChange={(e) => setCloneMid2Text(e.target.checked)}
+                        className="rounded text-teal-600 focus:ring-teal-500 h-4 w-4"
+                      />
+                      MID-II Scheme of Evaluation
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-slate-50 border-t border-slate-100 p-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCloneModal(false)}
+                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloneScheme}
+                  disabled={!cloneSourceMappingId || (!cloneMid1Text && !cloneMid2Text)}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                >
+                  Clone Selected
                 </button>
               </div>
             </motion.div>

@@ -32,6 +32,10 @@ export interface Student {
     isLateralEntry?: boolean;
     originalBatchId?: string | null;
     originalBatch?: { id: string; name: string };
+    detainedYear?: string | null;
+    detainedSemester?: string | null;
+    rejoinedYear?: string | null;
+    rejoinedSemester?: string | null;
     labBatchId?: string | null;
     labBatch?: { id: string; name: string };
 

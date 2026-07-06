@@ -111,6 +111,10 @@ model Student {
   isLeftCollege         Boolean              @default(false)
   alumniId              String? // links to Alumni.id after graduation
   originalBatchId       String?
+  detainedYear          String?
+  detainedSemester      String?
+  rejoinedYear          String?
+  rejoinedSemester      String?
   labBatchId            String?
   photoUrl              String?
   hallTicketNumber      String?              @unique
@@ -802,6 +806,11 @@ model CourseFile {
   assignmentQuestions Json? // Array of { unit: string, questions: string[] }
   lecturePlan         Json? // Array of { unit: string, topic: string, plannedPeriods: number, actualDate: string, aid: string }
   remedialClasses     Json? // Array of { date: string, topics: string, studentRolls: string[] }
+
+  // Direct Text Inputs / Evaluation Schemes
+  mid1SchemeText          String? @db.Text
+  mid2SchemeText          String? @db.Text
+  tentativeCompletionDate String?
 
   // Uploaded PDF Files (Paths / URLs)
   academicCalendarPath String?

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
         let labBatchStudentRolls: string[] = [];
         if (labBatchId) {
             const batchStudents = await prisma.student.findMany({
-                where: { labBatchId, isAlumni: false, isLeftCollege: false },
+                where: { labBatchId, isAlumni: false, isLeftCollege: false, isDetained: false },
                 select: { rollNumber: true }
             });
             labBatchStudentRolls = batchStudents.map(s => s.rollNumber);

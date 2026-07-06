@@ -127,7 +127,12 @@ export default function StudentsPage() {
         isDetained: false,
         isLateralEntry: false,
         originalBatchId: "",
-        isLeftCollege: false
+        isLeftCollege: false,
+        detainedYear: "1",
+        detainedSemester: "1",
+        rejoinedYear: "",
+        rejoinedSemester: "",
+        isRejoining: false
     });
 
     const fetchDepartments = async () => {
@@ -221,12 +226,19 @@ export default function StudentsPage() {
             if (tab === "alumni") {
                 query.set("showAlumni", "true");
                 query.set("showLeftCollege", "false");
+                query.set("showDetained", "false");
             } else if (tab === "left") {
                 query.set("showAlumni", "false");
                 query.set("showLeftCollege", "true");
+                query.set("showDetained", "false");
+            } else if (tab === "detained") {
+                query.set("showAlumni", "false");
+                query.set("showLeftCollege", "false");
+                query.set("showDetained", "true");
             } else {
                 query.set("showAlumni", "false");
                 query.set("showLeftCollege", "false");
+                query.set("showDetained", "false");
             }
 
             // Search & Pagination
@@ -288,17 +300,48 @@ export default function StudentsPage() {
                 : "/api/students";
             const method = editingStudent ? "PUT" : "POST";
 
+            const payload = {
+                ...formData,
+                isDetained: formData.isRejoining ? false : formData.isDetained,
+                year: formData.isRejoining ? formData.rejoinedYear : formData.year,
+                semester: formData.isRejoining ? formData.rejoinedSemester : formData.semester,
+                detainedYear: formData.isDetained ? formData.detainedYear : null,
+                detainedSemester: formData.isDetained ? formData.detainedSemester : null,
+                rejoinedYear: formData.isRejoining ? formData.rejoinedYear : (formData.rejoinedYear || null),
+                rejoinedSemester: formData.isRejoining ? formData.rejoinedSemester : (formData.rejoinedSemester || null)
+            };
+            delete (payload as any).isRejoining;
+
             const res = await fetch(url, {
                 method,
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
 
             if (res.ok) {
                 const successMessage = editingStudent ? "Student updated successfully" : "Student created successfully";
                 setStatus({ type: "success", message: successMessage });
                 setEditingStudent(null);
-                setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "", isLeftCollege: false });
+                setFormData({
+                    rollNumber: "",
+                    name: "",
+                    mobile: "",
+                    year: "1",
+                    semester: "1",
+                    departmentId: "",
+                    sectionId: "",
+                    regulation: "R22",
+                    batchId: "",
+                    isDetained: false,
+                    isLateralEntry: false,
+                    originalBatchId: "",
+                    isLeftCollege: false,
+                    detainedYear: "1",
+                    detainedSemester: "1",
+                    rejoinedYear: "",
+                    rejoinedSemester: "",
+                    isRejoining: false
+                });
                 fetchStudents();
                 setTimeout(() => {
                     setIsModalOpen(false);
@@ -385,7 +428,26 @@ export default function StudentsPage() {
 
     const openAddModal = () => {
         setEditingStudent(null);
-        setFormData({ rollNumber: "", name: "", mobile: "", year: "1", semester: "1", departmentId: "", sectionId: "", regulation: "R22", batchId: "", isDetained: false, isLateralEntry: false, originalBatchId: "", isLeftCollege: false }); // Reset
+        setFormData({
+            rollNumber: "",
+            name: "",
+            mobile: "",
+            year: "1",
+            semester: "1",
+            departmentId: "",
+            sectionId: "",
+            regulation: "R22",
+            batchId: "",
+            isDetained: false,
+            isLateralEntry: false,
+            originalBatchId: "",
+            isLeftCollege: false,
+            detainedYear: "1",
+            detainedSemester: "1",
+            rejoinedYear: "",
+            rejoinedSemester: "",
+            isRejoining: false
+        }); // Reset
         setIsModalOpen(true);
     };
 
@@ -404,7 +466,12 @@ export default function StudentsPage() {
             isDetained: student.isDetained || false,
             isLateralEntry: student.isLateralEntry || false,
             originalBatchId: student.originalBatchId || "",
-            isLeftCollege: (student as any).isLeftCollege || false
+            isLeftCollege: (student as any).isLeftCollege || false,
+            detainedYear: student.detainedYear || student.year,
+            detainedSemester: student.detainedSemester || student.semester,
+            rejoinedYear: student.rejoinedYear || "",
+            rejoinedSemester: student.rejoinedSemester || "",
+            isRejoining: false
         });
         setIsModalOpen(true);
     };
@@ -915,6 +982,16 @@ export default function StudentsPage() {
                 >
                     Alumni
                 </button>
+                <button
+                    onClick={() => updateFilters("tab", "detained")}
+                    className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors duration-200 ${
+                        currentTab === "detained"
+                            ? "border-orange-600 text-orange-600"
+                            : "border-transparent text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    Detained
+                </button>
             </div>
 
             <div className={`mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) ? "sm:grid-cols-4" : "sm:grid-cols-3"
@@ -1223,19 +1300,40 @@ export default function StudentsPage() {
                         </label>
                     </div>
 
-                    {/* Detained Student Logic */}
-                    <div className="flex items-center gap-2 mt-4 ml-1">
-                        <input
-                            type="checkbox"
-                            checked={formData.isDetained}
-                            onChange={(e) => setFormData({ ...formData, isDetained: e.target.checked })}
-                            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                            id="isDetainedCheck"
-                        />
-                        <label htmlFor="isDetainedCheck" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
-                            Is Detained Student?
-                        </label>
-                    </div>
+                    {/* Detention Status Info & Toggle */}
+                    {editingStudent?.isDetained && (
+                        <div className="rounded-lg bg-orange-50 border border-orange-200 p-4 text-xs text-orange-800">
+                            Currently Detained in Year <strong>{editingStudent.detainedYear || editingStudent.year}</strong>, Sem <strong>{editingStudent.detainedSemester || editingStudent.semester}</strong>. (Original Batch: <strong>{(editingStudent.originalBatch as any)?.name || "N/A"}</strong>)
+                        </div>
+                    )}
+
+                    {editingStudent?.isDetained ? (
+                        <div className="flex items-center gap-2 mt-4 ml-1">
+                            <input
+                                type="checkbox"
+                                checked={formData.isRejoining}
+                                onChange={(e) => setFormData({ ...formData, isRejoining: e.target.checked })}
+                                className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                                id="isRejoiningCheck"
+                            />
+                            <label htmlFor="isRejoiningCheck" className="text-sm font-semibold text-slate-800 select-none cursor-pointer">
+                                Rejoin Student?
+                            </label>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 mt-4 ml-1">
+                            <input
+                                type="checkbox"
+                                checked={formData.isDetained}
+                                onChange={(e) => setFormData({ ...formData, isDetained: e.target.checked })}
+                                className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                id="isDetainedCheck"
+                            />
+                            <label htmlFor="isDetainedCheck" className="text-sm font-medium text-slate-700 select-none cursor-pointer">
+                                Is Detained Student?
+                            </label>
+                        </div>
+                    )}
 
                     {/* Left College Logic */}
                     <div className="flex items-center gap-2 mt-4 ml-1">
@@ -1251,23 +1349,122 @@ export default function StudentsPage() {
                         </label>
                     </div>
 
-                    {formData.isDetained && (
-                        <div className="mt-4 bg-red-50 p-4 rounded-md border border-red-100">
-                            <p className="text-xs text-red-600 mb-2">
-                                <strong>Note:</strong> Select the student's <strong>Current Operational Batch</strong> above.
-                                Below, select their <strong>Original Batch</strong> (when they first joined).
+                    {!editingStudent?.isDetained && formData.isDetained && (
+                        <div className="mt-4 bg-orange-50/50 p-4 rounded-md border border-orange-100 space-y-4">
+                            <p className="text-xs text-orange-700 mb-2">
+                                <strong>Note:</strong> Specify the Year and Semester when the student is detained.
                             </p>
-                            <label className="text-sm font-medium text-slate-700">Original Batch (History)</label>
-                            <select
-                                value={formData.originalBatchId}
-                                onChange={(e) => setFormData({ ...formData, originalBatchId: e.target.value })}
-                                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500"
-                            >
-                                <option value="">Select Original Batch</option>
-                                {batches.map((b: any) => (
-                                    <option key={b.id} value={b.id}>{b.name}</option>
-                                ))}
-                            </select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium text-slate-700">Detention Year</label>
+                                    <select
+                                        value={formData.detainedYear}
+                                        onChange={(e) => setFormData({ ...formData, detainedYear: e.target.value })}
+                                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+                                    >
+                                        {[1, 2, 3, 4].map(y => (
+                                            <option key={y} value={y}>{y}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-slate-700">Detention Semester</label>
+                                    <select
+                                        value={formData.detainedSemester}
+                                        onChange={(e) => setFormData({ ...formData, detainedSemester: e.target.value })}
+                                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+                                    >
+                                        {[1, 2].map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-slate-700">Original Batch (History)</label>
+                                <select
+                                    value={formData.originalBatchId}
+                                    onChange={(e) => setFormData({ ...formData, originalBatchId: e.target.value })}
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+                                >
+                                    <option value="">Select Original Batch</option>
+                                    {batches.map((b: any) => (
+                                        <option key={b.id} value={b.id}>{b.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
+                    {editingStudent?.isDetained && formData.isRejoining && (
+                        <div className="mt-4 bg-green-50 p-4 rounded-md border border-green-100 space-y-4">
+                            <p className="text-xs text-green-700 mb-2">
+                                <strong>Rejoin Details:</strong> Specify the Year, Semester, Batch and Section where the student is rejoining.
+                            </p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium text-slate-700">Rejoined Year</label>
+                                    <select
+                                        value={formData.rejoinedYear}
+                                        onChange={(e) => setFormData({ ...formData, rejoinedYear: e.target.value })}
+                                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-green-500"
+                                        required
+                                    >
+                                        <option value="">Select Year</option>
+                                        {[1, 2, 3, 4].map(y => (
+                                            <option key={y} value={y}>{y}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-slate-700">Rejoined Semester</label>
+                                    <select
+                                        value={formData.rejoinedSemester}
+                                        onChange={(e) => setFormData({ ...formData, rejoinedSemester: e.target.value })}
+                                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-green-500"
+                                        required
+                                    >
+                                        <option value="">Select Semester</option>
+                                        {[1, 2].map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-slate-700">New Operational Batch</label>
+                                <select
+                                    value={formData.batchId}
+                                    onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-green-500"
+                                    required
+                                >
+                                    <option value="">Select New Batch</option>
+                                    {batches.map((b: any) => (
+                                        <option key={b.id} value={b.id}>{b.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium text-slate-700">New Section</label>
+                                <select
+                                    value={formData.sectionId}
+                                    onChange={(e) => setFormData({ ...formData, sectionId: e.target.value })}
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-green-500"
+                                    required
+                                >
+                                    <option value="">Select New Section</option>
+                                    {(() => {
+                                        const selectedDept = departments.find(d => d.id === formData.departmentId);
+                                        const availableSections = selectedDept?.sections && selectedDept.sections.length > 0
+                                            ? selectedDept.sections
+                                            : sections;
+                                        return availableSections.map((s: any) => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ));
+                                    })()}
+                                </select>
+                            </div>
                         </div>
                     )}
 

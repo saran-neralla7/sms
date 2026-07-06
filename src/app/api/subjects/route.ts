@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isBSHHod } from "@/lib/permissions";
+import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -28,10 +29,16 @@ export async function GET(request: Request) {
     const user = session?.user as any;
     const isFaculty = user?.role === "FACULTY";
     if (isFaculty && user?.facultyId) {
-        const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
-        if (activeYear) {
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+        if (!academicYearId) {
+            const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+            if (activeYear) academicYearId = activeYear.id;
+        }
+
+        if (academicYearId) {
             const mappings = await prisma.facultySubjectMapping.findMany({
-                where: { facultyId: user.facultyId, academicYearId: activeYear.id, subject: { departmentId: departmentId || undefined, year: year || undefined, semester: semester || undefined } },
+                where: { facultyId: user.facultyId, academicYearId: academicYearId, subject: { departmentId: departmentId || undefined, year: year || undefined, semester: semester || undefined } },
                 select: { subjectId: true }
             });
             const mappedIds = mappings.map(m => m.subjectId);

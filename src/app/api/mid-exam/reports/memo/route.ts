@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
           semester, 
           sectionId: isAllSections ? undefined : sectionId, 
           isAlumni: false,
-          isLeftCollege: false
+          isLeftCollege: false,
+          isDetained: false
         },
         select: { id: true, rollNumber: true, name: true, sectionId: true },
         orderBy: { rollNumber: "asc" }

@@ -37,6 +37,15 @@ export default withAuth(
             return;
         }
 
+        // --- FACULTY ROLE RESTRICTION ---
+        if (role === "FACULTY") {
+            if (path === "/dashboard") {
+                const url = req.nextUrl.clone();
+                url.pathname = "/faculty";
+                return NextResponse.redirect(url);
+            }
+        }
+
         // Protected Admin Routes: /admin, /reports, /faculty, /fees, /timetables, /student
         // Notice we explicitly added /student here to prevent Admins/Faculty from needing to go there, though harmless.
         const adminRoutes = ["/admin", "/reports", "/faculty", "/fees", "/timetables"];
@@ -49,7 +58,7 @@ export default withAuth(
 
             if (!isGlobalAdmin) {
                 const url = req.nextUrl.clone();
-                url.pathname = "/dashboard"; // Redirect unauthorized access to their dashboard
+                url.pathname = role === "FACULTY" ? "/faculty" : "/dashboard"; // Redirect unauthorized access to their dashboard
                 return NextResponse.redirect(url);
             }
         }

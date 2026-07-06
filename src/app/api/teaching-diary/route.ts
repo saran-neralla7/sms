@@ -14,6 +14,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const departmentId = searchParams.get("departmentId");
         const subjectId = searchParams.get("subjectId");
+        const sectionId = searchParams.get("sectionId");
         const search = searchParams.get("search"); // Search query for faculty name/code
         const startDateStr = searchParams.get("startDate");
         const endDateStr = searchParams.get("endDate");
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
             topicsTaught: { not: null },
             academicYearId: academicYearId || undefined,
             subjectId: subjectId || undefined,
+            sectionId: sectionId || undefined,
         };
 
         // Role-based restrictions
@@ -143,3 +145,160 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Failed to fetch teaching diary" }, { status: 500 });
     }
 }
+
+export async function POST(request: Request) {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    try {
+        const body = await request.json();
+        const { date, subjectId, sectionId, periodId, topicsTaught } = body;
+
+        if (!date || !subjectId || !sectionId || !periodId || !topicsTaught) {
+            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        // Fetch subject details to get year, semester, departmentId
+        const subject = await prisma.subject.findUnique({
+            where: { id: subjectId }
+        });
+
+        if (!subject) {
+            return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+        }
+
+        // Get current academic year id
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+        if (!academicYearId) {
+            const currentYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+            if (currentYear) academicYearId = currentYear.id;
+        }
+
+        // Check if there is already an AttendanceHistory record for this date, section, period, year, department
+        const existing = await prisma.attendanceHistory.findFirst({
+            where: {
+                date: new Date(date),
+                sectionId,
+                periodId,
+                year: subject.year,
+                departmentId: subject.departmentId
+            }
+        });
+
+        if (existing) {
+            // Update existing record
+            const updated = await prisma.attendanceHistory.update({
+                where: { id: existing.id },
+                data: {
+                    topicsTaught,
+                    subjectId,
+                    downloadedBy: session.user.id
+                }
+            });
+            return NextResponse.json(updated);
+        }
+
+        // Create new record
+        const record = await prisma.attendanceHistory.create({
+            data: {
+                date: new Date(date),
+                year: subject.year,
+                semester: subject.semester,
+                sectionId,
+                departmentId: subject.departmentId,
+                academicYearId: academicYearId || null,
+                subjectId,
+                periodId,
+                status: "Completed",
+                type: "ACADEMIC",
+                fileName: "Manual Entry",
+                downloadedBy: session.user.id,
+                details: "[]",
+                topicsTaught
+            }
+        });
+
+        return NextResponse.json(record);
+    } catch (error: any) {
+        console.error("Failed to create teaching diary entry:", error);
+        return NextResponse.json({ error: error.message || "Failed to create entry" }, { status: 500 });
+    }
+}
+
+export async function PUT(request: Request) {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    try {
+        const body = await request.json();
+        const { id, topicsTaught, date, periodId, sectionId, subjectId } = body;
+
+        if (!id || !topicsTaught) {
+            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        const data: any = { topicsTaught };
+        if (date) data.date = new Date(date);
+        if (periodId) data.periodId = periodId;
+        if (sectionId) data.sectionId = sectionId;
+        if (subjectId) data.subjectId = subjectId;
+
+        const updated = await prisma.attendanceHistory.update({
+            where: { id },
+            data
+        });
+
+        return NextResponse.json(updated);
+    } catch (error: any) {
+        console.error("Failed to update teaching diary entry:", error);
+        return NextResponse.json({ error: error.message || "Failed to update entry" }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get("id");
+
+        if (!id) {
+            return NextResponse.json({ error: "Missing entry ID" }, { status: 400 });
+        }
+
+        const record = await prisma.attendanceHistory.findUnique({
+            where: { id }
+        });
+
+        if (!record) {
+            return NextResponse.json({ error: "Record not found" }, { status: 404 });
+        }
+
+        if (record.details === "[]" || !record.details || record.details === "null") {
+            // Delete the record completely
+            await prisma.attendanceHistory.delete({
+                where: { id }
+            });
+        } else {
+            // Keep attendance record, but delete topicsTaught text
+            await prisma.attendanceHistory.update({
+                where: { id },
+                data: { topicsTaught: null }
+            });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Failed to delete teaching diary entry:", error);
+        return NextResponse.json({ error: error.message || "Failed to delete entry" }, { status: 500 });
+    }
+}
+

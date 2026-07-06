@@ -1,12 +1,66 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { FaPrint, FaSpinner } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import { calculateStudentTotal, scaleMidMarks, aggregateCOMarks, calculateInternalMarks } from "@/lib/mid-exam-calc";
 import MathRenderer from "@/components/MathRenderer";
 import { computeAttainments } from "@/lib/attainments";
+
+
+function parseLecturePlan(dbValue: any) {
+  if (!dbValue || !Array.isArray(dbValue)) {
+    return [
+      { unit: "Unit I", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+      { unit: "Unit II", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+      { unit: "Unit III", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+      { unit: "Unit IV", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] },
+      { unit: "Unit V", title: "", references: "", topics: [{ topic: "", plannedPeriods: 1 }] }
+    ];
+  }
+
+  const isStructured = dbValue.length > 0 && "topics" in dbValue[0] && Array.isArray(dbValue[0].topics);
+  if (isStructured) {
+    return dbValue;
+  }
+
+  const plan = [
+    { unit: "Unit I", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit II", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit III", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit IV", title: "", references: "", topics: [] as any[] },
+    { unit: "Unit V", title: "", references: "", topics: [] as any[] }
+  ];
+
+  dbValue.forEach((row: any) => {
+    const unitName = row.unit || "Unit I";
+    let target = plan.find(u => u.unit.toLowerCase() === unitName.toLowerCase());
+    if (!target) {
+      target = { unit: unitName, title: "", references: "", topics: [] as any[] };
+      plan.push(target);
+    }
+    
+    const topicText = row.topic || "";
+    const isHeaderRow = topicText.toLowerCase().includes("unit") && (topicText.includes(":") || topicText.includes("-"));
+    
+    if (isHeaderRow) {
+      const splitChar = topicText.includes(":") ? ":" : "-";
+      const parts = topicText.split(splitChar);
+      target.title = parts.slice(1).join(splitChar).trim();
+      target.references = row.aid || "";
+    } else {
+      if (topicText.trim()) {
+        target.topics.push({
+          topic: topicText,
+          plannedPeriods: parseInt(row.plannedPeriods) || 1
+        });
+      }
+    }
+  });
+
+  return plan;
+}
 
 
 export default function CourseFilePrintPage() {
@@ -220,11 +274,248 @@ export default function CourseFilePrintPage() {
     return pct2 >= threshold;
   });
 
+  interface RubricItem {
+    description: string;
+    marks: number;
+  }
+
+  interface StructuredScheme {
+    version: number;
+    type: "structured";
+    rubrics: Record<string, RubricItem[]>;
+  }
+
+  const parseSchemeText = (text: string): StructuredScheme | null => {
+    if (!text) return null;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && parsed.type === "structured" && parsed.rubrics) {
+        return parsed;
+      }
+    } catch (e) {}
+    return null;
+  };
+
   // Clean syllabus and outcomes HTML strings
   const stripHtmlTags = (str: any): string => {
     if (!str) return "";
     const s = typeof str === "object" ? JSON.stringify(str) : String(str);
     return s.replace(/<[^>]*>/g, "");
+  };
+
+  // Helper to chunk student list into a 5-column side-by-side grid
+  const getMarksGridData = (studentsList: any[], marksMap: Record<string, number>, absentMap: Record<string, boolean>) => {
+    const totalStudents = studentsList.length;
+    const colsCount = 5;
+    const rowsCount = Math.ceil(totalStudents / colsCount);
+    
+    const rows = [];
+    for (let r = 0; r < rowsCount; r++) {
+      const rowCells = [];
+      for (let c = 0; c < colsCount; c++) {
+        const studentIdx = c * rowsCount + r;
+        if (studentIdx < totalStudents) {
+          const student = studentsList[studentIdx];
+          const total = marksMap[student.id] ?? 0;
+          const isAbs = absentMap[student.id];
+          rowCells.push({
+            roll: student.rollNumber,
+            marks: isAbs ? "AB" : total
+          });
+        } else {
+          rowCells.push({ roll: "", marks: "" });
+        }
+      }
+      rows.push(rowCells);
+    }
+    return rows;
+  };
+
+  // Helper to chunk student list into a 2-column side-by-side grid to save vertical space
+  const getStudentGridData = (studentsList: any[]) => {
+    const total = studentsList.length;
+    const half = Math.ceil(total / 2);
+    const rows = [];
+    for (let i = 0; i < half; i++) {
+      const leftStudent = studentsList[i];
+      const rightStudent = studentsList[i + half] || null;
+      rows.push({
+        left: leftStudent ? { sNo: i + 1, roll: leftStudent.rollNumber, name: leftStudent.name } : null,
+        right: rightStudent ? { sNo: i + half + 1, roll: rightStudent.rollNumber, name: rightStudent.name } : null,
+      });
+    }
+    return rows;
+  };
+
+
+  const renderEvaluationScheme = (schemeText: string, paper: any, examTitle: string) => {
+    const structured = parseSchemeText(schemeText);
+
+    if (!schemeText && !courseFile?.mid1SchemePath && !courseFile?.mid2SchemePath) {
+      return (
+        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 min-h-[70vh] flex flex-col justify-center items-center bg-slate-50/10">
+          <span className="font-extrabold text-sm text-slate-600 uppercase mb-2">🔑 [ ATTACH / INSERT {examTitle} EVALUATION SCHEME HERE ]</span>
+          <span className="text-xs text-slate-400 font-medium max-w-sm mt-1 leading-relaxed">
+            No scheme of evaluation answer key has been entered or uploaded by the faculty. This page is left blank for a physical copy.
+          </span>
+        </div>
+      );
+    }
+
+    if (!structured) {
+      if (schemeText) {
+        return (
+          <div className="text-xs font-serif text-black leading-relaxed whitespace-pre-wrap border border-slate-300 p-6 rounded-xl bg-slate-50/20 font-medium">
+            {schemeText}
+          </div>
+        );
+      }
+      
+      const schemePath = examTitle === "MID-I" ? courseFile?.mid1SchemePath : courseFile?.mid2SchemePath;
+      return (
+        <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
+          <div>
+            <p className="text-emerald-700 font-bold mb-2">✅ {examTitle} Evaluation answer key has been uploaded</p>
+            <p className="text-slate-500 font-medium">Serving path: <a href={schemePath} target="_blank" className="text-teal-600 underline font-semibold">{schemePath}</a></p>
+          </div>
+        </div>
+      );
+    }
+
+    const rubrics = structured.rubrics || {};
+    const matrixQuestions: any[] = [];
+    paper?.questions?.forEach((q: any) => {
+      q.subQuestions?.forEach((sq: any) => {
+        matrixQuestions.push({
+          label: `${q.questionNo}(${sq.subLabel})`,
+          co: sq.coMapping || "—",
+          marks: sq.maxMarks || 0
+        });
+      });
+    });
+
+    const totalMatrixMarks = matrixQuestions.reduce((sum, item) => sum + item.marks, 0);
+
+    return (
+      <div className="flex flex-col gap-6 font-serif text-black leading-relaxed">
+        <div className="text-center font-bold">
+          <h2 className="text-sm uppercase tracking-wide">Gayatri Vidya Parishad</h2>
+          <h3 className="text-[11px] uppercase tracking-wider text-slate-800">College for Degree and PG Courses (A)</h3>
+          <p className="text-[9px] text-slate-600 font-sans mt-0.5">Rushikonda, Visakhapatnam – 530 045 | Engineering &amp; Technology Program</p>
+          <p className="text-[10px] mt-1 font-bold">I/IV B. Tech Degree {examTitle} Examinations</p>
+        </div>
+
+        <table className="w-full text-[10px] border-collapse border border-black font-semibold mt-2">
+          <tbody>
+            <tr>
+              <td className="border border-black p-1.5 font-bold bg-slate-50 w-24">Course Title:</td>
+              <td className="border border-black p-1.5 uppercase font-bold text-slate-900">{subject?.name || "—"}</td>
+              <td rowSpan={3} className="border border-black p-2 font-extrabold text-center text-lg w-28 align-middle" style={{ verticalAlign: "middle" }}>
+                {examTitle}
+              </td>
+              <td className="border border-black p-1.5 font-bold bg-slate-50 w-24">Course Code:</td>
+              <td className="border border-black p-1.5 font-mono font-bold text-slate-900">{subject?.code || "—"}</td>
+            </tr>
+            <tr>
+              <td className="border border-black p-1.5 font-bold bg-slate-50">Date:</td>
+              <td className="border border-black p-1.5">{paper?.examDate || "—"}</td>
+              <td className="border border-black p-1.5 font-bold">Academic Year:</td>
+              <td className="border border-black p-1.5 font-bold">{courseFile?.academicYear?.name || "—"}</td>
+            </tr>
+            <tr>
+              <td className="border border-black p-1.5 font-bold bg-slate-50">Time:</td>
+              <td className="border border-black p-1.5">2:30pm - 4:00pm</td>
+              <td className="border border-black p-1.5 font-bold bg-slate-50">Max. Marks:</td>
+              <td className="border border-black p-1.5 font-bold">{paper?.totalMarks || 30}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {matrixQuestions.length > 0 && (
+          <div className="mt-2">
+            <table className="w-full text-center border-collapse border border-black text-[9.5px]">
+              <tbody>
+                <tr className="border border-black font-bold bg-slate-100">
+                  <td className="border border-black p-1 font-bold w-20">Question no.</td>
+                  {matrixQuestions.map((item, idx) => (
+                    <td key={idx} className="border border-black p-1">{item.label}</td>
+                  ))}
+                  <td className="border border-black p-1 bg-slate-200">Total Marks</td>
+                </tr>
+                <tr className="border border-black font-bold">
+                  <td className="border border-black p-1 font-bold">Course Outcome</td>
+                  {matrixQuestions.map((item, idx) => (
+                    <td key={idx} className="border border-black p-1">{item.co}</td>
+                  ))}
+                  <td className="border border-black p-1 font-bold">—</td>
+                </tr>
+                <tr className="border border-black">
+                  <td className="border border-black p-1 font-bold">Marks allotted</td>
+                  {matrixQuestions.map((item, idx) => (
+                    <td key={idx} className="border border-black p-1 font-semibold">{item.marks}</td>
+                  ))}
+                  <td className="border border-black p-1 font-bold bg-slate-200">{totalMatrixMarks}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="text-center font-bold text-xs uppercase tracking-widest mt-4 decoration-solid underline underline-offset-4">
+          SCHEME OF EVALUATION
+        </div>
+
+        <div className="flex flex-col gap-4 mt-2 pl-4 text-xs">
+          {paper?.questions?.map((q: any) => {
+            const hasSubQuestions = q.subQuestions && q.subQuestions.length > 0;
+            if (!hasSubQuestions) return null;
+
+            return (
+              <div key={q.questionNo} className="flex gap-2">
+                <div className="w-5 font-bold text-right">{q.questionNo}.</div>
+                <div className="flex-grow flex flex-col gap-3">
+                  {q.subQuestions.map((sq: any) => {
+                    const key = `${q.questionNo}_${sq.subLabel}`;
+                    const items = rubrics[key] || [];
+
+                    return (
+                      <div key={sq.subLabel} className="flex flex-col gap-1.5">
+                        {items.map((item: any, idx: number) => {
+                          const isFirst = idx === 0;
+                          return (
+                            <div key={idx} className="flex justify-between items-start gap-4">
+                              <div className="flex gap-1.5 items-start">
+                                {isFirst ? (
+                                  <span className="font-bold w-4 text-left">{sq.subLabel}.</span>
+                                ) : (
+                                  <span className="w-4"></span>
+                                )}
+                                <span className="text-slate-800">{item.description || "—"}</span>
+                              </div>
+                              <span className="font-bold whitespace-nowrap text-slate-900">
+                                ({item.marks || 0}M)
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-12 flex justify-between items-center text-[10px] font-bold">
+          <div></div>
+          <div className="text-right flex flex-col items-center">
+            <div className="h-10"></div>
+            <span className="border-t border-black pt-1 px-4 uppercase">Signature of the Faculty</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Render question paper in portrait mode
@@ -901,74 +1192,117 @@ export default function CourseFilePrintPage() {
 
         {/* Lecture Plan Table */}
         <h4 className="font-bold text-xs text-slate-700 mb-2 uppercase">Unit-wise Lecture Plan & Topics List</h4>
-        {courseFile?.lecturePlan && Array.isArray(courseFile.lecturePlan) && courseFile.lecturePlan.length > 0 ? (
-          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
-            <thead>
-              <tr className="bg-slate-50 font-bold border-b border-black text-slate-700">
-                <th className="p-2 w-16 text-center">Unit</th>
-                <th className="p-2">Topics & Syllabus covered</th>
-                <th className="p-2 w-20 text-center">Periods</th>
-                <th className="p-2 w-28 text-center">Actual Date</th>
-                <th className="p-2 w-36">Teaching Aid</th>
-              </tr>
-            </thead>
-            <tbody>
-              {courseFile.lecturePlan.map((row: any, idx: number) => (
-                <tr key={idx} className="hover:bg-slate-50/50">
-                  <td className="p-2 font-bold bg-slate-50/30 text-center">{row.unit}</td>
-                  <td className="p-2">{row.topic}</td>
-                  <td className="p-2 text-center">{row.plannedPeriods}</td>
-                  <td className="p-2 text-center">{row.actualDate || "-"}</td>
-                  <td className="p-2">{row.aid || "Chalk & Board"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
-            <thead>
-              <tr className="bg-slate-50 font-bold border-b border-black text-slate-700">
-                <th className="p-2 w-16 text-center">Unit</th>
-                <th className="p-2">Topics & Syllabus covered</th>
-                <th className="p-2 w-20 text-center">Periods</th>
-                <th className="p-2 w-28 text-center">Actual Date</th>
-                <th className="p-2 w-36">Teaching Aid</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: 8 }).map((_, idx) => (
-                <tr key={idx}>
-                  <td className="p-4 text-center"></td>
-                  <td className="p-4"></td>
-                  <td className="p-4 text-center"></td>
-                  <td className="p-4 text-center"></td>
-                  <td className="p-4"></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {(() => {
+          const plan = parseLecturePlan(courseFile?.lecturePlan);
+          const getUnitHours = (unit: any) => unit.topics.reduce((sum: number, t: any) => sum + (t.plannedPeriods || 0), 0);
+          const getGrandTotalHours = () => plan.reduce((sum: number, u: any) => sum + getUnitHours(u), 0);
+          
+          let serialNum = 1;
+
+          return (
+            <div className="flex flex-col gap-4">
+              <table className="print-table w-full text-xs text-left border-collapse font-semibold">
+                <thead>
+                  <tr className="bg-slate-50 font-bold border-b border-black text-slate-700">
+                    <th className="p-2 w-16 text-center">S.No</th>
+                    <th className="p-2">Topics To be Covered</th>
+                    <th className="p-2 w-28 text-center">No.Of Hours</th>
+                    <th className="p-2 w-48 text-center font-bold">References</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plan.map((u: any, uIdx: number) => {
+                    const unitHours = getUnitHours(u);
+                    const rows: React.ReactNode[] = [];
+
+                    // 1. Add unit header row
+                    rows.push(
+                      <tr key={`header-${u.unit}`} className="bg-slate-100/70 border-y border-slate-300">
+                        <td colSpan={4} className="p-2 font-bold text-slate-900 uppercase text-center tracking-wider text-[11px]">
+                          {u.unit}: {u.title || "[No Unit Title Enterered]"}
+                        </td>
+                      </tr>
+                    );
+
+                    // 2. Add each topic row
+                    u.topics.forEach((t: any, tIdx: number) => {
+                      rows.push(
+                        <tr key={`topic-${u.unit}-${tIdx}`} className="hover:bg-slate-50/50">
+                          <td className="p-2 text-center text-slate-400 font-medium">{serialNum++}</td>
+                          <td className="p-2 text-slate-800">{t.topic || "—"}</td>
+                          <td className="p-2 text-center text-slate-800">{t.plannedPeriods || 1}</td>
+                          {tIdx === 0 ? (
+                            <td rowSpan={u.topics.length} className="p-2 text-center text-slate-800 border-l border-slate-200 font-medium align-middle" style={{ verticalAlign: "middle" }}>
+                              {u.references || "—"}
+                            </td>
+                          ) : null}
+                        </tr>
+                      );
+                    });
+
+                    // 3. Add unit total row
+                    rows.push(
+                      <tr key={`total-${u.unit}`} className="bg-slate-50/30 border-y border-slate-200">
+                        <td colSpan={2} className="p-2 font-bold text-slate-700 text-right uppercase tracking-wider">
+                          Total Hours for {u.unit}:
+                        </td>
+                        <td className="p-2 text-center font-bold text-slate-800">{unitHours}</td>
+                        <td className="p-2 bg-slate-50/10"></td>
+                      </tr>
+                    );
+
+                    return rows;
+                  })}
+                  
+                  {/* Grand total subject hours row */}
+                  <tr className="bg-slate-100 border-t border-black">
+                    <td colSpan={2} className="p-2.5 font-bold text-slate-900 text-right uppercase tracking-widest text-[10.5px]">
+                      Total Subject Hours:
+                    </td>
+                    <td className="p-2.5 text-center font-bold text-[11px] text-slate-950">{getGrandTotalHours()}</td>
+                    <td className="p-2.5 bg-slate-100"></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Syllabus completion date at the bottom */}
+              <div className="mt-4 text-xs font-bold text-slate-800 text-right italic tracking-wide">
+                Tentative date for completion of syllabus is {courseFile?.tentativeCompletionDate || "27.01.2024"}
+              </div>
+            </div>
+          );
+        })()}
       </PrintSection>
 
       {/* ========================================================================= */}
       {/* 6. STUDENT LIST */}
       {/* ========================================================================= */}
       <PrintSection title="6. Student Roster (Registered Students Ranks)">
-        <p className="text-xs text-slate-500 mb-4 font-semibold">Total Registered: {students.length} students</p>
-        <table className="print-table w-full text-xs text-left border-collapse font-semibold">
+        <p className="text-xs text-slate-500 mb-2 font-semibold">Total Registered: {students.length} students</p>
+        <table className="print-table tight-table w-full text-xs text-left border-collapse border border-black font-semibold">
           <thead>
-            <tr className="bg-slate-50 font-bold text-slate-700">
-              <th className="p-1.5 w-16 text-center">S.No</th>
-              <th className="p-1.5 w-40 text-center">Roll Number</th>
-              <th className="p-1.5 px-4">Student Full Name</th>
+            <tr className="bg-slate-100 font-bold border-b border-black text-slate-800 text-[10.5px]">
+              <th className="p-1 border-r border-black w-10 text-center">S.No</th>
+              <th className="p-1 border-r border-black w-24 text-center">Roll Number</th>
+              <th className="p-1 border-r border-black px-2">Student Full Name</th>
+              
+              <th className="p-1 border-r border-black w-10 text-center bg-slate-50/50">S.No</th>
+              <th className="p-1 border-r border-black w-24 text-center bg-slate-50/50">Roll Number</th>
+              <th className="p-1 px-2 bg-slate-50/50">Student Full Name</th>
             </tr>
           </thead>
           <tbody>
-            {students.map((student: any, idx: number) => (
-              <tr key={student.id}>
-                <td className="p-1.5 text-center">{idx + 1}</td>
-                <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
-                <td className="p-1.5 uppercase px-4">{student.name}</td>
+            {getStudentGridData(students).map((row, idx) => (
+              <tr key={idx} className="border-b border-slate-300 last:border-b-black text-[10.5px]">
+                {/* Left Student */}
+                <td className="p-1 text-center border-r border-slate-300">{row.left?.sNo || ""}</td>
+                <td className="p-1 font-mono font-bold uppercase text-center border-r border-slate-300">{row.left?.roll || ""}</td>
+                <td className="p-1 uppercase px-2 border-r border-black">{row.left?.name || ""}</td>
+                
+                {/* Right Student */}
+                <td className="p-1 text-center border-r border-slate-300 bg-slate-50/10">{row.right?.sNo || ""}</td>
+                <td className="p-1 font-mono font-bold uppercase text-center border-r border-slate-300 bg-slate-50/10">{row.right?.roll || ""}</td>
+                <td className="p-1 uppercase px-2 bg-slate-50/10">{row.right?.name || ""}</td>
               </tr>
             ))}
           </tbody>
@@ -1078,21 +1412,7 @@ export default function CourseFilePrintPage() {
       {/* 11. MID-I EVALUATION SCHEME */}
       {/* ========================================================================= */}
       <PrintSection title="11. MID-I Scheme of Evaluation">
-        {courseFile?.mid1SchemePath ? (
-          <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
-            <div>
-              <p className="text-emerald-700 font-bold mb-2">✅ MID-I Evaluation answer key has been uploaded</p>
-              <p className="text-slate-500 font-medium">Serving path: <a href={courseFile.mid1SchemePath} target="_blank" className="text-teal-600 underline font-semibold">{courseFile.mid1SchemePath}</a></p>
-            </div>
-          </div>
-        ) : (
-          <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 min-h-[70vh] flex flex-col justify-center items-center bg-slate-50/10">
-            <span className="font-extrabold text-sm text-slate-600 uppercase mb-2">🔑 [ ATTACH / INSERT MID-I EVALUATION SCHEME HERE ]</span>
-            <span className="text-xs text-slate-400 font-medium max-w-sm mt-1 leading-relaxed">
-              No scheme of evaluation answer key has been uploaded by the faculty. This page is left blank for a physical copy.
-            </span>
-          </div>
-        )}
+        {renderEvaluationScheme(courseFile?.mid1SchemeText || "", mid1Paper, "MID-I")}
       </PrintSection>
 
       {/* ========================================================================= */}
@@ -1100,37 +1420,39 @@ export default function CourseFilePrintPage() {
       {/* ========================================================================= */}
       <PrintSection title="12. MID-I Exam Marks List">
         {mid1Paper ? (
-          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
-            <thead>
-              <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="p-1.5 w-16 text-center">S.No</th>
-                <th className="p-1.5 w-36 text-center">Roll Number</th>
-                <th className="p-1.5 px-4">Student Full Name</th>
-                <th className="p-1.5 w-28 text-center">Marks Obtained</th>
-                <th className="p-1.5 w-28 text-center">Percentage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student: any, idx: number) => {
-                const total = mid1MarksMap[student.id] || 0;
-                const isAbs = mid1AbsentMap[student.id];
-                const pct = ((total / mid1Paper.totalMarks) * 100).toFixed(1);
-                return (
-                  <tr key={student.id} className={isAbs ? "bg-red-50/20" : ""}>
-                    <td className="p-1.5 text-center">{idx + 1}</td>
-                    <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
-                    <td className="p-1.5 uppercase px-4">{student.name}</td>
-                    <td className="p-1.5 text-center font-bold">
-                      {isAbs ? "Absent" : total}
-                    </td>
-                    <td className="p-1.5 text-center text-slate-500 font-medium">
-                      {isAbs ? "-" : `${pct}%`}
-                    </td>
+          <div className="flex flex-col gap-4">
+            <p className="text-[10px] text-slate-500 font-medium">
+              Marks displayed in a 5-column side-by-side grid format to save space. (AB = Absent)
+            </p>
+            <table className="print-table w-full text-xs text-center border-collapse border border-black font-semibold">
+              <thead>
+                <tr className="bg-slate-100 font-bold border-b border-black text-slate-855">
+                  {Array.from({ length: 5 }).map((_, c) => (
+                    <React.Fragment key={c}>
+                      <th className="p-1 border-r border-black w-24">Roll Number</th>
+                      <th className="p-1 border-black w-12" style={{ borderRight: c < 4 ? "1px solid black" : "none" }}>Marks</th>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {getMarksGridData(students, mid1MarksMap, mid1AbsentMap).map((row, rIdx) => (
+                  <tr key={rIdx} className="border-b border-slate-300 last:border-b-black">
+                    {row.map((cell, cIdx) => (
+                      <React.Fragment key={cIdx}>
+                        <td className="p-1 font-mono font-bold border-r border-slate-300 text-[10.5px] uppercase">
+                          {cell.roll || "—"}
+                        </td>
+                        <td className="p-1 font-bold text-[10.5px]" style={{ color: cell.marks === "AB" ? "red" : "inherit", borderRight: cIdx < 4 ? "1px solid #cbd5e1" : "none" }}>
+                          {cell.marks !== "" ? cell.marks : "—"}
+                        </td>
+                      </React.Fragment>
+                    ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="text-xs text-slate-500 italic">No marks entries recorded for MID-I exam.</p>
         )}
@@ -1245,21 +1567,7 @@ export default function CourseFilePrintPage() {
       {/* 16. MID-II EVALUATION SCHEME */}
       {/* ========================================================================= */}
       <PrintSection title="16. MID-II Scheme of Evaluation">
-        {courseFile?.mid2SchemePath ? (
-          <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
-            <div>
-              <p className="text-emerald-700 font-bold mb-2">✅ MID-II Evaluation answer key has been uploaded</p>
-              <p className="text-slate-500 font-medium">Serving path: <a href={courseFile.mid2SchemePath} target="_blank" className="text-teal-600 underline font-semibold">{courseFile.mid2SchemePath}</a></p>
-            </div>
-          </div>
-        ) : (
-          <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 min-h-[70vh] flex flex-col justify-center items-center bg-slate-50/10">
-            <span className="font-extrabold text-sm text-slate-600 uppercase mb-2">🔑 [ ATTACH / INSERT MID-II EVALUATION SCHEME HERE ]</span>
-            <span className="text-xs text-slate-400 font-medium max-w-sm mt-1 leading-relaxed">
-              No scheme of evaluation answer key has been uploaded by the faculty. This page is left blank for a physical copy.
-            </span>
-          </div>
-        )}
+        {renderEvaluationScheme(courseFile?.mid2SchemeText || "", mid2Paper, "MID-II")}
       </PrintSection>
 
       {/* ========================================================================= */}
@@ -1267,37 +1575,39 @@ export default function CourseFilePrintPage() {
       {/* ========================================================================= */}
       <PrintSection title="17. MID-II Exam Marks List">
         {mid2Paper ? (
-          <table className="print-table w-full text-xs text-left border-collapse font-semibold">
-            <thead>
-              <tr className="bg-slate-50 font-bold text-slate-700">
-                <th className="p-1.5 w-16 text-center">S.No</th>
-                <th className="p-1.5 w-36 text-center">Roll Number</th>
-                <th className="p-1.5 px-4">Student Full Name</th>
-                <th className="p-1.5 w-28 text-center">Marks Obtained</th>
-                <th className="p-1.5 w-28 text-center">Percentage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student: any, idx: number) => {
-                const total = mid2MarksMap[student.id] || 0;
-                const isAbs = mid2AbsentMap[student.id];
-                const pct = ((total / mid2Paper.totalMarks) * 100).toFixed(1);
-                return (
-                  <tr key={student.id} className={isAbs ? "bg-red-50/20" : ""}>
-                    <td className="p-1.5 text-center">{idx + 1}</td>
-                    <td className="p-1.5 font-bold uppercase text-center">{student.rollNumber}</td>
-                    <td className="p-1.5 uppercase px-4">{student.name}</td>
-                    <td className="p-1.5 text-center font-bold">
-                      {isAbs ? "Absent" : total}
-                    </td>
-                    <td className="p-1.5 text-center text-slate-500 font-medium">
-                      {isAbs ? "-" : `${pct}%`}
-                    </td>
+          <div className="flex flex-col gap-4">
+            <p className="text-[10px] text-slate-500 font-medium">
+              Marks displayed in a 5-column side-by-side grid format to save space. (AB = Absent)
+            </p>
+            <table className="print-table w-full text-xs text-center border-collapse border border-black font-semibold">
+              <thead>
+                <tr className="bg-slate-100 font-bold border-b border-black text-slate-855">
+                  {Array.from({ length: 5 }).map((_, c) => (
+                    <React.Fragment key={c}>
+                      <th className="p-1 border-r border-black w-24">Roll Number</th>
+                      <th className="p-1 border-black w-12" style={{ borderRight: c < 4 ? "1px solid black" : "none" }}>Marks</th>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {getMarksGridData(students, mid2MarksMap, mid2AbsentMap).map((row, rIdx) => (
+                  <tr key={rIdx} className="border-b border-slate-300 last:border-b-black">
+                    {row.map((cell, cIdx) => (
+                      <React.Fragment key={cIdx}>
+                        <td className="p-1 font-mono font-bold border-r border-slate-300 text-[10.5px] uppercase">
+                          {cell.roll || "—"}
+                        </td>
+                        <td className="p-1 font-bold text-[10.5px]" style={{ color: cell.marks === "AB" ? "red" : "inherit", borderRight: cIdx < 4 ? "1px solid #cbd5e1" : "none" }}>
+                          {cell.marks !== "" ? cell.marks : "—"}
+                        </td>
+                      </React.Fragment>
+                    ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="text-xs text-slate-500 italic">No marks entries recorded for MID-II exam.</p>
         )}
@@ -1843,6 +2153,10 @@ export default function CourseFilePrintPage() {
             text-align: left !important;
             font-size: 10px !important;
             color: #000000 !important;
+          }
+          table.print-table.tight-table th, table.print-table.tight-table td {
+            padding: 3px 6px !important;
+            font-size: 9px !important;
           }
           table.print-table th {
             background-color: #f1f5f9 !important;

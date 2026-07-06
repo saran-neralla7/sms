@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth"; // Assume authOptions is exported here, or we use getServerSession without it if App Router 
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,23 @@ export async function GET(req: NextRequest) {
 
         const username = session.user.username;
 
+        // Retrieve academic year from cookies
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+        if (!academicYearId) {
+            const currentYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+            if (currentYear) academicYearId = currentYear.id;
+        }
+
         // Find the faculty profile
         const faculty = await prisma.faculty.findFirst({
             where: { user: { username: username } },
             include: {
                 department: true,
                 FacultySubjectMapping: {
+                    where: {
+                        academicYearId: academicYearId || undefined
+                    },
                     include: {
                         subject: {
                             include: {
@@ -33,6 +45,7 @@ export async function GET(req: NextRequest) {
                 FeedbackResponse: {
                     where: {
                         form: {
+                            academicYearId: academicYearId || undefined,
                             OR: [
                                 { endDate: { lt: new Date() } },
                                 { isActive: false }
@@ -99,7 +112,9 @@ export async function GET(req: NextRequest) {
         let personalTimetable: any[] = [];
         if (personalOrConditions.length > 0) {
             personalTimetable = await prisma.timetable.findMany({
-                where: { OR: personalOrConditions },
+                where: { 
+                    OR: personalOrConditions
+                },
                 include: {
                     period: true,
                     subject: true,
@@ -114,7 +129,9 @@ export async function GET(req: NextRequest) {
         let sectionTimetables: any[] = [];
         if (sectionIds.length > 0) {
             sectionTimetables = await prisma.timetable.findMany({
-                where: { sectionId: { in: sectionIds } },
+                where: { 
+                    sectionId: { in: sectionIds }
+                },
                 include: {
                     period: true,
                     subject: true,

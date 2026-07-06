@@ -256,7 +256,10 @@ export async function POST(req: NextRequest) {
       academicCalendarPath,
       mid1SchemePath,
       mid2SchemePath,
-      prevPapersPaths
+      prevPapersPaths,
+      mid1SchemeText,
+      mid2SchemeText,
+      tentativeCompletionDate
     } = body;
 
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !subjectId || !facultyId) {
@@ -287,7 +290,10 @@ export async function POST(req: NextRequest) {
         academicCalendarPath,
         mid1SchemePath,
         mid2SchemePath,
-        prevPapersPaths
+        prevPapersPaths,
+        mid1SchemeText,
+        mid2SchemeText,
+        tentativeCompletionDate
       },
       create: {
         academicYearId,
@@ -304,7 +310,10 @@ export async function POST(req: NextRequest) {
         academicCalendarPath,
         mid1SchemePath,
         mid2SchemePath,
-        prevPapersPaths
+        prevPapersPaths,
+        mid1SchemeText,
+        mid2SchemeText,
+        tentativeCompletionDate
       }
     });
 

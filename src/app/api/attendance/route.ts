@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { logActivity } from "@/lib/logging";
+import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -95,6 +96,11 @@ export async function POST(request: Request) {
         // Get Academic Year: use passed academicYearId (from cookie) or fall back to isCurrent
         let resolvedAcademicYearId: string | null = academicYearId || null;
         if (!resolvedAcademicYearId) {
+            const cookieStore = await cookies();
+            const cookieYearId = cookieStore.get("academic-year-id")?.value;
+            resolvedAcademicYearId = cookieYearId || null;
+        }
+        if (!resolvedAcademicYearId) {
             const activeYear = await prisma.academicYear.findFirst({
                 where: { isCurrent: true }
             });
@@ -111,7 +117,8 @@ export async function POST(request: Request) {
                 year: String(year),
                 semester: String(semester),
                 isAlumni: false,  // exclude alumni from attendance
-                isLeftCollege: false
+                isLeftCollege: false,
+                isDetained: false
             },
             select: { rollNumber: true, sectionId: true, name: true, mobile: true, studentContactNumber: true }
         });

@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
           departmentId: paper.subject.departmentId,
           isAlumni: false,
           isLeftCollege: false,
+          isDetained: false,
         },
         select: {
           id: true,

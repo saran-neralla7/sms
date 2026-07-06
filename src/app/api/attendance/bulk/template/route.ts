@@ -40,7 +40,8 @@ export async function GET(request: Request) {
                 year,
                 semester,
                 isAlumni: false,
-                isLeftCollege: false
+                isLeftCollege: false,
+                isDetained: false
             },
             orderBy: { rollNumber: "asc" },
             select: { rollNumber: true, name: true }

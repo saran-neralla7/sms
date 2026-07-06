@@ -222,7 +222,8 @@ export async function POST(request: Request) {
                 semester,
                 sectionId,
                 isAlumni: false,
-                isLeftCollege: false
+                isLeftCollege: false,
+                isDetained: false
             },
             select: { rollNumber: true, name: true }
         });

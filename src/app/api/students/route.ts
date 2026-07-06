@@ -36,10 +36,12 @@ export async function GET(request: Request) {
 
     const showAlumni = searchParams.get("showAlumni") === "true";
     const showLeftCollege = searchParams.get("showLeftCollege") === "true";
+    const showDetained = searchParams.get("showDetained") === "true";
 
     const where: any = {
         isAlumni: showAlumni,
-        isLeftCollege: showLeftCollege
+        isLeftCollege: showLeftCollege,
+        isDetained: showDetained
     };
 
     if (year) where.year = year;
@@ -232,6 +234,10 @@ export async function POST(request: Request) {
                     isDetained: body.isDetained || false,
                     isLeftCollege: body.isLeftCollege || false,
                     originalBatchId: body.originalBatchId || null,
+                    detainedYear: body.detainedYear || null,
+                    detainedSemester: body.detainedSemester || null,
+                    rejoinedYear: body.rejoinedYear || null,
+                    rejoinedSemester: body.rejoinedSemester || null,
                     isLateralEntry: body.isLateralEntry || false,
                     // Extended Fields
                     hallTicketNumber: body.hallTicketNumber || null,
@@ -273,6 +279,10 @@ export async function POST(request: Request) {
                     isLeftCollege: body.isLeftCollege || false,
                     isLateralEntry: body.isLateralEntry || false,
                     originalBatchId: body.originalBatchId || null,
+                    detainedYear: body.detainedYear || null,
+                    detainedSemester: body.detainedSemester || null,
+                    rejoinedYear: body.rejoinedYear || null,
+                    rejoinedSemester: body.rejoinedSemester || null,
                     // Extended Fields
                     hallTicketNumber: body.hallTicketNumber || null,
                     eamcetRank: body.eamcetRank || null,
