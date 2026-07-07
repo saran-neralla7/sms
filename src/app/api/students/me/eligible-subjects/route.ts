@@ -32,9 +32,12 @@ export async function GET(request: Request) {
             // Fetch all subjects for this department, year, semester
             const subjects = await prisma.subject.findMany({
                 where: {
-                    departmentId: student.departmentId,
                     year: year,
-                    semester: semester
+                    semester: semester,
+                    OR: [
+                        { departmentId: student.departmentId },
+                        { students: { some: { id: student.id } } }
+                    ]
                 },
                 orderBy: { name: "asc" }
             });
@@ -56,9 +59,12 @@ export async function GET(request: Request) {
                 // so the student can select their backlogs manually
                 const allSubjects = await prisma.subject.findMany({
                     where: {
-                        departmentId: student.departmentId,
                         year: year,
-                        semester: semester
+                        semester: semester,
+                        OR: [
+                            { departmentId: student.departmentId },
+                            { students: { some: { id: student.id } } }
+                        ]
                     },
                     orderBy: { name: "asc" }
                 });
@@ -95,9 +101,12 @@ export async function GET(request: Request) {
             const failedSubjects = await prisma.subject.findMany({
                 where: {
                     code: { in: failedSubjectCodes },
-                    departmentId: student.departmentId,
                     year: year,
-                    semester: semester
+                    semester: semester,
+                    OR: [
+                        { departmentId: student.departmentId },
+                        { students: { some: { id: student.id } } }
+                    ]
                 },
                 orderBy: { name: "asc" }
             });

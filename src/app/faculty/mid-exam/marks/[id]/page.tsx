@@ -516,14 +516,16 @@ export default function MarksGridPage() {
                 </span>
               )}
 
-              <button
-                onClick={downloadExcel}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all"
-                title="Download marks spreadsheet offline"
-              >
-                <FaFileDownload className="text-green-600" />
-                Download Excel
-              </button>
+              {role === "ADMIN" && (
+                <button
+                  onClick={downloadExcel}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all"
+                  title="Download marks spreadsheet offline"
+                >
+                  <FaFileDownload className="text-green-600" />
+                  Download Excel
+                </button>
+              )}
 
               {canEdit && (
                 <>

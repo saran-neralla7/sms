@@ -61,6 +61,11 @@ interface Paper {
 export default function AdminMidExamDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isBSH = session?.user?.role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
+  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "DIRECTOR";
+
+  const [hideBulkDownload, setHideBulkDownload] = useState<boolean>(false);
+  const [updatingSettings, setUpdatingSettings] = useState<boolean>(false);
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<"dashboard" | "schemes" | "publish" | "reports" | "co-po-mapping" | "analysis">("dashboard");
@@ -71,6 +76,34 @@ export default function AdminMidExamDashboard() {
       setActiveTab(savedTab as any);
     }
   }, []);
+
+  const handleToggleHideBulkDownload = async () => {
+    if (updatingSettings) return;
+    setUpdatingSettings(true);
+    const newValue = !hideBulkDownload;
+    try {
+      const res = await fetch("/api/admin/system-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideBulkDownload: newValue })
+      });
+      if (res.ok) {
+        setHideBulkDownload(newValue);
+        showToast(
+          newValue 
+            ? "Bulk download hidden for non-admins." 
+            : "Bulk download unhidden for everyone.",
+          "success"
+        );
+      } else {
+        showToast("Failed to update setting.", "error");
+      }
+    } catch (e) {
+      showToast("Network error occurred.", "error");
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
 
   // Sync scrollbar refs & state
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -600,11 +633,13 @@ export default function AdminMidExamDashboard() {
     Promise.all([
       fetch("/api/academic-years").then(r => r.json()),
       fetch("/api/departments").then(r => r.json()),
-      fetch("/api/mid-exam/scheme").then(r => r.json())
-    ]).then(([ay, dept, sch]) => {
+      fetch("/api/mid-exam/scheme").then(r => r.json()),
+      fetch("/api/admin/system-settings").then(r => r.ok ? r.json() : { hideBulkDownload: false }).catch(() => ({ hideBulkDownload: false }))
+    ]).then(([ay, dept, sch, settings]) => {
       setAcademicYears(ay);
       setDepartments(dept);
       setSchemes(sch);
+      setHideBulkDownload(settings?.hideBulkDownload || false);
 
       const savedAY = sessionStorage.getItem("mid_exam_filter_ay");
       const currentAY = savedAY && ay.some((y: any) => y.id === savedAY)
@@ -2084,8 +2119,10 @@ export default function AdminMidExamDashboard() {
           secFolder.file(`Subject_Marks_Memo_${sub.code}_${safeSubName}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, subjectPDFBuffer);
         }
 
-        const excelBuffer = buildConsolidatedExcelBuffer(data);
-        secFolder.file(`Consolidated_Marks_Report_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.xlsx`, excelBuffer);
+        if (!isBSH) {
+          const excelBuffer = buildConsolidatedExcelBuffer(data);
+          secFolder.file(`Consolidated_Marks_Report_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.xlsx`, excelBuffer);
+        }
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -3196,6 +3233,32 @@ export default function AdminMidExamDashboard() {
                 </div>
               </div>
 
+              {/* System Settings Panel for Admin */}
+              {isAdmin && (
+                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                  <h3 className="text-lg font-bold text-slate-900">System Configuration</h3>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100 hover:shadow-sm transition-shadow">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-semibold text-slate-800">Hide Bulk Download Option</p>
+                      <p className="text-xs text-slate-500">When enabled, the bulk download option is hidden for all non-admin roles on the Reports page.</p>
+                    </div>
+                    <button
+                      onClick={handleToggleHideBulkDownload}
+                      disabled={updatingSettings}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                        hideBulkDownload ? "bg-blue-600" : "bg-slate-200"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          hideBulkDownload ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Recent activity grid */}
               <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Class Question Paper Status</h3>
@@ -3704,34 +3767,40 @@ export default function AdminMidExamDashboard() {
                 </div>
 
                 {/* Bulk Download Reports Card */}
-                <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 flex flex-col justify-between">
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-lg font-bold text-slate-900">Bulk Download Reports</h4>
-                      <p className="text-xs text-slate-500 font-medium">Export a ZIP file containing class-wise PDF reports and a consolidated Excel sheet.</p>
+                {(!hideBulkDownload || isAdmin) && (
+                  <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4 flex flex-col justify-between">
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-lg font-bold text-slate-900">Bulk Download Reports</h4>
+                        <p className="text-xs text-slate-500 font-medium">
+                          {isBSH
+                            ? "Export a ZIP file containing class-wise PDF reports."
+                            : "Export a ZIP file containing class-wise PDF reports and a consolidated Excel sheet."}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Download Scope</label>
+                        <select
+                          value={bulkDownloadScope}
+                          onChange={e => setBulkDownloadScope(e.target.value as "CURRENT" | "ALL")}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="CURRENT">Current Section Only</option>
+                          <option value="ALL">All Sections in Class</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Download Scope</label>
-                      <select
-                        value={bulkDownloadScope}
-                        onChange={e => setBulkDownloadScope(e.target.value as "CURRENT" | "ALL")}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="CURRENT">Current Section Only</option>
-                        <option value="ALL">All Sections in Class</option>
-                      </select>
-                    </div>
+                    <button
+                      onClick={handleBulkDownload}
+                      disabled={fetchingReport || bulkDownloading}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-xs font-semibold text-white hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 mt-auto"
+                    >
+                      {bulkDownloading ? <FaSpinner className="animate-spin" /> : <FaArchive />} Trigger Bulk Download
+                    </button>
                   </div>
-
-                  <button
-                    onClick={handleBulkDownload}
-                    disabled={fetchingReport || bulkDownloading}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-xs font-semibold text-white hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 mt-auto"
-                  >
-                    {bulkDownloading ? <FaSpinner className="animate-spin" /> : <FaArchive />} Trigger Bulk Download
-                  </button>
-                </div>
+                )}
               </div>
 
               {/* Report Preview Section */}
@@ -3798,13 +3867,15 @@ export default function AdminMidExamDashboard() {
                       )}
 
                       {/* Download Excel Trigger */}
-                      <button
-                        onClick={downloadExcel}
-                        disabled={fetchingAttendance}
-                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
-                      >
-                        <FaFileExcel size={12} /> Export Excel
-                      </button>
+                      {!isBSH && (
+                        <button
+                          onClick={downloadExcel}
+                          disabled={fetchingAttendance}
+                          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                        >
+                          <FaFileExcel size={12} /> Export Excel
+                        </button>
+                      )}
 
                       {/* Download PDF Trigger */}
                       <button
@@ -4558,12 +4629,14 @@ export default function AdminMidExamDashboard() {
                     </div>
                     {!analysisData.isComparison && (
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={downloadAnalysisExcel}
-                          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
-                        >
-                          <FaFileExcel size={12} /> Export Excel
-                        </button>
+                        {!isBSH && (
+                          <button
+                            onClick={downloadAnalysisExcel}
+                            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                          >
+                            <FaFileExcel size={12} /> Export Excel
+                          </button>
+                        )}
                         <button
                           onClick={() => generateAnalysisPDF(analysisData)}
                           className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"

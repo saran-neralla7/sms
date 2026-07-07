@@ -23,21 +23,28 @@ export async function GET(req: NextRequest) {
   try {
     const subject = await prisma.subject.findUnique({
       where: { id: subjectId },
-      select: { departmentId: true }
+      select: { departmentId: true, isElective: true }
     });
     if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
 
     // Get students
+    const studentWhereClause: any = {
+      year,
+      semester,
+      sectionId,
+      isAlumni: false,
+      isLeftCollege: false,
+      isDetained: false,
+    };
+
+    if (subject.isElective) {
+      studentWhereClause.subjects = { some: { id: subjectId } };
+    } else {
+      studentWhereClause.departmentId = subject.departmentId;
+    }
+
     const students = await prisma.student.findMany({
-      where: {
-        year,
-        semester,
-        sectionId,
-        departmentId: subject.departmentId,
-        isAlumni: false,
-        isLeftCollege: false,
-        isDetained: false,
-      },
+      where: studentWhereClause,
       select: { id: true, rollNumber: true, name: true },
       orderBy: { rollNumber: "asc" }
     });
@@ -96,14 +103,28 @@ export async function POST(req: NextRequest) {
 
     let saved = 0;
     for (const entry of entries) {
-      if (entry.marksObtained === null || entry.marksObtained === undefined) continue;
-
       // Resolve individual student's departmentId to satisfy the compound key constraint
       const student = await prisma.student.findUnique({
         where: { id: entry.studentId },
         select: { departmentId: true }
       });
       const resolvedDeptId = student?.departmentId || departmentId;
+
+      if (entry.marksObtained === null || entry.marksObtained === undefined) {
+        await prisma.assignmentMark.deleteMany({
+          where: {
+            academicYearId,
+            departmentId: resolvedDeptId,
+            year,
+            semester,
+            sectionId,
+            subjectId,
+            studentId: entry.studentId,
+          }
+        });
+        saved++;
+        continue;
+      }
 
       await prisma.assignmentMark.upsert({
         where: {

@@ -19,6 +19,8 @@ interface Student {
     status: "Present" | "Absent";
     sectionId: string; // Added for multi-section support
     section?: { name: string }; // Added for display
+    departmentId?: string;
+    department?: { id: string; name: string; code: string };
 }
 
 interface Meta {
@@ -31,7 +33,18 @@ export default function AttendancePage() {
     const router = useRouter();
 
     // -- VIEW MODE --
-    const [viewMode, setViewMode] = useState<"manual" | "bulk">("manual");
+    const [viewMode, setViewMode] = useState<"manual" | "elective" | "bulk">("manual");
+    const [electiveDeptFilter, setElectiveDeptFilter] = useState("");
+
+    // Clear state on viewMode change
+    useEffect(() => {
+        setStudents([]);
+        setMessage("");
+        setSelectedSubject("");
+        setSelectedSectionIds([]);
+        setSelectedLabBatch("");
+        setElectiveDeptFilter("");
+    }, [viewMode]);
 
     // -- SELECTIONS --
     const [departments, setDepartments] = useState<Meta[]>([]);
@@ -56,6 +69,7 @@ export default function AttendancePage() {
 
     // -- DATA --
     const [students, setStudents] = useState<Student[]>([]);
+    const displayedStudents = students.filter(s => viewMode !== "elective" || !electiveDeptFilter || s.departmentId === electiveDeptFilter);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const isSubmittingRef = useRef(false);
@@ -140,15 +154,36 @@ export default function AttendancePage() {
 
     // Load Subjects
     useEffect(() => {
-        if (selectedDept && year && semester) {
-            fetch(`/api/subjects?departmentId=${selectedDept}&year=${year}&semester=${semester}`)
-                .then(res => res.json())
-                .then(data => setSubjects(data))
-                .catch(err => console.error(err));
+        if (viewMode === "elective") {
+            if (year && semester) {
+                const userDept = (session?.user as any)?.departmentId;
+                const query = new URLSearchParams({
+                    year,
+                    semester,
+                    includeElectives: "true",
+                    ...(userDept ? { departmentId: userDept } : {})
+                });
+                fetch(`/api/subjects?${query.toString()}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        const filtered = Array.isArray(data) ? data.filter((s: any) => s.isElective || (s.type && s.type.toUpperCase().includes("ELECTIVE"))) : [];
+                        setSubjects(filtered);
+                    })
+                    .catch(err => console.error(err));
+            } else {
+                setSubjects([]);
+            }
         } else {
-            setSubjects([]);
+            if (selectedDept && year && semester) {
+                fetch(`/api/subjects?departmentId=${selectedDept}&year=${year}&semester=${semester}`)
+                    .then(res => res.json())
+                    .then(data => setSubjects(data))
+                    .catch(err => console.error(err));
+            } else {
+                setSubjects([]);
+            }
         }
-    }, [selectedDept, year, semester]);
+    }, [viewMode, selectedDept, year, semester, session]);
 
     // -- HANDLERS: MANUAL MODE --
 
@@ -173,7 +208,12 @@ export default function AttendancePage() {
         const role = (session?.user?.role || "").toUpperCase();
         const isAcademic = ["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes(role);
 
-        if (isAcademic) {
+        if (viewMode === "elective") {
+            if (!year || !semester || !selectedSubject || selectedPeriods.length === 0 || !date) {
+                setMessage("Please fill all required fields (Year, Sem, Open Elective Subject, Date, and at least one Period).");
+                return;
+            }
+        } else if (isAcademic) {
             if (!selectedDept || !year || !semester || selectedSectionIds.length === 0 || selectedPeriods.length === 0 || !date) {
                 setMessage("Please fill all required fields (Year, Sem, at least one Section, Date, and at least one Period).");
                 return;
@@ -230,15 +270,19 @@ export default function AttendancePage() {
         setMessage("");
 
         try {
-            const query = new URLSearchParams({
-                departmentId: selectedDept,
+            const queryParams: any = {
                 year,
                 semester,
-                sectionIds: selectedSectionIds.join(","), // Send all IDs
-                limit: "-1", // Fetch all students, no pagination
+                limit: "-1",
                 ...(selectedSubject ? { subjectId: selectedSubject } : {})
-            });
+            };
 
+            if (viewMode !== "elective") {
+                queryParams.departmentId = selectedDept;
+                queryParams.sectionIds = selectedSectionIds.join(",");
+            }
+
+            const query = new URLSearchParams(queryParams);
             const res = await fetch(`/api/students?${query.toString()}`);
             const data = await res.json();
             const studentList = data.data || data; // Handle pagination wrapper or direct array
@@ -247,7 +291,7 @@ export default function AttendancePage() {
                 let filtered = studentList;
                 // Filter by Lab Batch if selected (Only applies if single section ideally, 
                 // or if we filter students who have that labBatchId regardless of section)
-                if (selectedLabBatch) {
+                if (viewMode !== "elective" && selectedLabBatch) {
                     filtered = filtered.filter((s: any) => s.labBatchId === selectedLabBatch);
                 }
 
@@ -274,20 +318,28 @@ export default function AttendancePage() {
     };
 
     const markAll = (status: "Present" | "Absent") => {
-        setStudents(students.map(s => ({ ...s, status })));
+        setStudents(students.map(s => {
+            const isDisplayed = viewMode !== "elective" || !electiveDeptFilter || s.departmentId === electiveDeptFilter;
+            if (isDisplayed) {
+                return { ...s, status };
+            }
+            return s;
+        }));
     };
 
     const initiateSubmission = () => {
         if (students.length === 0) return;
 
-        // Check if students from all selected sections are present
-        const loadedSectionIds = new Set(students.map(s => s.sectionId));
-        const missingSections = selectedSectionIds.filter(id => !loadedSectionIds.has(id));
+        if (viewMode !== "elective") {
+            // Check if students from all selected sections are present
+            const loadedSectionIds = new Set(students.map(s => s.sectionId));
+            const missingSections = selectedSectionIds.filter(id => !loadedSectionIds.has(id));
 
-        if (missingSections.length > 0) {
-            const missingNames = sections.filter(s => missingSections.includes(s.id)).map(s => s.name).join(", ");
-            alert(`You have selected sections: ${missingNames}, but haven't loaded their students yet.\n\nPlease click "Load Students" to refresh the list.`);
-            return;
+            if (missingSections.length > 0) {
+                const missingNames = sections.filter(s => missingSections.includes(s.id)).map(s => s.name).join(", ");
+                alert(`You have selected sections: ${missingNames}, but haven't loaded their students yet.\n\nPlease click "Load Students" to refresh the list.`);
+                return;
+            }
         }
 
         // Calculate Stats
@@ -296,10 +348,16 @@ export default function AttendancePage() {
         const absent = total - present;
 
         // Get Names
-        const secNames = sections
-            .filter(s => selectedSectionIds.includes(s.id))
-            .map(s => s.name)
-            .join(", ");
+        let secNames = "";
+        if (viewMode === "elective") {
+            const studentSections = Array.from(new Set(students.map(s => s.section?.name || s.sectionId)));
+            secNames = studentSections.join(", ");
+        } else {
+            secNames = sections
+                .filter(s => selectedSectionIds.includes(s.id))
+                .map(s => s.name)
+                .join(", ");
+        }
 
         const subName = subjects.find(s => s.id === selectedSubject)?.name || "N/A";
         const pNames = periods.filter(p => selectedPeriods.includes(p.id)).map(p => p.name).join(", ");
@@ -335,10 +393,10 @@ export default function AttendancePage() {
                 year: summaryData.year,
                 semester: summaryData.semester,
                 // Pass IDs array
-                sectionIds: selectedSectionIds,
+                sectionIds: viewMode === "elective" ? Array.from(new Set(students.map(s => s.sectionId))) : selectedSectionIds,
                 // Pass single ID if just one (for legacy/completeness, optional)
-                sectionId: selectedSectionIds[0],
-                departmentId: selectedDept,
+                sectionId: viewMode === "elective" ? students[0]?.sectionId || "" : selectedSectionIds[0],
+                departmentId: viewMode === "elective" ? students[0]?.departmentId || "" : selectedDept,
                 subjectId: selectedSubject || null,
                 periodIds: selectedPeriods,
                 labBatchId: selectedLabBatch || null,
@@ -524,6 +582,12 @@ export default function AttendancePage() {
                     Manual Marking
                 </button>
                 <button
+                    onClick={() => setViewMode("elective")}
+                    className={`pb-2 text-sm font-semibold transition-colors ${viewMode === "elective" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                    Open Electives
+                </button>
+                <button
                     onClick={() => setViewMode("bulk")}
                     className={`pb-2 text-sm font-semibold transition-colors ${viewMode === "bulk" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
                 >
@@ -534,19 +598,21 @@ export default function AttendancePage() {
             <div className="grid gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
 
                 {/* SELECTORS (Common for both) */}
-                <div className="grid gap-4 md:grid-cols-4">
-                    <div>
-                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Department</label>
-                        <select
-                            value={selectedDept}
-                            onChange={(e) => setSelectedDept(e.target.value)}
-                            disabled={!["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) && !!(session?.user as any).departmentId}
-                            className={`block w-full rounded-md border border-slate-300 p-2 text-sm ${(!["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) && !!(session?.user as any).departmentId) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
-                        >
-                            <option value="">Select Dept</option>
-                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
-                    </div>
+                <div className={`grid gap-4 ${viewMode === "elective" ? "md:grid-cols-2" : "md:grid-cols-4"}`}>
+                    {viewMode !== "elective" && (
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Department</label>
+                            <select
+                                value={selectedDept}
+                                onChange={(e) => setSelectedDept(e.target.value)}
+                                disabled={!["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) && !!(session?.user as any).departmentId}
+                                className={`block w-full rounded-md border border-slate-300 p-2 text-sm ${(!["ADMIN", "DIRECTOR", "PRINCIPAL", "FACULTY", "HOD"].includes((session?.user?.role || "").toUpperCase()) && !!(session?.user as any).departmentId) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                            >
+                                <option value="">Select Dept</option>
+                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                    )}
                     <div>
                         <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Year</label>
                         <select
@@ -567,27 +633,29 @@ export default function AttendancePage() {
                             {[1, 2].map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
-                    <div className="md:col-span-1">
-                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Sections (Multi-Select)</label>
-                        <div className="flex flex-wrap gap-2 rounded-md border border-slate-300 p-2 min-h-[42px] bg-white">
-                            {sections.length === 0 && <span className="text-xs text-slate-400">Select Year/Sem first</span>}
-                            {sections.map(s => (
-                                <button
-                                    key={s.id}
-                                    onClick={() => handleSectionToggle(s.id)}
-                                    className={`rounded px-2 py-0.5 text-xs font-bold transition-all ${selectedSectionIds.includes(s.id)
-                                        ? "bg-blue-600 text-white shadow-sm"
-                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                        }`}
-                                >
-                                    {s.name}
-                                </button>
-                            ))}
+                    {viewMode !== "elective" && (
+                        <div className="md:col-span-1">
+                            <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Sections (Multi-Select)</label>
+                            <div className="flex flex-wrap gap-2 rounded-md border border-slate-300 p-2 min-h-[42px] bg-white">
+                                {sections.length === 0 && <span className="text-xs text-slate-400">Select Year/Sem first</span>}
+                                {sections.map(s => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => handleSectionToggle(s.id)}
+                                        className={`rounded px-2 py-0.5 text-xs font-bold transition-all ${selectedSectionIds.includes(s.id)
+                                            ? "bg-blue-600 text-white shadow-sm"
+                                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                            }`}
+                                    >
+                                        {s.name}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
-                {viewMode === "manual" ? (
+                {viewMode === "manual" || viewMode === "elective" ? (
                     /* MANUAL MODE UI */
                     <>
                         <div className="grid gap-4 md:grid-cols-3 bg-slate-50 p-4 rounded-lg">
@@ -692,7 +760,27 @@ export default function AttendancePage() {
                         {students.length > 0 && (
                             <div className="mt-6 animate-in fade-in">
                                 <div className="mb-4 flex items-center justify-between">
-                                    <h3 className="font-bold text-slate-800">Student List ({students.length})</h3>
+                                    <h3 className="font-bold text-slate-800">
+                                        Student List ({displayedStudents.length === students.length ? students.length : `${displayedStudents.length} / ${students.length}`})
+                                    </h3>
+
+                                    {/* Department Filter for Electives */}
+                                    {viewMode === "elective" && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-semibold text-slate-500 uppercase">Filter Dept:</span>
+                                            <select
+                                                value={electiveDeptFilter}
+                                                onChange={(e) => setElectiveDeptFilter(e.target.value)}
+                                                className="rounded-md border border-slate-300 px-2 py-1 text-xs bg-white text-slate-700 font-medium"
+                                            >
+                                                <option value="">All Departments</option>
+                                                {departments.map(d => (
+                                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
                                     <div className="flex gap-2 text-sm">
                                         <button onClick={() => markAll("Present")} className="text-green-600 hover:underline">All Present</button>
                                         <span className="text-slate-300">|</span>
@@ -702,7 +790,7 @@ export default function AttendancePage() {
 
                                 {/* CARD GRID LAYOUT */}
                                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                                    {students.map(s => (
+                                    {displayedStudents.map(s => (
                                         <div
                                             key={s.id}
                                             onClick={() => toggleStudentStatus(s.id)}
@@ -715,7 +803,7 @@ export default function AttendancePage() {
                                                 {s.rollNumber.slice(-3) || s.rollNumber}
                                             </p>
                                             <p className="mt-1 truncate text-xs font-medium text-slate-500" title={s.name}>
-                                                {s.name} <span className="text-slate-300">({s.section?.name})</span>
+                                                {s.name} <span className="text-slate-400 font-semibold">({s.department?.code || s.department?.name || "N/A"}-{s.section?.name || "N/A"})</span>
                                             </p>
                                             <div className="mt-2 flex justify-center">
                                                 {s.status === "Absent" ? (

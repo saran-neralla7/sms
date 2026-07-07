@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { departmentId, year, semester, sectionId, entries } = body;
+        const { departmentId, year, semester, sectionId, entries, activationDate } = body;
 
         if (!departmentId || !year || !semester || !sectionId || !entries) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -88,7 +88,11 @@ export async function POST(request: Request) {
             }
         }
 
-        const now = new Date();
+        let activeDate = new Date();
+        if (activationDate) {
+            const [y, m, d] = activationDate.split("-").map(Number);
+            activeDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+        }
 
         // Wrap in transaction to ensure consistency
         await prisma.$transaction(async (tx) => {
@@ -99,15 +103,13 @@ export async function POST(request: Request) {
                     validTo: null
                 },
                 data: {
-                    validTo: now
+                    validTo: activeDate
                 }
             });
 
             // Insert new timetable entries
-            // The frontend now sends entries as an array of structured mappings per period block
             const recordsToInsert: any[] = [];
             for (const entry of entries) {
-                // entry contains dayOfWeek, periodId, and an array of 'blocks'
                 for (const block of entry.blocks) {
                     recordsToInsert.push({
                         departmentId,
@@ -121,7 +123,7 @@ export async function POST(request: Request) {
                         electiveSlotId: block.electiveSlotId || null,
                         isLab: block.isLab || false,
                         isLunch: block.isLunch || false,
-                        validFrom: now,
+                        validFrom: activeDate,
                         validTo: null
                     });
                 }

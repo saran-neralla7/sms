@@ -38,6 +38,18 @@ export async function GET(request: Request) {
     const showLeftCollege = searchParams.get("showLeftCollege") === "true";
     const showDetained = searchParams.get("showDetained") === "true";
 
+    // Check if subject is elective
+    let isElective = false;
+    if (subjectId) {
+        const subjectInfo = await prisma.subject.findUnique({
+            where: { id: subjectId },
+            select: { isElective: true, type: true }
+        });
+        if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
+            isElective = true;
+        }
+    }
+
     const where: any = {
         isAlumni: showAlumni,
         isLeftCollege: showLeftCollege,
@@ -47,11 +59,12 @@ export async function GET(request: Request) {
     if (year) where.year = year;
     if (semester) where.semester = semester;
 
-
-    if (sectionIds) {
-        where.sectionId = { in: sectionIds.split(",") };
-    } else if (sectionId) {
-        where.sectionId = sectionId;
+    if (!isElective) {
+        if (sectionIds) {
+            where.sectionId = { in: sectionIds.split(",") };
+        } else if (sectionId) {
+            where.sectionId = sectionId;
+        }
     }
 
     const batchId = searchParams.get("batchId");
@@ -59,21 +72,12 @@ export async function GET(request: Request) {
         where.batchId = batchId;
     }
 
-    if (subjectId) {
-        // Only apply explicit subject filtering if the subject is an Elective.
-        // Core subjects implicitly apply to the entire section, so they might not be manually mapped in StudentToSubject.
-        const subjectInfo = await prisma.subject.findUnique({
-            where: { id: subjectId },
-            select: { isElective: true, type: true }
-        });
-
-        if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
-            where.subjects = {
-                some: {
-                    id: subjectId
-                }
-            };
-        }
+    if (isElective && subjectId) {
+        where.subjects = {
+            some: {
+                id: subjectId
+            }
+        };
     }
 
     // Search Query Support (Server-Side)
@@ -98,21 +102,20 @@ export async function GET(request: Request) {
         where.year = "1";
     }
 
-    const queryDeptId = searchParams.get("departmentId");
+    if (!isElective) {
+        const queryDeptId = searchParams.get("departmentId");
 
-    if (queryDeptId) {
-        // If explicitly requested, use it (Allowed for all roles now to support BSH/Cross-dept attendance)
-        where.departmentId = queryDeptId;
-    } else {
-        // Default behavior if no department specified
-        if (isGlobalAdmin || isBSH) {
-            // Admin and BSH HOD see all if no filter
+        if (queryDeptId) {
+            where.departmentId = queryDeptId;
         } else {
-            // Faculty/HOD defaults to their own department
-            if (userDeptId) {
-                where.departmentId = userDeptId;
+            if (isGlobalAdmin || isBSH) {
+                // Admin and BSH HOD see all if no filter
             } else {
-                return NextResponse.json({ error: "User has no department assigned" }, { status: 403 });
+                if (userDeptId) {
+                    where.departmentId = userDeptId;
+                } else {
+                    return NextResponse.json({ error: "User has no department assigned" }, { status: 403 });
+                }
             }
         }
     }

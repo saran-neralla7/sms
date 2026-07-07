@@ -23,21 +23,28 @@ export async function GET(req: NextRequest) {
   try {
     const subject = await prisma.subject.findUnique({
       where: { id: subjectId },
-      select: { departmentId: true }
+      select: { departmentId: true, isElective: true }
     });
     if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
 
     // Get active students mapped to this section & subject department
+    const studentWhereClause: any = {
+      year,
+      semester,
+      sectionId,
+      isAlumni: false,
+      isLeftCollege: false,
+      isDetained: false,
+    };
+
+    if (subject.isElective) {
+      studentWhereClause.subjects = { some: { id: subjectId } };
+    } else {
+      studentWhereClause.departmentId = subject.departmentId;
+    }
+
     const students = await prisma.student.findMany({
-      where: {
-        year,
-        semester,
-        sectionId,
-        departmentId: subject.departmentId,
-        isAlumni: false,
-        isLeftCollege: false,
-        isDetained: false,
-      },
+      where: studentWhereClause,
       select: { id: true, rollNumber: true, name: true },
       orderBy: { rollNumber: "asc" }
     });

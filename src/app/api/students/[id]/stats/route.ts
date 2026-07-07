@@ -36,7 +36,10 @@ export async function GET(
             where: {
                 year: targetYear,
                 semester: targetSemester,
-                departmentId: student.departmentId
+                OR: [
+                    { departmentId: student.departmentId },
+                    { students: { some: { id: student.id } } }
+                ]
             }
         });
 
@@ -50,15 +53,21 @@ export async function GET(
         // If looking at past, we ignore sectionId to account for section changes/merges.
         const isCurrentContext = targetYear === student.year && targetSemester === student.semester;
 
+        const orConditions: any[] = [
+            {
+                departmentId: student.departmentId,
+                ...(isCurrentContext && student.sectionId ? { sectionId: student.sectionId } : {})
+            },
+            {
+                details: { contains: student.rollNumber }
+            }
+        ];
+
         const whereClause: any = {
             year: targetYear,
             semester: targetSemester,
-            departmentId: student.departmentId,
+            OR: orConditions
         };
-
-        if (isCurrentContext) {
-            whereClause.sectionId = student.sectionId;
-        }
 
         if (startDate && endDate) {
             whereClause.date = {

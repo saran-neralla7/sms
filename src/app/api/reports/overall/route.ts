@@ -24,12 +24,15 @@ export async function GET(request: Request) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59);
 
-        // 1. Fetch all subjects for this context
+        // 1. Fetch all subjects for this context (core + electives)
         const subjects = await prisma.subject.findMany({
             where: {
                 year,
                 semester,
-                departmentId: departmentId || undefined
+                OR: [
+                    { departmentId: departmentId || undefined },
+                    { isElective: true }
+                ]
             },
             orderBy: { name: 'asc' }
         });

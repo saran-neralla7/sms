@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FaCalendarAlt, FaSave, FaFilter, FaClock, FaCheck, FaExclamationTriangle, FaUtensils } from "react-icons/fa";
+import { FaCalendarAlt, FaSave, FaFilter, FaClock, FaCheck, FaExclamationTriangle, FaUtensils, FaDownload, FaUpload } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import { Department, Section, Subject, Period } from "@/types";
 
@@ -29,6 +29,14 @@ export default function TimetablesPage() {
     const [hasLoaded, setHasLoaded] = useState(false);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
+    const [electiveSlots, setElectiveSlots] = useState<any[]>([]);
+    const [activationDate, setActivationDate] = useState(() => {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, "0");
+        const dd = String(today.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    });
 
     // gridData maps `${dayOfWeek}-${periodId}` to an array of blocks: [{ subjectId, labBatchId, isLunch, isLab }]
     const [gridData, setGridData] = useState<Record<string, Array<{ subjectId: string | null, labBatchId: string | null, electiveSlotId: string | null, isLunch: boolean, isLab: boolean }>>>({});
@@ -75,12 +83,13 @@ export default function TimetablesPage() {
         setStatus({ type: null, message: "" });
 
         try {
-            // Fetch periods, subjects, current active timetable, and lab batches in parallel
-            const [periodsRes, subjectsRes, timetableRes, batchesRes] = await Promise.all([
+            // Fetch periods, subjects, current active timetable, lab batches, and elective slots in parallel
+            const [periodsRes, subjectsRes, timetableRes, batchesRes, slotsRes] = await Promise.all([
                 fetch("/api/periods"),
                 fetch(`/api/subjects?departmentId=${departmentId}&year=${year}&semester=${semester}`),
                 fetch(`/api/timetables?sectionId=${sectionId}`),
-                fetch(`/api/sections/${sectionId}/batches?departmentId=${departmentId}&year=${year}&semester=${semester}`)
+                fetch(`/api/sections/${sectionId}/batches?departmentId=${departmentId}&year=${year}&semester=${semester}`),
+                fetch("/api/elective-slots")
             ]);
 
             if (periodsRes.ok && subjectsRes.ok && timetableRes.ok) {
@@ -91,6 +100,11 @@ export default function TimetablesPage() {
                 if (batchesRes?.ok) {
                     const b = await batchesRes.json();
                     setLabBatches(b.batches || []);
+                }
+
+                if (slotsRes?.ok) {
+                    const s = await slotsRes.json();
+                    setElectiveSlots(s || []);
                 }
 
                 // Sort periods by order
@@ -128,7 +142,7 @@ export default function TimetablesPage() {
         }
     };
 
-    const handleCellChange = (day: number, periodId: string, index: number, type: "subjectId" | "labBatchId" | "isLunch" | "remove" | "add", value?: any) => {
+    const handleCellChange = (day: number, periodId: string, index: number, type: "subjectId" | "labBatchId" | "isLunch" | "remove" | "add" | "electiveSlotId", value?: any) => {
         const key = `${day}:${periodId}`;
         setGridData((prev) => {
             const currentBlocks = prev[key] && prev[key].length > 0 
@@ -144,9 +158,13 @@ export default function TimetablesPage() {
 
                 if (type === "isLunch") {
                     updated.isLunch = value;
-                    if (value) updated.subjectId = ""; // Clear subject if marked as lunch
+                    if (value) {
+                        updated.subjectId = "";
+                        updated.electiveSlotId = "";
+                    }
                 } else if (type === "subjectId") {
                     updated.subjectId = value;
+                    updated.electiveSlotId = "";
                     if (value) updated.isLunch = false; // Clear lunch if subject selected
                     // Auto-flag isLab if the subject name suggests it
                     const subject = subjects.find(s => s.id === value);
@@ -154,6 +172,12 @@ export default function TimetablesPage() {
                         updated.isLab = subject.type.toUpperCase() === "LAB" || subject.name.toLowerCase().includes("lab");
                         if (!updated.isLab) updated.labBatchId = ""; // Clear lab batch if not a lab
                     }
+                } else if (type === "electiveSlotId") {
+                    updated.electiveSlotId = value;
+                    updated.subjectId = "";
+                    updated.isLunch = false;
+                    updated.isLab = false;
+                    updated.labBatchId = "";
                 } else if (type === "labBatchId") {
                     updated.labBatchId = value || null;
                 }
@@ -196,7 +220,8 @@ export default function TimetablesPage() {
                 year,
                 semester,
                 sectionId,
-                entries
+                entries,
+                activationDate
             };
 
             const res = await fetch("/api/timetables", {
@@ -217,6 +242,48 @@ export default function TimetablesPage() {
             setStatus({ type: "error", message: "An error occurred while saving." });
         } finally {
             setSaving(false);
+        }
+    };
+
+    const downloadTemplate = () => {
+        if (!departmentId || !year || !semester || !sectionId) return;
+        window.open(`/api/timetables/bulk/template?departmentId=${departmentId}&year=${year}&semester=${semester}&sectionId=${sectionId}`);
+    };
+
+    const handleUploadExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        setStatus({ type: null, message: "" });
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("departmentId", departmentId);
+        formData.append("year", year);
+        formData.append("semester", semester);
+        formData.append("sectionId", sectionId);
+        formData.append("activationDate", activationDate);
+
+        try {
+            const res = await fetch("/api/timetables/bulk/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: "success", message: data.message || "Timetable imported successfully!" });
+                loadConfiguration();
+            } else {
+                setStatus({ type: "error", message: data.error || "Failed to upload timetable." });
+            }
+        } catch (error) {
+            console.error(error);
+            setStatus({ type: "error", message: "An error occurred during upload." });
+        } finally {
+            setLoading(false);
+            e.target.value = "";
         }
     };
 
@@ -316,24 +383,71 @@ export default function TimetablesPage() {
                         </button>
                     </div>
                 </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                    <div className="text-xs text-slate-500">
+                        {departmentId && year && semester && sectionId ? "Ready to load, download, or upload." : "Select all filters to unlock template downloading and Excel uploading."}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                        {departmentId && year && semester && sectionId && (
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-slate-500">Activation Date:</label>
+                                <input
+                                    type="date"
+                                    value={activationDate}
+                                    onChange={(e) => setActivationDate(e.target.value)}
+                                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs outline-none focus:border-orange-500"
+                                />
+                            </div>
+                        )}
+                        <button
+                            onClick={downloadTemplate}
+                            disabled={!departmentId || !year || !semester || !sectionId}
+                            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            <FaDownload /> Download Template
+                        </button>
+                        <label className={`flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm cursor-pointer transition-colors hover:bg-emerald-700 ${(!departmentId || !year || !semester || !sectionId) ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
+                            <FaUpload /> Upload Excel
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                onChange={handleUploadExcel}
+                                disabled={!departmentId || !year || !semester || !sectionId}
+                                className="hidden"
+                            />
+                        </label>
+                    </div>
+                </div>
             </div>
 
             {/* Grid UI */}
             {hasLoaded && (
                 <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden text-sm">
                     {/* Toolbar */}
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+                    <div className="flex flex-wrap items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4 gap-4">
                         <div className="font-semibold text-slate-700">
                             Current Configuration
                         </div>
-                        <button
-                            onClick={saveTimetable}
-                            disabled={saving}
-                            className="flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-2 font-bold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:opacity-50"
-                        >
-                            {saving ? <LogoSpinner /> : <FaSave />}
-                            Publish New Version
-                        </button>
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-slate-500">Activation Date:</label>
+                                <input
+                                    type="date"
+                                    value={activationDate}
+                                    onChange={(e) => setActivationDate(e.target.value)}
+                                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-orange-500"
+                                />
+                            </div>
+                            <button
+                                onClick={saveTimetable}
+                                disabled={saving}
+                                className="flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-2 font-bold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:opacity-50"
+                            >
+                                {saving ? <LogoSpinner /> : <FaSave />}
+                                Publish New Version
+                            </button>
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto p-6">
@@ -369,11 +483,12 @@ export default function TimetablesPage() {
                                                     ? gridData[key]
                                                     : [{ subjectId: "", labBatchId: "", electiveSlotId: "", isLunch: false, isLab: false }];
 
-                                                // If any block in this cell is marked as lunch, we style the whole cell
+                                                // If any block in this cell is marked as lunch or elective slot, we style the cell
                                                 const isCellLunch = cellBlocks.some(b => b.isLunch);
+                                                const isCellElective = cellBlocks.some(b => b.electiveSlotId);
 
                                                 return (
-                                                    <td key={period.id} className={`p-2 border border-slate-200 align-top min-w-[200px] ${isCellLunch ? 'bg-orange-50/50' : ''}`}>
+                                                    <td key={period.id} className={`p-2 border border-slate-200 align-top min-w-[200px] ${isCellLunch ? 'bg-orange-50/50' : isCellElective ? 'bg-indigo-50/50' : ''}`}>
                                                         <div className="flex flex-col gap-3">
                                                             {cellBlocks.map((block, index) => (
                                                                 <div key={index} className="flex flex-col gap-1 relative rounded border border-slate-100 bg-white p-2 shadow-sm">
@@ -389,12 +504,15 @@ export default function TimetablesPage() {
                                                                     )}
 
                                                                     <select
-                                                                        className={`w-full rounded-md border text-xs outline-none focus:border-orange-500 ${block.isLunch ? 'border-orange-300 bg-orange-50 text-orange-700 font-semibold p-2' : 'border-slate-300 bg-white p-2'}`}
-                                                                        value={block.isLunch ? "LUNCH" : (block.subjectId || "")}
+                                                                        className={`w-full rounded-md border text-xs outline-none focus:border-orange-500 ${block.isLunch ? 'border-orange-300 bg-orange-50 text-orange-700 font-semibold p-2' : block.electiveSlotId ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold p-2' : 'border-slate-300 bg-white p-2'}`}
+                                                                        value={block.isLunch ? "LUNCH" : (block.electiveSlotId ? `ELECTIVE_SLOT:${block.electiveSlotId}` : (block.subjectId || ""))}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value;
                                                                             if (val === "LUNCH") {
                                                                                 handleCellChange(day.id, period.id, index, "isLunch", true);
+                                                                            } else if (val.startsWith("ELECTIVE_SLOT:")) {
+                                                                                const slotId = val.split(":")[1];
+                                                                                handleCellChange(day.id, period.id, index, "electiveSlotId", slotId);
                                                                             } else {
                                                                                 handleCellChange(day.id, period.id, index, "subjectId", val);
                                                                             }
@@ -402,11 +520,24 @@ export default function TimetablesPage() {
                                                                     >
                                                                         <option value="">-- Empty --</option>
                                                                         <option value="LUNCH">🍕 Lunch Break</option>
-                                                                        {subjects.map((sub) => (
-                                                                            <option key={sub.id} value={sub.id}>
-                                                                                {sub.shortName || sub.name}
-                                                                            </option>
-                                                                        ))}
+                                                                        {subjects.length > 0 && (
+                                                                            <optgroup label="Subjects">
+                                                                                {subjects.map((sub) => (
+                                                                                    <option key={sub.id} value={sub.id}>
+                                                                                        {sub.shortName || sub.name}
+                                                                                    </option>
+                                                                                ))}
+                                                                            </optgroup>
+                                                                        )}
+                                                                        {electiveSlots.length > 0 && (
+                                                                            <optgroup label="Elective Slots">
+                                                                                {electiveSlots.map((slot) => (
+                                                                                    <option key={slot.id} value={`ELECTIVE_SLOT:${slot.id}`}>
+                                                                                        {slot.name}
+                                                                                    </option>
+                                                                                ))}
+                                                                            </optgroup>
+                                                                        )}
                                                                     </select>
 
                                                                     {block.isLab && labBatches.length > 0 && (

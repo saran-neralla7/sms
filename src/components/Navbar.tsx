@@ -62,7 +62,7 @@ export default function Navbar({ years = [], currentYearId }: Props) {
 
                         {/* Global Academic Year Selector - HIDE for SMS User and Students */}
                         {(session.user as any).role !== "SMS_USER" && (session.user as any).role !== "STUDENT" && (
-                            <div className="hidden md:block">
+                            <div className="flex items-center">
                                 <AcademicYearSelector years={years} currentYearId={currentYearId} />
                             </div>
                         )}

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
-  FaArrowLeft, FaSave, FaCheck, FaSpinner, FaClipboardList, FaInfoCircle
+  FaArrowLeft, FaSave, FaCheck, FaSpinner, FaClipboardList, FaInfoCircle, FaTimes
 } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 
@@ -40,6 +40,10 @@ function AssignmentMarksContent() {
   // Keyboard navigation refs
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  // Track last saved values for auto-save comparison
+  const lastSavedMarksRef = useRef<Record<string, number | null>>({});
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -57,7 +61,15 @@ function AssignmentMarksContent() {
 
       if (marksRes.ok) {
         const data = await marksRes.json();
-        setRows(data.rows || []);
+        const rowsData = data.rows || [];
+        setRows(rowsData);
+
+        // Populate the last saved marks ref
+        const saved: Record<string, number | null> = {};
+        rowsData.forEach((row: any) => {
+          saved[row.studentId] = row.marksObtained;
+        });
+        lastSavedMarksRef.current = saved;
       }
       if (subjectRes.ok) {
         const sub = await subjectRes.json();
@@ -75,8 +87,11 @@ function AssignmentMarksContent() {
     }
   }, [subjectId, sectionId, academicYearId, year, semester, session]);
 
+  const initialLoadedRef = useRef(false);
+
   useEffect(() => {
-    if (session) {
+    if (session && !initialLoadedRef.current) {
+      initialLoadedRef.current = true;
       loadData();
     }
   }, [session, loadData]);
@@ -86,6 +101,61 @@ function AssignmentMarksContent() {
     setRows(prev =>
       prev.map(row => (row.studentId === studentId ? { ...row, marksObtained: val } : row))
     );
+  };
+
+  const handleAutoSave = async (studentId: string, value: string) => {
+    const val = value === "" ? null : parseFloat(value);
+    const row = rows.find(r => r.studentId === studentId);
+    if (!row) return;
+
+    // Only save if the value has changed
+    const lastVal = lastSavedMarksRef.current[studentId];
+    if (val === lastVal) return;
+
+    // Validate marks before auto-saving
+    if (val !== null && (val < 0 || val > row.maxMarks)) {
+      showToast(`Marks for ${row.rollNumber} must be between 0 and ${row.maxMarks}`, "error");
+      return;
+    }
+
+    setAutoSaveStatus("saving");
+    try {
+      const entry = {
+        studentId,
+        marksObtained: val,
+        maxMarks: row.maxMarks,
+        rollNumber: row.rollNumber
+      };
+
+      const res = await fetch("/api/mid-exam/assignment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          academicYearId,
+          departmentId: (session?.user as any).departmentId,
+          year,
+          semester,
+          sectionId,
+          subjectId,
+          entries: [entry],
+          isDraft: true,
+        })
+      });
+
+      if (res.ok) {
+        lastSavedMarksRef.current[studentId] = val;
+        setRows(prev =>
+          prev.map(r => r.studentId === studentId ? { ...r, isDraft: true } : r)
+        );
+        setAutoSaveStatus("success");
+        setTimeout(() => setAutoSaveStatus("idle"), 3000);
+      } else {
+        setAutoSaveStatus("error");
+      }
+    } catch (e) {
+      console.error(e);
+      setAutoSaveStatus("error");
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
@@ -140,6 +210,14 @@ function AssignmentMarksContent() {
 
       if (res.ok) {
         showToast(isDraft ? "Draft saved successfully!" : "Marks submitted successfully!", "success");
+        
+        // Update the lastSavedMarksRef
+        const saved: Record<string, number | null> = {};
+        rows.forEach(r => {
+          saved[r.studentId] = r.marksObtained;
+        });
+        lastSavedMarksRef.current = saved;
+
         await loadData();
       } else {
         const data = await res.json();
@@ -172,11 +250,39 @@ function AssignmentMarksContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              {/* Auto Save Status */}
+              <div className="text-xs font-medium flex items-center gap-1.5 transition-all duration-300">
+                {autoSaveStatus === "saving" && (
+                  <span className="flex items-center gap-1.5 text-slate-500">
+                    <FaSpinner className="animate-spin text-blue-500" />
+                    Saving...
+                  </span>
+                )}
+                {autoSaveStatus === "success" && (
+                  <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 animate-pulse">
+                    <FaCheck size={10} />
+                    Auto-saved
+                  </span>
+                )}
+                {autoSaveStatus === "error" && (
+                  <span className="flex items-center gap-1.5 text-red-600 bg-red-50 px-2 py-1 rounded-lg border border-red-100">
+                    <FaTimes size={10} />
+                    Failed to save
+                  </span>
+                )}
+                {autoSaveStatus === "idle" && (
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+                    Changes saved
+                  </span>
+                )}
+              </div>
+
               <button
                 onClick={() => handleSave(true)}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 shadow-sm"
               >
                 {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
                 Save Draft
@@ -184,7 +290,7 @@ function AssignmentMarksContent() {
               <button
                 onClick={() => handleSave(false)}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 shadow-sm"
               >
                 <FaCheck /> Submit Final
               </button>
@@ -225,6 +331,7 @@ function AssignmentMarksContent() {
                       type="number"
                       value={row.marksObtained === null ? "" : row.marksObtained}
                       onChange={e => handleMarksChange(row.studentId, e.target.value)}
+                      onBlur={e => handleAutoSave(row.studentId, e.target.value)}
                       onKeyDown={e => handleKeyDown(e, idx)}
                       className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-center text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-100 hover:border-slate-300 focus:border-blue-500 text-slate-800"
                       placeholder="-"

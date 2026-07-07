@@ -1301,9 +1301,9 @@ export default function FacultyCourseFilesPage() {
                   <p className="text-slate-500 font-semibold text-sm">Fetching workspace details from DB...</p>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-visible">
                   {/* Tabs header */}
-                  <div className="flex border-b border-slate-100 bg-slate-50/50 flex-wrap items-center justify-between">
+                  <div className="sticky top-16 z-20 flex border-b border-slate-200 bg-slate-50/95 backdrop-blur-sm flex-wrap items-center justify-between shadow-sm rounded-t-2xl">
                     <div className="flex flex-wrap flex-1">
                       <button
                         type="button"
@@ -1368,25 +1368,23 @@ export default function FacultyCourseFilesPage() {
                       </button>
                     </div>
 
-                    {isSidebarCollapsed && (
-                      <div className="flex items-center gap-2 px-4 py-2 border-l border-slate-100 bg-slate-50/10 self-stretch flex-wrap">
-                        <button
-                          type="button"
-                          onClick={handlePrintClick}
-                          className="flex justify-center items-center gap-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold px-3 py-1.5 text-xs transition-colors shadow-sm cursor-pointer"
-                        >
-                          <FaFileAlt className="h-3 w-3" /> Print Booklet
-                        </button>
-                        <button
-                          onClick={handleSave}
-                          disabled={saving}
-                          className="flex justify-center items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 text-xs transition-colors shadow-sm disabled:opacity-60"
-                        >
-                          {saving ? <FaSpinner className="h-3 w-3 animate-spin" /> : <FaSave className="h-3 w-3" />}
-                          Save Changes
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 px-4 py-2 border-l border-slate-100 bg-slate-50/10 self-stretch flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handlePrintClick}
+                        className="flex justify-center items-center gap-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold px-3 py-1.5 text-xs transition-colors shadow-sm cursor-pointer"
+                      >
+                        <FaFileAlt className="h-3 w-3" /> Print Booklet
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex justify-center items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 text-xs transition-colors shadow-sm disabled:opacity-60"
+                      >
+                        {saving ? <FaSpinner className="h-3 w-3 animate-spin" /> : <FaSave className="h-3 w-3" />}
+                        Save Changes
+                      </button>
+                    </div>
                   </div>
 
                   {/* Tab Contents */}
@@ -1512,6 +1510,19 @@ export default function FacultyCourseFilesPage() {
                             className="w-48 rounded-lg border border-slate-300 p-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
                           />
                         </div>
+
+                        {/* Save Button for Lecture Plan */}
+                        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 text-sm transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+                          >
+                            {saving ? <FaSpinner className="h-4 w-4 animate-spin" /> : <FaSave className="h-4 w-4" />}
+                            Save Lecture Plan
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1553,6 +1564,19 @@ export default function FacultyCourseFilesPage() {
                               onChange={setMid2SchemeText}
                             />
                           </div>
+                        </div>
+
+                        {/* Save Button for Evaluation Schemes */}
+                        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 text-sm transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+                          >
+                            {saving ? <FaSpinner className="h-4 w-4 animate-spin" /> : <FaSave className="h-4 w-4" />}
+                            Save Evaluation Schemes
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1606,6 +1630,19 @@ export default function FacultyCourseFilesPage() {
                             </div>
                           </div>
                         ))}
+
+                        {/* Save Button for Assignments */}
+                        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 text-sm transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+                          >
+                            {saving ? <FaSpinner className="h-4 w-4 animate-spin" /> : <FaSave className="h-4 w-4" />}
+                            Save Assignments
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1691,6 +1728,19 @@ export default function FacultyCourseFilesPage() {
                             ))}
                           </div>
                         )}
+
+                        {/* Save Button for Remedial Logs */}
+                        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 text-sm transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+                          >
+                            {saving ? <FaSpinner className="h-4 w-4 animate-spin" /> : <FaSave className="h-4 w-4" />}
+                            Save Remedial Logs
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1710,6 +1760,19 @@ export default function FacultyCourseFilesPage() {
 - Virtual Laboratory simulations link: https://vlab.co.in/
 - Text book chapters PDF shared on MSTeams..."
                         />
+
+                        {/* Save Button for Support Materials */}
+                        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 text-sm transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+                          >
+                            {saving ? <FaSpinner className="h-4 w-4 animate-spin" /> : <FaSave className="h-4 w-4" />}
+                            Save Support Materials
+                          </button>
+                        </div>
                       </div>
                     )}
 

@@ -29,18 +29,39 @@ export async function GET(request: Request) {
         // 1. Fetch History Records for the range
         console.log(`[DEBUG REPORT] Fetching consolidated. Dept: ${departmentId}, Sec: ${sectionId}, Sem: ${semester}, Start: ${start.toISOString()}, End: ${end.toISOString()}`);
 
-        const history = await prisma.attendanceHistory.findMany({
-            where: {
-                semester,
-                sectionId,
-                departmentId: departmentId || undefined,
-                ...(searchParams.get("subjectId") ? { subjectId: searchParams.get("subjectId") ?? undefined } : {}),
-                date: {
-                    gte: start,
-                    lte: end
-                },
-                type: "ACADEMIC" // Exclude SMS logs
+        const subjectId = searchParams.get("subjectId");
+        let isElective = false;
+        if (subjectId) {
+            const subjectInfo = await prisma.subject.findUnique({
+                where: { id: subjectId },
+                select: { isElective: true, type: true }
+            });
+            if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
+                isElective = true;
+            }
+        }
+
+        const historyWhere: any = {
+            semester,
+            date: {
+                gte: start,
+                lte: end
             },
+            type: "ACADEMIC"
+        };
+
+        if (isElective && subjectId) {
+            historyWhere.subjectId = subjectId;
+        } else {
+            historyWhere.sectionId = sectionId;
+            historyWhere.departmentId = departmentId || undefined;
+            if (subjectId) {
+                historyWhere.subjectId = subjectId;
+            }
+        }
+
+        const history = await prisma.attendanceHistory.findMany({
+            where: historyWhere,
             select: {
                 id: true,
                 details: true,
@@ -62,16 +83,23 @@ export async function GET(request: Request) {
         }> = {};
 
         // STRICT FETCH: Only get students mathematically enrolled in this specific class
+        const studentWhere: any = {
+            year,
+            semester,
+            isAlumni: false,
+            isLeftCollege: false,
+            isDetained: false
+        };
+
+        if (isElective && subjectId) {
+            studentWhere.subjects = { some: { id: subjectId } };
+        } else {
+            studentWhere.sectionId = sectionId;
+            studentWhere.departmentId = departmentId || undefined;
+        }
+
         const students = await prisma.student.findMany({
-            where: {
-                year,
-                semester,
-                sectionId,
-                departmentId: departmentId || undefined,
-                isAlumni: false,
-                isLeftCollege: false,
-                isDetained: false
-            },
+            where: studentWhere,
             select: { id: true, rollNumber: true, name: true },
             orderBy: { rollNumber: "asc" }
         });

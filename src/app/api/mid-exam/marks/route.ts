@@ -46,16 +46,23 @@ export async function GET(req: NextRequest) {
     }
 
     // Get students for this academic class
+    const studentWhereClause: any = {
+      year: paper.year,
+      semester: paper.semester,
+      sectionId: paper.sectionId,
+      isAlumni: false,
+      isLeftCollege: false,
+      isDetained: false,
+    };
+
+    if (paper.subject.isElective) {
+      studentWhereClause.subjects = { some: { id: paper.subjectId } };
+    } else {
+      studentWhereClause.departmentId = paper.subject.departmentId;
+    }
+
     const students = await prisma.student.findMany({
-      where: {
-        year: paper.year,
-        semester: paper.semester,
-        sectionId: paper.sectionId,
-        departmentId: paper.subject.departmentId,
-        isAlumni: false,
-        isLeftCollege: false,
-        isDetained: false,
-      },
+      where: studentWhereClause,
       select: { id: true, rollNumber: true, name: true },
       orderBy: { rollNumber: "asc" }
     });

@@ -110,10 +110,14 @@ export async function GET(req: Request) {
       where: {
         year: targetYear,
         semester: targetSem,
-        departmentId: student.departmentId,
-        regulationId: student.regulationId || undefined
+        regulationId: student.regulationId || undefined,
+        OR: [
+          { departmentId: student.departmentId },
+          { students: { some: { id: student.id } } }
+        ]
       }
     });
+
 
     const studentMarks: any[] = [];
 

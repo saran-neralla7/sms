@@ -33,8 +33,22 @@ export async function POST(request: Request) {
             date, sectionIds, sectionId, studentCount: students?.length, periodIds, hasTopics: !!topicsTaught
         });
 
+        // Determine if open elective first for validation purposes
+        let isElective = false;
+        if (subjectId) {
+            const subject = await prisma.subject.findUnique({
+                where: { id: subjectId },
+                select: { isElective: true, type: true }
+            });
+            if (subject && (subject.isElective || (subject.type && subject.type.toUpperCase().includes("ELECTIVE")))) {
+                isElective = true;
+            }
+        }
+
         // Validation
-        if (!date || !year || !semester || (!sectionId && (!sectionIds || sectionIds.length === 0)) || !departmentId || !students) {
+        const isValidationOk = date && year && semester && students && 
+            (isElective || ((sectionId || (sectionIds && sectionIds.length > 0)) && departmentId));
+        if (!isValidationOk) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
@@ -70,6 +84,7 @@ export async function POST(request: Request) {
         let finalSubjectId = subjectId;
         if (userRole === "SMS_USER" || userRole === "USER") {
             finalSubjectId = null;
+            isElective = false;
         }
 
         // Verify Subject matches the provided Year and Semester
@@ -90,9 +105,6 @@ export async function POST(request: Request) {
             ? periodIds
             : (periodId ? [periodId] : [null]);
 
-        // Normalize Sections: If sectionIds provided, use it. Else use [sectionId]
-        const targetSectionIds: string[] = (sectionIds && sectionIds.length > 0) ? sectionIds : [sectionId];
-
         // Get Academic Year: use passed academicYearId (from cookie) or fall back to isCurrent
         let resolvedAcademicYearId: string | null = academicYearId || null;
         if (!resolvedAcademicYearId) {
@@ -108,19 +120,27 @@ export async function POST(request: Request) {
         }
 
         // Pre-fetch valid students for all target sections to prevent UI stale-state mixing
-        // CRITICAL: Filter by departmentId + year + semester to prevent cross-department mixing
-        // (Sections like "A" can be shared across multiple departments)
+
+        const studentWhereClause: any = {
+            year: String(year),
+            semester: String(semester),
+            isAlumni: false,
+            isLeftCollege: false,
+            isDetained: false
+        };
+
+        let tempTargetSectionIds: string[] = [];
+        if (isElective) {
+            studentWhereClause.subjects = { some: { id: finalSubjectId } };
+        } else {
+            tempTargetSectionIds = (sectionIds && sectionIds.length > 0) ? sectionIds : [sectionId];
+            studentWhereClause.sectionId = { in: tempTargetSectionIds };
+            studentWhereClause.departmentId = departmentId;
+        }
+
         const validStudents = await prisma.student.findMany({
-            where: {
-                sectionId: { in: targetSectionIds },
-                departmentId,
-                year: String(year),
-                semester: String(semester),
-                isAlumni: false,  // exclude alumni from attendance
-                isLeftCollege: false,
-                isDetained: false
-            },
-            select: { rollNumber: true, sectionId: true, name: true, mobile: true, studentContactNumber: true }
+            where: studentWhereClause,
+            select: { rollNumber: true, sectionId: true, name: true, mobile: true, studentContactNumber: true, departmentId: true }
         });
 
         // Create a fast lookup Map of rollNumber -> student
@@ -130,15 +150,25 @@ export async function POST(request: Request) {
         }
 
         // Group students by section
-        // Map<SectionID, Student[]>
         const studentsBySection = new Map<string, any[]>();
 
-        if (sectionIds && sectionIds.length > 0) {
-            // Multi-section mode: Expect students to have contain 'sectionId'
+        if (isElective) {
+            // Group elective students by their actual database sectionId!
+            for (const s of students) {
+                const roll = String(s.rollNumber).toLowerCase();
+                const dbStudent = validStudentMap.get(roll);
+                const sId = dbStudent?.sectionId;
+                if (sId) {
+                    const list = studentsBySection.get(sId) || [];
+                    list.push(s);
+                    studentsBySection.set(sId, list);
+                }
+            }
+        } else if (sectionIds && sectionIds.length > 0) {
+            // Multi-section mode: Expect students to contain 'sectionId'
             for (const s of students) {
                 if (!s.sectionId) {
-                    // Fallback: If for some reason missing, maybe assign to first? 
-                    // Or error? Let's assign to 'sectionId' param if available as fallback
+                    // Fallback: If for some reason missing, assign to first
                     if (sectionId) {
                         const list = studentsBySection.get(sectionId) || [];
                         list.push(s);
@@ -155,6 +185,10 @@ export async function POST(request: Request) {
             studentsBySection.set(sectionId, students);
         }
 
+        const targetSectionIds: string[] = isElective
+            ? Array.from(studentsBySection.keys())
+            : tempTargetSectionIds;
+
         const transactions: any[] = [];
 
         // For each section, for each period, create a record
@@ -162,13 +196,13 @@ export async function POST(request: Request) {
             const sectionStudentsRaw = studentsBySection.get(sid) || [];
             const sectionStudents = [];
 
-            // Strict Validation: Only accept students natively enrolled in this section
+            // Strict Validation: Only accept students natively enrolled in this section (unless elective)
             for (const s of sectionStudentsRaw) {
                 const roll = String(s.rollNumber).toLowerCase();
                 const dbStudent = validStudentMap.get(roll);
 
-                // If student exists and their DB sectionId matches the target sid, accept them
-                if (dbStudent && dbStudent.sectionId === sid) {
+                // If student exists and their DB sectionId matches the target sid (or is elective), accept them
+                if (dbStudent && (isElective || dbStudent.sectionId === sid)) {
                     sectionStudents.push({
                         "Roll Number": dbStudent.rollNumber,
                         "Name": dbStudent.name,
@@ -182,6 +216,16 @@ export async function POST(request: Request) {
 
             // If the filtered list is empty, skip this section to prevent blank records
             if (sectionStudents.length === 0) continue;
+
+            // Resolve departmentId for this section's students if elective
+            let sectionDeptId = departmentId;
+            if (isElective && sectionStudents.length > 0) {
+                const firstRoll = String(sectionStudents[0]["Roll Number"]).toLowerCase();
+                const dbStudent = validStudentMap.get(firstRoll);
+                if (dbStudent?.departmentId) {
+                    sectionDeptId = dbStudent.departmentId;
+                }
+            }
 
             // Serialize details for this section only
             const details = JSON.stringify(sectionStudents);
@@ -198,7 +242,7 @@ export async function POST(request: Request) {
                         sectionId: sid,
                         periodId: pid,
                         year: String(year),
-                        departmentId
+                        departmentId: sectionDeptId
                     }
                 });
 
@@ -263,7 +307,7 @@ export async function POST(request: Request) {
                             year,
                             semester,
                             sectionId: sid,
-                            departmentId,
+                            departmentId: sectionDeptId,
                             academicYearId: resolvedAcademicYearId,
                             periodId: pid,
                             subjectId: finalSubjectId || null,

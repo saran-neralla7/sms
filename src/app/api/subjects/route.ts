@@ -11,11 +11,22 @@ export async function GET(request: Request) {
     const departmentId = searchParams.get("departmentId");
     const year = searchParams.get("year");
     const semester = searchParams.get("semester");
+    const includeElectives = searchParams.get("includeElectives") === "true";
 
     const where: any = {};
-    if (departmentId) where.departmentId = departmentId;
     if (year) where.year = year;
     if (semester) where.semester = semester;
+
+    if (departmentId) {
+        if (includeElectives) {
+            where.OR = [
+                { departmentId: departmentId },
+                { isElective: true }
+            ];
+        } else {
+            where.departmentId = departmentId;
+        }
+    }
 
     const isBSH = isBSHHod(session?.user as any);
     if (isBSH) {
@@ -38,7 +49,15 @@ export async function GET(request: Request) {
 
         if (academicYearId) {
             const mappings = await prisma.facultySubjectMapping.findMany({
-                where: { facultyId: user.facultyId, academicYearId: academicYearId, subject: { departmentId: departmentId || undefined, year: year || undefined, semester: semester || undefined } },
+                where: {
+                    facultyId: user.facultyId,
+                    academicYearId: academicYearId,
+                    subject: {
+                        year: year || undefined,
+                        semester: semester || undefined,
+                        ...(includeElectives ? {} : { departmentId: departmentId || undefined })
+                    }
+                },
                 select: { subjectId: true }
             });
             const mappedIds = mappings.map(m => m.subjectId);

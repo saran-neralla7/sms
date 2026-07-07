@@ -3086,13 +3086,15 @@ export default function FacultyMidExamPage() {
                     )}
 
                     {/* Download Excel Trigger */}
-                    <button
-                      onClick={downloadExcel}
-                      disabled={fetchingAttendance}
-                      className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
-                    >
-                      <FaFileExcel size={12} /> Export Excel
-                    </button>
+                    {role === "ADMIN" && (
+                      <button
+                        onClick={downloadExcel}
+                        disabled={fetchingAttendance}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                      >
+                        <FaFileExcel size={12} /> Export Excel
+                      </button>
+                    )}
 
                     {/* Download PDF Trigger */}
                     <button
@@ -3605,12 +3607,14 @@ export default function FacultyMidExamPage() {
                   </div>
                   {!analysisData.isComparison && (
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={downloadAnalysisExcel}
-                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm animate-pulse-subtle"
-                      >
-                        <FaFileExcel size={12} /> Export Excel
-                      </button>
+                      {role === "ADMIN" && (
+                        <button
+                          onClick={downloadAnalysisExcel}
+                          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm animate-pulse-subtle"
+                        >
+                          <FaFileExcel size={12} /> Export Excel
+                        </button>
+                      )}
                       <button
                         onClick={() => generateAnalysisPDF(analysisData)}
                         className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm"
