@@ -54,7 +54,8 @@ export const authOptions: NextAuthOptions = {
                     username: user.username,
                     name: user.faculty?.empName || user.username, // Attach full name here
                     role: user.role,
-                    departmentId: user.departmentId
+                    departmentId: user.departmentId,
+                    facultyId: user.facultyId
                 };
             },
         }),
@@ -67,6 +68,7 @@ export const authOptions: NextAuthOptions = {
                 token.departmentId = user.departmentId as string | null | undefined;
                 token.username = (user as any).username;
                 token.name = user.name;
+                token.facultyId = (user as any).facultyId;
             }
             return token;
         },
@@ -76,6 +78,7 @@ export const authOptions: NextAuthOptions = {
                 (session.user as any).id = token.id;
                 (session.user as any).departmentId = token.departmentId;
                 (session.user as any).username = token.username;
+                (session.user as any).facultyId = token.facultyId;
                 session.user.name = token.name as string | null | undefined;
             }
             return session;

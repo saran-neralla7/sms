@@ -252,12 +252,11 @@ export async function GET(req: Request) {
         const mid1Result = getPaperCalculatedTotal(mid1Paper);
         const mid2Result = getPaperCalculatedTotal(mid2Paper);
 
-        const mid1Final = mid1Result.isAbsent ? 0 : (mid1Result.total * 20) / (mid1Paper?.totalMarks || 30);
-        const mid2Final = mid2Result.isAbsent ? 0 : (mid2Result.total * 20) / (mid2Paper?.totalMarks || 30);
+        const mid1Final = mid1Result.isAbsent ? 0 : Math.ceil((mid1Result.total * 20) / (mid1Paper?.totalMarks || 30));
+        const mid2Final = mid2Result.isAbsent ? 0 : Math.ceil((mid2Result.total * 20) / (mid2Paper?.totalMarks || 30));
 
-        internalMarks = Math.round(
-          ((mid1Final + mid2Final) / 2) + assignmentFinal
-        );
+        const avgMid = Math.ceil((mid1Final + mid2Final) / 2);
+        internalMarks = avgMid + assignmentFinal;
       }
 
       // Compute CO-wise performance

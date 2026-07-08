@@ -184,7 +184,7 @@ export default function AdminMidExamDashboard() {
       if (isAbsent) {
         countAbsent++;
       } else {
-        const numVal = Math.round(val ?? 0);
+        const numVal = previewType === "FINAL" ? Math.ceil(val ?? 0) : Math.round(val ?? 0);
         sum += numVal;
         count++;
 
@@ -1401,7 +1401,7 @@ export default function AdminMidExamDashboard() {
         } else if (reportType === "ASSIGNMENT") {
           displayVal = marks.assignment !== null ? Math.round(marks.assignment).toString() : "0";
         } else if (reportType === "FINAL") {
-          displayVal = Math.round(marks.internal).toString();
+          displayVal = Math.ceil(marks.internal).toString();
         }
         rowData.push(displayVal);
       }
@@ -1412,7 +1412,7 @@ export default function AdminMidExamDashboard() {
           const marks = r.subjects[sub.id] || {};
           totalInternal += marks.internal || 0;
         }
-        rowData.push(Math.round(totalInternal).toString());
+        rowData.push(Math.ceil(totalInternal).toString());
       }
 
       return rowData;
@@ -1455,7 +1455,7 @@ export default function AdminMidExamDashboard() {
           if (isAbsent) {
             countAbsent++;
           } else {
-            const numVal = Math.round(val ?? 0);
+            const numVal = (reportType as string) === "FINAL" ? Math.ceil(val ?? 0) : Math.round(val ?? 0);
             sum += numVal;
             count++;
 
@@ -1702,12 +1702,12 @@ export default function AdminMidExamDashboard() {
         r.rollNumber,
         r.name,
         marks.isMid1Absent ? "AB" : (marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB"),
-        marks.isMid1Absent ? "0" : (marks.mid1Scaled !== null ? Math.round(marks.mid1Scaled).toString() : "AB"),
+        marks.isMid1Absent ? "0" : (marks.mid1Scaled !== null ? Math.ceil(marks.mid1Scaled).toString() : "AB"),
         marks.isMid2Absent ? "AB" : (marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB"),
-        marks.isMid2Absent ? "0" : (marks.mid2Scaled !== null ? Math.round(marks.mid2Scaled).toString() : "AB"),
-        midAvgVal !== null ? Math.round(midAvgVal).toString() : "AB",
+        marks.isMid2Absent ? "0" : (marks.mid2Scaled !== null ? Math.ceil(marks.mid2Scaled).toString() : "AB"),
+        midAvgVal !== null ? Math.ceil(midAvgVal).toString() : "AB",
         marks.assignment !== null ? Math.round(marks.assignment).toString() : "0",
-        Math.round(marks.internal).toString()
+        Math.ceil(marks.internal).toString()
       ];
     });
 
@@ -1728,7 +1728,8 @@ export default function AdminMidExamDashboard() {
     const getColStatsPDF = (
       extractor: (m: any) => number | null, 
       maxMarks: number, 
-      isAbsentExtractor: (m: any) => boolean
+      isAbsentExtractor: (m: any) => boolean,
+      useCeil?: boolean
     ) => {
       let countAbove = 0;
       let countBetween = 0;
@@ -1744,7 +1745,7 @@ export default function AdminMidExamDashboard() {
         if (isAbsent) {
           countAbsent++;
         } else {
-          const numVal = Math.round(val ?? 0);
+          const numVal = useCeil ? Math.ceil(val ?? 0) : Math.round(val ?? 0);
           if (numVal === 0) {
             countZero++;
           }
@@ -1766,7 +1767,7 @@ export default function AdminMidExamDashboard() {
 
     const pdfStatsMid1 = getColStatsPDF((m) => m.mid1, pdfMaxMarks, (m) => m.isMid1Absent || m.mid1 === null || m.mid1 === undefined);
     const pdfStatsMid2 = getColStatsPDF((m) => m.mid2, pdfMaxMarks, (m) => m.isMid2Absent || m.mid2 === null || m.mid2 === undefined);
-    const pdfStatsFinal = getColStatsPDF((m) => m.internal, pdfMaxMarks, (m) => m.internal === null || m.internal === undefined);
+    const pdfStatsFinal = getColStatsPDF((m) => m.internal, pdfMaxMarks, (m) => m.internal === null || m.internal === undefined, true);
 
     const footerRow = [
       "",
@@ -1982,7 +1983,7 @@ export default function AdminMidExamDashboard() {
           if (isAbsent) {
             rowData.push("AB");
           } else {
-            rowData.push(val !== null && val !== undefined ? Math.round(val) : "");
+            rowData.push(val !== null && val !== undefined ? (reportType === "FINAL" ? Math.ceil(val) : Math.round(val)) : "");
           }
         });
         if (reportType === "FINAL") {
@@ -1990,7 +1991,7 @@ export default function AdminMidExamDashboard() {
             const marks = row.subjects[sub.id] || {};
             return sum + (marks.internal || 0);
           }, 0);
-          rowData.push(Math.round(totalInternal));
+          rowData.push(Math.ceil(totalInternal));
         }
         sheetRows.push(rowData);
       });
@@ -2026,12 +2027,12 @@ export default function AdminMidExamDashboard() {
 
         const rowData: any[] = [idx + 1, row.rollNumber, row.name];
         rowData.push(marksObj.isMid1Absent ? "AB" : (marksObj.mid1 !== null ? Math.round(marksObj.mid1) : ""));
-        rowData.push(marksObj.isMid1Absent ? 0 : (marksObj.mid1Scaled !== null ? Math.round(marksObj.mid1Scaled) : ""));
+        rowData.push(marksObj.isMid1Absent ? 0 : (marksObj.mid1Scaled !== null ? Math.ceil(marksObj.mid1Scaled) : ""));
         rowData.push(marksObj.isMid2Absent ? "AB" : (marksObj.mid2 !== null ? Math.round(marksObj.mid2) : ""));
-        rowData.push(marksObj.isMid2Absent ? 0 : (marksObj.mid2Scaled !== null ? Math.round(marksObj.mid2Scaled) : ""));
-        rowData.push(midAvgVal !== null ? Math.round(midAvgVal) : "");
+        rowData.push(marksObj.isMid2Absent ? 0 : (marksObj.mid2Scaled !== null ? Math.ceil(marksObj.mid2Scaled) : ""));
+        rowData.push(midAvgVal !== null ? Math.ceil(midAvgVal) : "");
         rowData.push(marksObj.assignment !== null ? Math.round(marksObj.assignment) : "");
-        rowData.push(marksObj.internal !== null ? Math.round(marksObj.internal) : "");
+        rowData.push(marksObj.internal !== null ? Math.ceil(marksObj.internal) : "");
         sheetRows.push(rowData);
       });
 
@@ -2333,7 +2334,7 @@ export default function AdminMidExamDashboard() {
           if (isAbsent) {
             rowData.push("AB");
           } else {
-            rowData.push(val !== null && val !== undefined ? Math.round(val) : "");
+            rowData.push(val !== null && val !== undefined ? (previewType === "FINAL" ? Math.ceil(val) : Math.round(val)) : "");
           }
         });
         if (previewType === "FINAL") {
@@ -2341,7 +2342,7 @@ export default function AdminMidExamDashboard() {
             const marks = row.subjects[sub.id] || {};
             return sum + (marks.internal || 0);
           }, 0);
-          rowData.push(Math.round(totalInternal));
+          rowData.push(Math.ceil(totalInternal));
         }
         rowsList.push(rowData);
       });
@@ -2366,12 +2367,12 @@ export default function AdminMidExamDashboard() {
         }
 
         rowData.push(marksObj.isMid1Absent ? "AB" : (marksObj.mid1 !== null ? Math.round(marksObj.mid1) : ""));
-        rowData.push(marksObj.isMid1Absent ? 0 : (marksObj.mid1Scaled !== null ? Math.round(marksObj.mid1Scaled) : ""));
+        rowData.push(marksObj.isMid1Absent ? 0 : (marksObj.mid1Scaled !== null ? Math.ceil(marksObj.mid1Scaled) : ""));
         rowData.push(marksObj.isMid2Absent ? "AB" : (marksObj.mid2 !== null ? Math.round(marksObj.mid2) : ""));
-        rowData.push(marksObj.isMid2Absent ? 0 : (marksObj.mid2Scaled !== null ? Math.round(marksObj.mid2Scaled) : ""));
-        rowData.push(midAvgVal !== null ? Math.round(midAvgVal) : "");
+        rowData.push(marksObj.isMid2Absent ? 0 : (marksObj.mid2Scaled !== null ? Math.ceil(marksObj.mid2Scaled) : ""));
+        rowData.push(midAvgVal !== null ? Math.ceil(midAvgVal) : "");
         rowData.push(marksObj.assignment !== null ? Math.round(marksObj.assignment) : "");
-        rowData.push(marksObj.internal !== null ? Math.round(marksObj.internal) : "");
+        rowData.push(marksObj.internal !== null ? Math.ceil(marksObj.internal) : "");
         rowsList.push(rowData);
       });
     }
@@ -2529,7 +2530,7 @@ export default function AdminMidExamDashboard() {
           } else if (reportType === "ASSIGNMENT") {
             displayVal = marks.assignment !== null ? Math.round(marks.assignment).toString() : "0";
           } else if (reportType === "FINAL") {
-            displayVal = Math.round(marks.internal).toString();
+            displayVal = Math.ceil(marks.internal).toString();
           }
           rowData.push(displayVal);
         }
@@ -2540,7 +2541,7 @@ export default function AdminMidExamDashboard() {
             const marks = r.subjects[sub.id] || {};
             totalInternal += marks.internal || 0;
           }
-          rowData.push(Math.round(totalInternal).toString());
+          rowData.push(Math.ceil(totalInternal).toString());
         }
 
         return rowData;
@@ -2884,12 +2885,12 @@ export default function AdminMidExamDashboard() {
           r.rollNumber,
           r.name,
           marks.isMid1Absent ? "AB" : (marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB"),
-          marks.isMid1Absent ? "0" : (marks.mid1Scaled !== null ? Math.round(marks.mid1Scaled).toString() : "AB"),
+          marks.isMid1Absent ? "0" : (marks.mid1Scaled !== null ? Math.ceil(marks.mid1Scaled).toString() : "AB"),
           marks.isMid2Absent ? "AB" : (marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB"),
-          marks.isMid2Absent ? "0" : (marks.mid2Scaled !== null ? Math.round(marks.mid2Scaled).toString() : "AB"),
-          midAvgVal !== null ? Math.round(midAvgVal).toString() : "AB",
+          marks.isMid2Absent ? "0" : (marks.mid2Scaled !== null ? Math.ceil(marks.mid2Scaled).toString() : "AB"),
+          midAvgVal !== null ? Math.ceil(midAvgVal).toString() : "AB",
           marks.assignment !== null ? Math.round(marks.assignment).toString() : "0",
-          Math.round(marks.internal).toString()
+          Math.ceil(marks.internal).toString()
         ];
       });
 
@@ -2927,7 +2928,8 @@ export default function AdminMidExamDashboard() {
       const getColStatsPDF = (
         extractor: (m: any) => number | null, 
         maxMarks: number, 
-        isAbsentExtractor: (m: any) => boolean
+        isAbsentExtractor: (m: any) => boolean,
+        useCeil?: boolean
       ) => {
         let countAbove = 0;
         let countBetween = 0;
@@ -2943,7 +2945,7 @@ export default function AdminMidExamDashboard() {
           if (isAbsent) {
             countAbsent++;
           } else {
-            const numVal = Math.round(val ?? 0);
+            const numVal = useCeil ? Math.ceil(val ?? 0) : Math.round(val ?? 0);
             if (numVal === 0) {
               countZero++;
             }
@@ -2965,7 +2967,7 @@ export default function AdminMidExamDashboard() {
 
       const pdfStatsMid1 = getColStatsPDF((m) => m.mid1, pdfMaxMarks, (m) => m.isMid1Absent || m.mid1 === null || m.mid1 === undefined);
       const pdfStatsMid2 = getColStatsPDF((m) => m.mid2, pdfMaxMarks, (m) => m.isMid2Absent || m.mid2 === null || m.mid2 === undefined);
-      const pdfStatsFinal = getColStatsPDF((m) => m.internal, pdfMaxMarks, (m) => m.internal === null || m.internal === undefined);
+      const pdfStatsFinal = getColStatsPDF((m) => m.internal, pdfMaxMarks, (m) => m.internal === null || m.internal === undefined, true);
 
       const footerRow = [
         "",
@@ -4017,7 +4019,7 @@ export default function AdminMidExamDashboard() {
                                         displayVal = val !== null ? Math.round(val).toString() : "0";
                                       } else if (previewType === "FINAL") {
                                         val = marksObj.internal;
-                                        displayVal = val !== null ? Math.round(val).toString() : "0";
+                                        displayVal = val !== null ? Math.ceil(val).toString() : "0";
                                       }
 
                                       // Get dynamic color class
@@ -4047,7 +4049,7 @@ export default function AdminMidExamDashboard() {
                                       }, 0);
                                       return (
                                         <td className="px-4 py-2.5 text-center font-extrabold border border-black bg-slate-100/80 text-slate-900">
-                                          {Math.round(totalInternal)}
+                                          {Math.ceil(totalInternal)}
                                         </td>
                                       );
                                     })()}
@@ -4176,7 +4178,8 @@ export default function AdminMidExamDashboard() {
                         const getColStats = (
                           extractor: (m: any) => number | null, 
                           maxMarks: number, 
-                          isAbsentExtractor: (m: any) => boolean
+                          isAbsentExtractor: (m: any) => boolean,
+                          useCeil?: boolean
                         ) => {
                           let countAbove = 0;
                           let countBetween = 0;
@@ -4192,7 +4195,7 @@ export default function AdminMidExamDashboard() {
                             if (isAbsent) {
                               countAbsent++;
                             } else {
-                              const numVal = Math.round(val ?? 0);
+                              const numVal = useCeil ? Math.ceil(val ?? 0) : Math.round(val ?? 0);
                               if (numVal === 0) {
                                 countZero++;
                               }
@@ -4212,7 +4215,7 @@ export default function AdminMidExamDashboard() {
 
                         const statsMid1 = getColStats((m) => m.mid1, isLab ? 50 : 30, (m) => m.isMid1Absent || m.mid1 === null || m.mid1 === undefined);
                         const statsMid2 = getColStats((m) => m.mid2, isLab ? 50 : 30, (m) => m.isMid2Absent || m.mid2 === null || m.mid2 === undefined);
-                        const statsFinal = getColStats((m) => m.internal, isLab ? 50 : 30, (m) => m.internal === null || m.internal === undefined);
+                        const statsFinal = getColStats((m) => m.internal, isLab ? 50 : 30, (m) => m.internal === null || m.internal === undefined, true);
 
                         return (
                           <>
@@ -4255,12 +4258,12 @@ export default function AdminMidExamDashboard() {
                                 const isLab = targetSubject?.type?.toUpperCase() === "LAB";
                                 const fields = [
                                   { val: marksObj.mid1, max: isLab ? 50 : 30, fallback: "AB", isAbsent: marksObj.isMid1Absent },
-                                  { val: marksObj.mid1Scaled, max: isLab ? 50 : 20, fallback: "0", isAbsent: marksObj.isMid1Absent },
+                                  { val: marksObj.mid1Scaled, max: isLab ? 50 : 20, fallback: "0", isAbsent: marksObj.isMid1Absent, isAverageOrScaled: true },
                                   { val: marksObj.mid2, max: isLab ? 50 : 30, fallback: "AB", isAbsent: marksObj.isMid2Absent },
-                                  { val: marksObj.mid2Scaled, max: isLab ? 50 : 20, fallback: "0", isAbsent: marksObj.isMid2Absent },
-                                  { val: midAvgVal, max: isLab ? 50 : 20, fallback: "0", isMidAvg: true, isAbsent: marksObj.isMid1Absent && marksObj.isMid2Absent },
+                                  { val: marksObj.mid2Scaled, max: isLab ? 50 : 20, fallback: "0", isAbsent: marksObj.isMid2Absent, isAverageOrScaled: true },
+                                  { val: midAvgVal, max: isLab ? 50 : 20, fallback: "0", isMidAvg: true, isAbsent: marksObj.isMid1Absent && marksObj.isMid2Absent, isAverageOrScaled: true },
                                   { val: marksObj.assignment, max: 10, fallback: "0" },
-                                  { val: marksObj.internal, max: isLab ? 50 : 30, fallback: "0", isBold: true }
+                                  { val: marksObj.internal, max: isLab ? 50 : 30, fallback: "0", isBold: true, isAverageOrScaled: true }
                                 ];
 
                                 return (
@@ -4282,7 +4285,7 @@ export default function AdminMidExamDashboard() {
                                       </td>
                                     )}
                                     {fields.map((f, fIdx) => {
-                                      const displayVal = f.isAbsent ? f.fallback : ((f.val !== null && f.val !== undefined) ? Math.round(f.val).toString() : f.fallback);
+                                      const displayVal = f.isAbsent ? f.fallback : ((f.val !== null && f.val !== undefined) ? (f.isAverageOrScaled ? Math.ceil(f.val) : Math.round(f.val)).toString() : f.fallback);
                                       
                                       let colorClass = "";
                                       if (showHeatmap && displayVal !== "AB" && displayVal !== "") {

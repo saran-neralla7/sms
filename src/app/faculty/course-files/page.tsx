@@ -14,6 +14,7 @@ import { calculateStudentTotal } from "@/lib/mid-exam-calc";
 
 interface Mapping {
   id: string;
+  facultyId: string;
   subject: { id: string; name: string; code: string; type: string; year: string; semester: string; departmentId: string };
   section: { id: string; name: string };
   academicYear: { id: string; name: string };
@@ -629,7 +630,7 @@ export default function FacultyCourseFilesPage() {
           semester: selectedMapping.subject.semester,
           sectionId: selectedMapping.section.id,
           subjectId: selectedMapping.subject.id,
-          facultyId: (session?.user as any)?.facultyId || (session?.user as any)?.id || "system",
+          facultyId: selectedMapping.facultyId || (session?.user as any)?.facultyId || (session?.user as any)?.id || "system",
           teachingSupportText,
           assignmentQuestions,
           lecturePlan,

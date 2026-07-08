@@ -93,7 +93,7 @@ export function scaleMidMarks(
   toMax: number
 ): number {
   if (fromMax === 0) return 0;
-  return Math.round((obtained / fromMax) * toMax);
+  return Math.ceil((obtained / fromMax) * toMax);
 }
 
 /**
@@ -137,7 +137,7 @@ export function calculateInternalMarks(params: {
   // Average of scaled MIDs (only include non-null)
   const available = [mid1Total !== null ? scaled1 : null, mid2Total !== null ? scaled2 : null].filter(v => v !== null) as number[];
   const avgMid = available.length > 0
-    ? available.reduce((a, b) => a + b, 0) / available.length
+    ? Math.ceil(available.reduce((a, b) => a + b, 0) / available.length)
     : 0;
 
   // Scale assignment
@@ -146,7 +146,7 @@ export function calculateInternalMarks(params: {
     : 0;
 
   const internal = avgMid + scaledAssignment;
-  return Math.min(Math.round(internal), internalMax);
+  return Math.min(Math.ceil(internal), internalMax);
 }
 
 /**

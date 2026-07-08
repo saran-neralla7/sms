@@ -175,7 +175,7 @@ export default function AttendancePage() {
             }
         } else {
             if (selectedDept && year && semester) {
-                fetch(`/api/subjects?departmentId=${selectedDept}&year=${year}&semester=${semester}`)
+                fetch(`/api/subjects?departmentId=${selectedDept}&year=${year}&semester=${semester}&excludeElectives=true`)
                     .then(res => res.json())
                     .then(data => setSubjects(data))
                     .catch(err => console.error(err));
@@ -574,7 +574,7 @@ export default function AttendancePage() {
             <h1 className="mb-6 text-2xl font-bold text-slate-800">Attendance Portal</h1>
 
             {/* Mode Tabs */}
-            <div className="mb-6 flex gap-4 border-b border-slate-200 pb-2">
+            <div className="mb-6 flex gap-4 border-b border-slate-200 pb-2 overflow-x-auto whitespace-nowrap">
                 <button
                     onClick={() => setViewMode("manual")}
                     className={`pb-2 text-sm font-semibold transition-colors ${viewMode === "manual" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
@@ -595,7 +595,7 @@ export default function AttendancePage() {
                 </button>
             </div>
 
-            <div className="grid gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="grid gap-6 rounded-xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
 
                 {/* SELECTORS (Common for both) */}
                 <div className={`grid gap-4 ${viewMode === "elective" ? "md:grid-cols-2" : "md:grid-cols-4"}`}>
@@ -759,57 +759,64 @@ export default function AttendancePage() {
 
                         {students.length > 0 && (
                             <div className="mt-6 animate-in fade-in">
-                                <div className="mb-4 flex items-center justify-between">
-                                    <h3 className="font-bold text-slate-800">
+                                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <h3 className="font-bold text-slate-800 text-lg">
                                         Student List ({displayedStudents.length === students.length ? students.length : `${displayedStudents.length} / ${students.length}`})
                                     </h3>
 
-                                    {/* Department Filter for Electives */}
-                                    {viewMode === "elective" && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-semibold text-slate-500 uppercase">Filter Dept:</span>
-                                            <select
-                                                value={electiveDeptFilter}
-                                                onChange={(e) => setElectiveDeptFilter(e.target.value)}
-                                                className="rounded-md border border-slate-300 px-2 py-1 text-xs bg-white text-slate-700 font-medium"
-                                            >
-                                                <option value="">All Departments</option>
-                                                {departments.map(d => (
-                                                    <option key={d.id} value={d.id}>{d.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
+                                    <div className="flex flex-wrap items-center gap-3 justify-between sm:justify-end">
+                                        {/* Department Filter for Electives */}
+                                        {viewMode === "elective" && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-semibold text-slate-500 uppercase">Filter Dept:</span>
+                                                <select
+                                                    value={electiveDeptFilter}
+                                                    onChange={(e) => setElectiveDeptFilter(e.target.value)}
+                                                    className="rounded-md border border-slate-300 px-2 py-1 text-xs bg-white text-slate-700 font-medium"
+                                                >
+                                                    <option value="">All Departments</option>
+                                                    {departments.map(d => (
+                                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
 
-                                    <div className="flex gap-2 text-sm">
-                                        <button onClick={() => markAll("Present")} className="text-green-600 hover:underline">All Present</button>
-                                        <span className="text-slate-300">|</span>
-                                        <button onClick={() => markAll("Absent")} className="text-red-600 hover:underline">All Absent</button>
+                                        <div className="flex gap-2 text-xs sm:text-sm font-semibold">
+                                            <button onClick={() => markAll("Present")} className="text-green-600 hover:underline bg-green-50 px-2.5 py-1 rounded border border-green-200 hover:bg-green-100 transition-colors">All Present</button>
+                                            <span className="text-slate-300 self-center">|</span>
+                                            <button onClick={() => markAll("Absent")} className="text-red-600 hover:underline bg-red-50 px-2.5 py-1 rounded border border-red-200 hover:bg-red-100 transition-colors">All Absent</button>
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* CARD GRID LAYOUT */}
-                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                                <div className="grid grid-cols-2 gap-2.5 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                                     {displayedStudents.map(s => (
                                         <div
                                             key={s.id}
                                             onClick={() => toggleStudentStatus(s.id)}
-                                            className={`cursor-pointer rounded-lg border p-4 text-center transition-all shadow-sm select-none ${s.status === "Absent"
+                                            className={`cursor-pointer rounded-lg border p-3 sm:p-4 text-center transition-all shadow-sm select-none ${s.status === "Absent"
                                                 ? "bg-red-50 border-red-500 ring-1 ring-red-500" // Red for Absent
                                                 : "bg-white border-slate-200 hover:border-green-400 hover:shadow-md" // White/Greenish hover for Present
                                                 }`}
                                         >
-                                            <p className={`text-lg font-bold ${s.status === "Absent" ? "text-red-700" : "text-slate-800"}`}>
-                                                {s.rollNumber.slice(-3) || s.rollNumber}
+                                            <p className={`font-bold truncate ${viewMode === "elective" ? "text-sm sm:text-base tracking-tight" : "text-lg"} ${s.status === "Absent" ? "text-red-700" : "text-slate-800"}`} title={s.rollNumber}>
+                                                {viewMode === "elective" ? s.rollNumber : (s.rollNumber.slice(-3) || s.rollNumber)}
                                             </p>
                                             <p className="mt-1 truncate text-xs font-medium text-slate-500" title={s.name}>
                                                 {s.name} <span className="text-slate-400 font-semibold">({s.department?.code || s.department?.name || "N/A"}-{s.section?.name || "N/A"})</span>
                                             </p>
-                                            <div className="mt-2 flex justify-center">
+                                            <div className="mt-2 flex flex-wrap items-center justify-center gap-1">
+                                                {viewMode === "elective" && (
+                                                    <span className="text-[9px] font-extrabold uppercase text-slate-500 bg-slate-100 px-1 py-0.5 rounded select-none shrink-0" title="Student Department">
+                                                        {s.department?.code || s.department?.name || "N/A"}
+                                                    </span>
+                                                )}
                                                 {s.status === "Absent" ? (
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700"><FaTimesCircle /> Absent</span>
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold text-red-700 shrink-0"><FaTimesCircle /> Absent</span>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700"><FaCheckCircle /> Present</span>
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold text-green-700 shrink-0"><FaCheckCircle /> Present</span>
                                                 )}
                                             </div>
                                         </div>
@@ -852,8 +859,8 @@ export default function AttendancePage() {
                         {/* 1. Download Template */}
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-6">
                             <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-800"><FaFileDownload /> 1. Download Template</h3>
-                            <div className="flex gap-4 items-end">
-                                <div className="flex-1">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                                <div className="flex-1 w-full">
                                     <label className="text-xs font-semibold uppercase text-slate-500">Start Date (DD-MM-YYYY)</label>
                                     <div className="relative mt-1">
                                         <input 
@@ -871,7 +878,7 @@ export default function AttendancePage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex-1">
+                                <div className="flex-1 w-full">
                                     <label className="text-xs font-semibold uppercase text-slate-500">End Date (DD-MM-YYYY)</label>
                                     <div className="relative mt-1">
                                         <input 
@@ -891,7 +898,7 @@ export default function AttendancePage() {
                                 </div>
                                 <button
                                     onClick={downloadTemplate}
-                                    className="mb-0.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700"
+                                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 w-full sm:w-auto h-[38px] flex items-center justify-center"
                                 >
                                     Download
                                 </button>
@@ -902,7 +909,7 @@ export default function AttendancePage() {
                         {/* 2. Upload Template */}
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-6">
                             <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-800"><FaFileUpload /> 2. Upload Data</h3>
-                            <div className="flex gap-4 items-center">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                                 <input
                                     type="file" accept=".xlsx, .xls"
                                     onChange={handleBulkFileChange}
@@ -910,7 +917,7 @@ export default function AttendancePage() {
                                 />
                                 <button
                                     onClick={uploadBulk} disabled={!bulkFile || bulkUploading}
-                                    className="rounded-md bg-green-600 px-6 py-2 text-sm font-bold text-white shadow hover:bg-green-700 disabled:opacity-50"
+                                    className="rounded-md bg-green-600 px-6 py-2 text-sm font-bold text-white shadow hover:bg-green-700 disabled:opacity-50 w-full sm:w-auto whitespace-nowrap"
                                 >
                                     {bulkUploading ? "Uploading..." : "Upload"}
                                 </button>

@@ -19,7 +19,7 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true);
 
     // Tab State
-    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject" | "weekly">("daily");
+    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject" | "weekly" | "elective">("daily");
 
     // Filters
     const [departmentId, setDepartmentId] = useState("");
@@ -84,13 +84,24 @@ export default function ReportsPage() {
         fetchPeriods();
     }, [session]);
 
+    const fetchElectives = async () => {
+        if (!year || !semester) return;
+        const params = new URLSearchParams({ year, semester, onlyElectives: "true" });
+        const res = await fetch(`/api/subjects?${params}`);
+        if (res.ok) setSubjects(await res.json());
+    };
+
     useEffect(() => {
+        if (activeTab === "elective") {
+            fetchElectives();
+            return;
+        }
         const role = (session?.user.role || "").toUpperCase();
         const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
         const effectiveDeptId = isGlobal ? departmentId : (session?.user as any)?.departmentId;
         if (effectiveDeptId) fetchSections(effectiveDeptId);
         if (effectiveDeptId && year && semester) fetchSubjects(effectiveDeptId);
-    }, [departmentId, session, year, semester]);
+    }, [departmentId, session, year, semester, activeTab]);
 
     // Refetch when filters change (Daily Only)
     useEffect(() => {
@@ -110,7 +121,7 @@ export default function ReportsPage() {
     };
 
     const fetchSubjects = async (deptId: string) => {
-        const params = new URLSearchParams({ departmentId: deptId, year, semester });
+        const params = new URLSearchParams({ departmentId: deptId, year, semester, excludeElectives: "true" });
         const res = await fetch(`/api/subjects?${params}`);
         if (res.ok) setSubjects(await res.json());
     };
@@ -208,9 +219,13 @@ export default function ReportsPage() {
             const params = new URLSearchParams();
             if (year) params.append("year", year);
             if (semester) params.append("semester", semester);
-            if (sectionId) params.append("sectionId", sectionId);
-            if (departmentId) params.append("departmentId", departmentId);
-            if (activeTab === "subject" && subjectId) params.append("subjectId", subjectId);
+            if (activeTab !== "elective") {
+                if (sectionId) params.append("sectionId", sectionId);
+                if (departmentId) params.append("departmentId", departmentId);
+            }
+            if ((activeTab === "subject" || activeTab === "elective") && subjectId) {
+                params.append("subjectId", subjectId);
+            }
             params.append("startDate", startDate);
             params.append("endDate", endDate);
 
@@ -689,6 +704,13 @@ export default function ReportsPage() {
                         }`}
                 >
                     Weekly View
+                </button>
+                <button
+                    onClick={() => setActiveTab("elective")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "elective" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                        }`}
+                >
+                    Open Elective Reports
                 </button>
             </div>
 
@@ -1179,9 +1201,76 @@ export default function ReportsPage() {
                 )
             }
 
+            {/* Open Elective Reports Section */}
+            {activeTab === "elective" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Open Elective Reports</h2>
+                    <p className="mb-4 text-sm text-slate-500">View consolidated attendance for open elective subjects across all sections and departments.</p>
+
+                    {/* Filters & Actions */}
+                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Year</label>
+                                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Year</option>
+                                    <option value="1">1st Year</option>
+                                    <option value="2">2nd Year</option>
+                                    <option value="3">3rd Year</option>
+                                    <option value="4">4th Year</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Semester</label>
+                                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Sem</option>
+                                    <option value="1">1st Sem</option>
+                                    <option value="2">2nd Sem</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Elective Subject</label>
+                                <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                    <option value="">Select Elective</option>
+                                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 md:items-end">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">Start Date</label>
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500">End Date</label>
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
+                            </div>
+                            <div className="flex flex-col justify-end gap-2">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={clearFilters}
+                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-red-600"
+                                    >
+                                        Clear
+                                    </button>
+                                    <button
+                                        onClick={fetchConsolidated}
+                                        disabled={!year || !semester || !subjectId || !startDate || !endDate}
+                                        className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Generate
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Shared Table for Consolidated & Subject Tabs */}
             {
-                (activeTab === "consolidated" || activeTab === "subject") && (
+                (activeTab === "consolidated" || activeTab === "subject" || activeTab === "elective") && (
                     <>
                         {consolidatedData.length > 0 && (
                             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

@@ -270,6 +270,20 @@ export async function POST(req: NextRequest) {
     year = normalizeYear(year);
     semester = normalizeSemester(semester);
 
+    let resolvedFacultyId = facultyId;
+    const facultyCheck = await prisma.faculty.findUnique({
+      where: { id: facultyId }
+    });
+    if (!facultyCheck) {
+      const userCheck = await prisma.user.findUnique({
+        where: { id: facultyId },
+        select: { facultyId: true }
+      });
+      if (userCheck && userCheck.facultyId) {
+        resolvedFacultyId = userCheck.facultyId;
+      }
+    }
+
     const courseFile = await prisma.courseFile.upsert({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
@@ -282,7 +296,7 @@ export async function POST(req: NextRequest) {
         }
       },
       update: {
-        facultyId,
+        facultyId: resolvedFacultyId,
         teachingSupportText,
         assignmentQuestions,
         lecturePlan,
@@ -302,7 +316,7 @@ export async function POST(req: NextRequest) {
         semester,
         sectionId,
         subjectId,
-        facultyId,
+        facultyId: resolvedFacultyId,
         teachingSupportText,
         assignmentQuestions,
         lecturePlan,
@@ -347,6 +361,20 @@ export async function PATCH(req: NextRequest) {
     if (surveyRating !== undefined) updateData.surveyRating = surveyRating === null ? null : parseFloat(surveyRating);
     if (attainmentDecimal !== undefined) updateData.attainmentDecimal = parseInt(attainmentDecimal);
 
+    let resolvedFacultyId = facultyId || (session.user as any).id;
+    const facultyCheck = await prisma.faculty.findUnique({
+      where: { id: resolvedFacultyId }
+    });
+    if (!facultyCheck) {
+      const userCheck = await prisma.user.findUnique({
+        where: { id: resolvedFacultyId },
+        select: { facultyId: true }
+      });
+      if (userCheck && userCheck.facultyId) {
+        resolvedFacultyId = userCheck.facultyId;
+      }
+    }
+
     const courseFile = await prisma.courseFile.upsert({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
@@ -356,7 +384,7 @@ export async function PATCH(req: NextRequest) {
       update: updateData,
       create: {
         academicYearId, departmentId, year, semester, sectionId, subjectId,
-        facultyId: facultyId || session.user.id,
+        facultyId: resolvedFacultyId,
         ...updateData
       }
     });

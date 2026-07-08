@@ -347,6 +347,53 @@ export default function CourseFilePrintPage() {
     return rows;
   };
 
+  const isImageFile = (path: string): boolean => {
+    const ext = path.split('.').pop()?.toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext || '');
+  };
+
+  const renderUploadedDocument = (path: string, title: string) => {
+    if (!path) return null;
+    const isImg = isImageFile(path);
+    return (
+      <div className="space-y-4 w-full">
+        <div className="no-print text-xs border border-slate-200 p-4 rounded-xl bg-slate-50 flex justify-between items-center mb-4">
+          <div>
+            <p className="text-emerald-700 font-bold">✅ {title} has been uploaded</p>
+            <p className="text-slate-500 font-medium mt-1">
+              File: <a href={path} target="_blank" className="text-teal-600 underline font-semibold">{path}</a>
+            </p>
+            <p className="text-slate-400 text-[10px] mt-1 italic">
+              Note: If the embedded document does not print fully, click "Open in New Tab" to print it separately.
+            </p>
+          </div>
+          <a
+            href={path}
+            target="_blank"
+            className="bg-teal-600 hover:bg-teal-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 font-sans"
+          >
+            Open in New Tab
+          </a>
+        </div>
+        
+        <div className="w-full border border-slate-200 rounded-xl overflow-hidden bg-slate-100/50 p-1 flex justify-center">
+          {isImg ? (
+            <img
+              src={path}
+              alt={title}
+              className="max-w-full h-auto mx-auto object-contain max-h-[85vh] rounded-lg"
+            />
+          ) : (
+            <iframe
+              src={`${path}#toolbar=0&navpanes=0&scrollbar=0`}
+              className="w-full min-h-[75vh] print:h-[95vh] border-none rounded-lg bg-white"
+              title={title}
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderEvaluationScheme = (schemeText: string, paper: any, examTitle: string) => {
     const structured = parseSchemeText(schemeText);
@@ -372,14 +419,7 @@ export default function CourseFilePrintPage() {
       }
       
       const schemePath = examTitle === "MID-I" ? courseFile?.mid1SchemePath : courseFile?.mid2SchemePath;
-      return (
-        <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
-          <div>
-            <p className="text-emerald-700 font-bold mb-2">✅ {examTitle} Evaluation answer key has been uploaded</p>
-            <p className="text-slate-500 font-medium">Serving path: <a href={schemePath} target="_blank" className="text-teal-600 underline font-semibold">{schemePath}</a></p>
-          </div>
-        </div>
-      );
+      return renderUploadedDocument(schemePath || "", `${examTitle} Evaluation Scheme`);
     }
 
     const rubrics = structured.rubrics || {};
@@ -1099,7 +1139,7 @@ export default function CourseFilePrintPage() {
                     const mapping = coPoMappings.find((m: any) => m.co === coLabel && m.po === poLabel);
                     return (
                       <td key={poIdx} className="p-1.5 font-semibold text-center">
-                        {mapping ? mapping.level : "-"}
+                        {mapping && mapping.weight !== null ? mapping.weight : "-"}
                       </td>
                     );
                   })}
@@ -1130,7 +1170,7 @@ export default function CourseFilePrintPage() {
                     const mapping = coPsoMappings.find((m: any) => m.co === coLabel && m.pso === psoLabel);
                     return (
                       <td key={psoLabel} className="p-1.5 font-semibold text-center">
-                        {mapping ? mapping.level : "-"}
+                        {mapping && mapping.weight !== null ? mapping.weight : "-"}
                       </td>
                     );
                   })}
@@ -1146,12 +1186,7 @@ export default function CourseFilePrintPage() {
       {/* ========================================================================= */}
       <PrintSection title="4. Academic Calendar">
         {courseFile?.academicCalendarPath ? (
-          <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
-            <div>
-              <p className="text-emerald-700 font-bold mb-2">✅ Academic Calendar Document has been uploaded</p>
-              <p className="text-slate-500 font-medium">Serving path: <a href={courseFile.academicCalendarPath} target="_blank" className="text-teal-600 underline font-semibold">{courseFile.academicCalendarPath}</a></p>
-            </div>
-          </div>
+          renderUploadedDocument(courseFile.academicCalendarPath, "Academic Calendar")
         ) : (
           <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 min-h-[70vh] flex flex-col justify-center items-center bg-slate-50/10">
             <span className="font-extrabold text-sm text-slate-600 uppercase mb-2">📥 [ ATTACH / INSERT ACADEMIC CALENDAR DOCUMENT HERE ]</span>
@@ -1803,7 +1838,7 @@ export default function CourseFilePrintPage() {
                 ? availableScaled.reduce((a, b) => a + b, 0) / availableScaled.length
                 : 0;
               const avgMidDisplay = (m1Raw !== undefined || m2Raw !== undefined || isAbs1 || isAbs2)
-                ? Math.round(avgMid)
+                ? Math.ceil(avgMid)
                 : "-";
 
               const assignmentVal = assMark ? assMark.marksObtained : null;
@@ -1862,17 +1897,20 @@ export default function CourseFilePrintPage() {
       {/* ========================================================================= */}
       <PrintSection title="21. Previous Question Papers">
         {courseFile?.prevPapersPaths && Array.isArray(courseFile.prevPapersPaths) && courseFile.prevPapersPaths.length > 0 ? (
-          <div className="text-xs border border-dashed border-slate-300 p-6 rounded-xl text-center bg-slate-50/30">
-            <div>
-              <p className="text-emerald-700 font-bold mb-2">✅ Previous Semester Question Papers uploaded ({courseFile.prevPapersPaths.length})</p>
-              <ul className="text-slate-500 font-medium space-y-1.5 mt-4">
-                {courseFile.prevPapersPaths.map((path: string, pIdx: number) => (
-                  <li key={pIdx}>
-                    Paper #{pIdx + 1}: <a href={path} target="_blank" className="text-teal-600 underline font-semibold">{path}</a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className="space-y-12">
+            {courseFile.prevPapersPaths.map((path: string, pIdx: number) => (
+              <div
+                key={pIdx}
+                className="space-y-4"
+                style={{
+                  pageBreakBefore: pIdx > 0 ? "always" : "auto",
+                  breakBefore: pIdx > 0 ? "always" : "auto"
+                }}
+              >
+                <h4 className="font-bold text-xs text-slate-700 uppercase">Question Paper #{pIdx + 1}</h4>
+                {renderUploadedDocument(path, `Previous Question Paper #${pIdx + 1}`)}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 min-h-[70vh] flex flex-col justify-center items-center bg-slate-50/10">

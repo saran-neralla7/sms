@@ -17,7 +17,25 @@ export async function GET(request: Request) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    if (!year || !semester || !sectionId || !startDate || !endDate) {
+    const subjectId = searchParams.get("subjectId");
+    let isElective = false;
+
+    try {
+        if (subjectId) {
+            const subjectInfo = await prisma.subject.findUnique({
+                where: { id: subjectId },
+                select: { isElective: true, type: true }
+            });
+            if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
+                isElective = true;
+            }
+        }
+    } catch (e) {
+        console.error("Error fetching subject info:", e);
+    }
+
+    const isValidationOk = year && semester && startDate && endDate && (isElective || sectionId);
+    if (!isValidationOk) {
         return NextResponse.json({ error: "Missing required filters" }, { status: 400 });
     }
 
@@ -28,18 +46,6 @@ export async function GET(request: Request) {
 
         // 1. Fetch History Records for the range
         console.log(`[DEBUG REPORT] Fetching consolidated. Dept: ${departmentId}, Sec: ${sectionId}, Sem: ${semester}, Start: ${start.toISOString()}, End: ${end.toISOString()}`);
-
-        const subjectId = searchParams.get("subjectId");
-        let isElective = false;
-        if (subjectId) {
-            const subjectInfo = await prisma.subject.findUnique({
-                where: { id: subjectId },
-                select: { isElective: true, type: true }
-            });
-            if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
-                isElective = true;
-            }
-        }
 
         const historyWhere: any = {
             semester,

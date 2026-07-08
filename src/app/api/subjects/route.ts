@@ -12,12 +12,16 @@ export async function GET(request: Request) {
     const year = searchParams.get("year");
     const semester = searchParams.get("semester");
     const includeElectives = searchParams.get("includeElectives") === "true";
+    const excludeElectives = searchParams.get("excludeElectives") === "true";
+    const onlyElectives = searchParams.get("onlyElectives") === "true";
 
     const where: any = {};
     if (year) where.year = year;
     if (semester) where.semester = semester;
 
-    if (departmentId) {
+    if (onlyElectives) {
+        where.isElective = true;
+    } else if (departmentId) {
         if (includeElectives) {
             where.OR = [
                 { departmentId: departmentId },
@@ -25,7 +29,12 @@ export async function GET(request: Request) {
             ];
         } else {
             where.departmentId = departmentId;
+            if (excludeElectives) {
+                where.isElective = false;
+            }
         }
+    } else if (excludeElectives) {
+        where.isElective = false;
     }
 
     const isBSH = isBSHHod(session?.user as any);
@@ -55,7 +64,7 @@ export async function GET(request: Request) {
                     subject: {
                         year: year || undefined,
                         semester: semester || undefined,
-                        ...(includeElectives ? {} : { departmentId: departmentId || undefined })
+                        ...(onlyElectives ? { isElective: true } : (includeElectives ? {} : { departmentId: departmentId || undefined }))
                     }
                 },
                 select: { subjectId: true }

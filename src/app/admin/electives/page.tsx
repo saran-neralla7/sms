@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { FaSave, FaCheck, FaSearch } from "react-icons/fa";
 
 export default function ElectivesPage() {
     const { data: session } = useSession();
+    const router = useRouter();
     const [departments, setDepartments] = useState<any[]>([]);
     const [subjects, setSubjects] = useState<any[]>([]);
     const [sections, setSections] = useState<any[]>([]);
@@ -239,7 +241,15 @@ export default function ElectivesPage() {
 
     return (
         <div className="mx-auto max-w-7xl p-6 pb-32">
-            <h1 className="mb-6 text-2xl font-bold text-slate-900">Elective Enrollment</h1>
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <h1 className="text-2xl font-bold text-slate-900">Elective Enrollment</h1>
+                <button
+                    onClick={() => router.push("/admin/electives/report")}
+                    className="rounded-lg bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-600 transition-colors hover:bg-indigo-100"
+                >
+                    View Choices Report
+                </button>
+            </div>
 
             <div className="mb-8 grid gap-4 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-4">
                 <div>
