@@ -24,6 +24,7 @@ model Department {
   sections      Section[]           @relation("DepartmentToSection")
   feedbackForms FeedbackForm[]
   CourseFile    CourseFile[]
+  programSurveys ProgramSurvey[]
 }
 
 model Section {
@@ -299,6 +300,7 @@ model AcademicYear {
   midExamPapers         MidExamPaper[]
   assignmentMarks       AssignmentMark[]
   CourseFile            CourseFile[]
+  programSurveys        ProgramSurvey[]
 }
 
 model Batch {
@@ -887,4 +889,21 @@ model FacultyLeaveQuota {
   faculty            Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
 
   @@unique([facultyId, calendarYear])
+}
+
+model ProgramSurvey {
+  id             String   @id @default(uuid())
+  academicYearId String
+  departmentId   String
+  year           String
+  semester       String
+  poRatings      Json     // Record<string, number>
+  psoRatings     Json     // Record<string, number>
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  department     Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([academicYearId, departmentId, year, semester])
 }

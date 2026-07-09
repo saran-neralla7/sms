@@ -196,7 +196,8 @@ export async function GET(req: NextRequest) {
         completedCount,
         totalCount: 23,
         percentage: Math.round((completedCount / 23) * 100),
-        lastUpdated: courseFile ? courseFile.updatedAt : null
+        lastUpdated: courseFile ? courseFile.updatedAt : null,
+        externalResultsAvailable: hasSemResults
       };
     });
 

@@ -19,7 +19,8 @@ import {
     FaMobileAlt,
     FaSms,
     FaFileAlt,
-    FaHistory
+    FaHistory,
+    FaChartLine
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -242,6 +243,13 @@ export default function AdminDashboardPage() {
             description: "OBE-ready Mid examinations & marks evaluation control panel.",
             href: "/admin/mid-exam",
             color: "bg-blue-50 text-blue-600"
+        },
+        {
+            title: "Batch Rollup & Gap Analysis",
+            icon: <FaChartLine className="h-6 w-6" />,
+            description: "Calculate direct/indirect attainment and analyze program gaps.",
+            href: "/admin/course-files/rollup",
+            color: "bg-indigo-50 text-indigo-600"
         },
         {
             title: "Certificates",

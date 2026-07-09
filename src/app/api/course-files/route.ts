@@ -58,6 +58,49 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    // Fetch Faculty
+    let faculty = null;
+    if (courseFile?.facultyId) {
+      faculty = await prisma.faculty.findUnique({
+        where: { id: courseFile.facultyId }
+      });
+    }
+    if (!faculty) {
+      const mapping = await prisma.facultySubjectMapping.findFirst({
+        where: {
+          subjectId,
+          sectionId,
+          academicYearId
+        },
+        include: { faculty: true }
+      });
+      if (mapping) {
+        faculty = mapping.faculty;
+      }
+    }
+    if (!faculty) {
+      const userId = (session.user as any).id;
+      const username = session.user?.name || session.user?.email || "";
+      if (userId) {
+        const userWithFaculty = await prisma.user.findUnique({
+          where: { id: userId },
+          include: { faculty: true }
+        });
+        if (userWithFaculty?.faculty) {
+          faculty = userWithFaculty.faculty;
+        }
+      }
+      if (!faculty && username) {
+        const userWithFaculty = await prisma.user.findUnique({
+          where: { username },
+          include: { faculty: true }
+        });
+        if (userWithFaculty?.faculty) {
+          faculty = userWithFaculty.faculty;
+        }
+      }
+    }
+
     // 2. Fetch subject and its syllabus (Item 1 & 2)
     const subject = await prisma.subject.findUnique({
       where: { id: subjectId },
@@ -70,6 +113,10 @@ export async function GET(req: NextRequest) {
 
     const department = await prisma.department.findUnique({
       where: { id: departmentId }
+    });
+
+    const section = await prisma.section.findUnique({
+      where: { id: sectionId }
     });
 
     // 3. Fetch CO-PO/PSO mappings (Item 3)
@@ -214,6 +261,7 @@ export async function GET(req: NextRequest) {
       courseFile,
       academicYear,
       department,
+      section,
       subject,
       coPoMappings,
       coPsoMappings,
@@ -225,7 +273,8 @@ export async function GET(req: NextRequest) {
       mid2Marks,
       internalMarks,
       assignmentMarks,
-      semesterResults
+      semesterResults,
+      faculty
     });
   } catch (error: any) {
     console.error("Error in GET /api/course-files:", error);

@@ -2,29 +2,25 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
-  FaSpinner, FaCalculator, FaSliders, FaFloppyDisk, FaChevronDown, FaChevronUp,
+  FaSpinner, FaCalculator, FaChevronDown, FaChevronUp,
   FaChartBar, FaArrowLeft
-} from "react-icons/fa6";
+} from "react-icons/fa";
+import { FaFloppyDisk } from "react-icons/fa6";
 import { computeAttainments, AttainmentSummary } from "@/lib/attainments";
 import StudentMarksGrid from "@/components/StudentMarksGrid";
 
 // ─────────────────────────────────────────────────────────────
-// PO/PSO label helpers
-// ─────────────────────────────────────────────────────────────
 const PO_LABELS = ["PO1","PO2","PO3","PO4","PO5","PO6","PO7","PO8","PO9","PO10","PO11","PO12"];
+
 const levelColor = (v: number) => {
-  if (v >= 2.5) return "text-emerald-700 font-extrabold";
-  if (v >= 1.5) return "text-amber-700 font-bold";
-  if (v > 0)   return "text-orange-600 font-bold";
+  if (v >= 2.5) return "text-emerald-600 font-extrabold";
+  if (v >= 1.5) return "text-amber-600 font-bold";
+  if (v > 0)   return "text-orange-500 font-bold";
   return "text-slate-400";
 };
 
-// ─────────────────────────────────────────────────────────────
-// Flatten subquestions from paper (handles master paper)
-// ─────────────────────────────────────────────────────────────
 function flattenSubQuestions(paper: any) {
   if (!paper) return [];
   const sqs: any[] = [];
@@ -37,11 +33,22 @@ function flattenSubQuestions(paper: any) {
   return sqs;
 }
 
+function LevelBadge({ level }: { level: number }) {
+  const styles: Record<number, string> = {
+    3: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    2: "bg-amber-50 text-amber-700 border border-amber-200",
+    1: "bg-orange-50 text-orange-700 border border-orange-200",
+    0: "bg-slate-50 text-slate-400 border border-slate-200",
+  };
+  return (
+    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-extrabold ${styles[level] || styles[0]}`}>
+      {level}
+    </span>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
-// Main Page
-// ─────────────────────────────────────────────────────────────
-export default function AttainmentsPage() {
-  const { data: session } = useSession();
+export default function SubjectAttainmentAdminPage() {
   const searchParams = useSearchParams();
 
   const academicYearId = searchParams?.get("academicYearId") || "";
@@ -132,13 +139,12 @@ export default function AttainmentsPage() {
     setSaving(false);
   }, [academicYearId, departmentId, year, semester, sectionId, subjectId, benchmarkPct, decimalPlaces]);
 
-  // ── Loading ─────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
-          <FaSpinner className="h-10 w-10 text-teal-600 animate-spin mx-auto mb-4" />
-          <p className="font-semibold text-slate-600">Loading attainment data...</p>
+          <FaSpinner className="h-10 w-10 text-indigo-600 animate-spin mx-auto mb-4" />
+          <p className="font-semibold text-slate-600">Loading subject attainment data...</p>
         </div>
       </div>
     );
@@ -146,8 +152,13 @@ export default function AttainmentsPage() {
 
   if (!data || data.error) {
     return (
-      <div className="p-8 text-center text-red-600 font-bold">
-        {data?.error || "Missing query parameters. Please open this page from the mid-exam subjects list."}
+      <div className="p-8 text-center text-red-600 font-bold bg-slate-50 min-h-screen flex items-center justify-center">
+        <div>
+          <p className="mb-4">{data?.error || "Missing query parameters."}</p>
+          <Link href="/admin/course-files" className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-sm transition-all">
+            Back to Course Files
+          </Link>
+        </div>
       </div>
     );
   }
@@ -161,46 +172,40 @@ export default function AttainmentsPage() {
 
   const coPoMappings  = data.coPoMappings  || [];
   const coPsoMappings = data.coPsoMappings || [];
-
-  // Unique PSO list from mappings
   const psoList = ([...new Set(coPsoMappings.map((m: any) => m.pso))] as string[]).sort();
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
 
-      {/* Header */}
+      {/* ── Sticky Header ──────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <Link
-              href="/faculty/mid-exam"
+              href={`/admin/course-files?academicYearId=${academicYearId}&departmentId=${departmentId}&year=${year}&semester=${semester}&sectionId=${sectionId}&view=attainments`}
               className="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors"
             >
               <FaArrowLeft className="h-3.5 w-3.5" /> Back
             </Link>
             <div className="h-5 w-px bg-slate-200" />
-            <FaCalculator className="text-teal-600 h-5 w-5" />
+            <FaCalculator className="text-indigo-600 h-5 w-5" />
             <div>
-              <h1 className="text-base font-bold text-slate-800">CO-PO Attainment Calculator</h1>
-              <p className="text-xs text-slate-500">
-                {subject?.code} – {subject?.name} ({data.faculty?.empName || data.faculty?.name || "No faculty assigned"})
-              </p>
+              <h1 className="text-base font-extrabold text-slate-800 leading-tight">Subject Attainment Analysis</h1>
+              <p className="text-xs text-slate-500">{subject?.code} – {subject?.name} ({data.faculty?.empName || data.faculty?.name || "No faculty assigned"})</p>
             </div>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-60"
-          >
-            {saving ? <FaSpinner className="animate-spin h-4 w-4" /> : <FaFloppyDisk className="h-4 w-4" />}
-            Save Settings
-          </button>
-        </div>
-        {saveMsg && (
-          <div className="max-w-7xl mx-auto mt-1">
-            <span className="text-xs text-emerald-600 font-semibold">{saveMsg}</span>
+          <div className="flex items-center gap-3">
+            {saveMsg && <span className="text-xs text-emerald-600 font-semibold">{saveMsg}</span>}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all shadow-sm disabled:opacity-60 cursor-pointer"
+            >
+              {saving ? <FaSpinner className="animate-spin h-4 w-4" /> : <FaFloppyDisk className="h-4 w-4" />}
+              Save Settings
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -211,7 +216,7 @@ export default function AttainmentsPage() {
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Subject Details</span>
               <h2 className="text-lg font-extrabold text-slate-800 leading-tight">{subject?.name}</h2>
-              <p className="text-sm font-semibold text-teal-600 mt-1">{subject?.code}</p>
+              <p className="text-sm font-semibold text-indigo-600 mt-1">{subject?.code}</p>
             </div>
             <div className="border-t md:border-t-0 md:border-l border-slate-100 md:pl-6 pt-4 md:pt-0">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Faculty & Section</span>
@@ -238,43 +243,41 @@ export default function AttainmentsPage() {
           benchmarkPct={benchmarkPct}
         />
 
-        {/* ── Controls Card ──────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        {/* ── Settings Controls Card ─────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-4">
-            <FaSliders className="text-teal-600 h-4 w-4" />
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Attainment Settings</h2>
+            <FaCalculator className="text-indigo-600 h-4 w-4" />
+            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Adjustment Parameters</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {/* Benchmark % */}
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Benchmark Percentage (%)
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Benchmark Target Score (%)
               </label>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <input
                   type="range" min={40} max={80} step={5}
                   value={benchmarkPct}
                   onChange={e => setBenchmarkPct(Number(e.target.value))}
-                  className="flex-1 accent-teal-600"
+                  className="flex-1 accent-indigo-600 cursor-pointer"
                 />
-                <span className="text-sm font-bold text-teal-700 w-10 text-right">{benchmarkPct}%</span>
+                <span className="text-sm font-bold text-indigo-700 w-12 text-right">{benchmarkPct}%</span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Students must score ≥ {benchmarkPct}% to be counted as "passed"</p>
+              <p className="text-[10px] text-slate-400 mt-1">Defines the minimum student score to count as passing (for Mid exams and Assignments)</p>
             </div>
 
-            {/* Decimal Places */}
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Output Decimal Places
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Decimals Rounding
               </label>
               <div className="flex gap-2">
                 {[0, 1, 2].map(v => (
                   <button
                     key={v}
                     onClick={() => setDecimalPlaces(v)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all cursor-pointer ${
                       decimalPlaces === v
-                        ? "bg-slate-700 border-slate-700 text-white"
+                        ? "bg-slate-800 border-slate-800 text-white"
                         : "bg-white border-slate-200 text-slate-600 hover:border-slate-400"
                     }`}
                   >
@@ -282,47 +285,44 @@ export default function AttainmentsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Rounding for final PO/PSO attainment output</p>
+              <p className="text-[10px] text-slate-400 mt-1">Precision rounding applied to calculated PO and PSO output attainments</p>
             </div>
-          </div>
-          <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-[11px] text-blue-700 font-medium">
-            ℹ️ Exit survey ratings (indirect attainment) are now entered at the program level in the <strong>Batch Rollup &amp; Gap Analysis</strong> dashboard by the HOD/Admin.
           </div>
         </div>
 
-        {/* ── CO Attainment Table ─────────────────────────────── */}
+        {/* ── Attainment Results Table ───────────────────────── */}
         {result && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
               <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">CO Attainment Results</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Benchmark: {benchmarkPct}% &nbsp;|&nbsp;&nbsp;
-                {data.semesterResults?.length > 0 ? `University results: ${data.semesterResults.length} students` : "University results: Not yet uploaded"}
+                Benchmark Level: {benchmarkPct}% &nbsp;|&nbsp;&nbsp;
+                {data.semesterResults?.length > 0 ? `University records: ${data.semesterResults.length} students` : "University records: Not uploaded"}
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-700 font-bold">
-                    <th className="p-3 text-left border-b border-slate-200">CO</th>
-                    <th className="p-3 text-center border-b border-slate-200">Questions Mapped</th>
-                    <th className="p-3 text-center border-b border-slate-200">Combined Pass %</th>
-                    <th className="p-3 text-center border-b border-slate-200">Internal Score</th>
-                    <th className="p-3 text-center border-b border-slate-200 bg-blue-50">Internal Level</th>
-                    <th className="p-3 text-center border-b border-slate-200">Uni Pass %</th>
-                    <th className="p-3 text-center border-b border-slate-200 bg-blue-50">Uni Level</th>
-                    <th className="p-3 text-center border-b border-slate-200 bg-teal-50 text-teal-800">Final Attainment</th>
+                  <tr className="bg-slate-50/50 text-slate-600 font-bold border-b border-slate-200">
+                    <th className="p-3 text-left">Course Outcome</th>
+                    <th className="p-3 text-center">Questions Mapped</th>
+                    <th className="p-3 text-center">Pass % (Internal)</th>
+                    <th className="p-3 text-center">Avg Score %</th>
+                    <th className="p-3 text-center bg-slate-50">Internal Level</th>
+                    <th className="p-3 text-center">Uni Pass %</th>
+                    <th className="p-3 text-center bg-slate-50">Uni Level</th>
+                    <th className="p-3 text-center bg-indigo-50 text-indigo-900 font-extrabold">Final Direct Level</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {result.coResults.map(cr => (
-                    <tr key={cr.co} className="hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                      <td className="p-3 font-bold text-slate-800">{cr.co}</td>
-                      <td className="p-3 text-center text-slate-600">
+                    <tr key={cr.co} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="p-3 font-bold text-slate-900">{cr.co}</td>
+                      <td className="p-3 text-center">
                         {cr.subQuestions.length > 0 ? (
                           <span className="inline-flex flex-wrap gap-1 justify-center">
                             {cr.subQuestions.map((sq, i) => (
-                              <span key={i} className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[10px]">
+                              <span key={i} className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[10px] font-bold">
                                 {sq.maxMarks}M
                               </span>
                             ))}
@@ -333,23 +333,23 @@ export default function AttainmentsPage() {
                       </td>
                       <td className="p-3 text-center">
                         {cr.subQuestions.length > 0
-                          ? <span className={cr.combinedPassPct >= benchmarkPct ? "text-emerald-700 font-bold" : "text-red-600 font-bold"}>
+                          ? <span className={cr.combinedPassPct >= benchmarkPct ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
                               {cr.combinedPassPct.toFixed(1)}%
                             </span>
                           : <span className="text-slate-300">–</span>
                         }
                       </td>
-                      <td className="p-3 text-center text-slate-700">{cr.internalScore.toFixed(1)}%</td>
-                      <td className="p-3 text-center bg-blue-50">
+                      <td className="p-3 text-center text-slate-600">{cr.internalScore.toFixed(1)}%</td>
+                      <td className="p-3 text-center bg-slate-50/50">
                         <LevelBadge level={cr.internalLevel} />
                       </td>
                       <td className="p-3 text-center text-slate-500">
                         {cr.universityPassPct !== null ? `${cr.universityPassPct.toFixed(1)}%` : <span className="text-slate-300 italic text-[10px]">pending</span>}
                       </td>
-                      <td className="p-3 text-center bg-blue-50">
+                      <td className="p-3 text-center bg-slate-50/50">
                         {cr.universityLevel !== null ? <LevelBadge level={cr.universityLevel} /> : <span className="text-slate-300 text-[10px]">–</span>}
                       </td>
-                      <td className="p-3 text-center bg-teal-50">
+                      <td className="p-3 text-center bg-indigo-50/30">
                         <span className={`text-base ${levelColor(cr.finalAttainment)}`}>
                           {cr.finalAttainment.toFixed(decimalPlaces)}
                         </span>
@@ -362,7 +362,7 @@ export default function AttainmentsPage() {
           </div>
         )}
 
-        {/* ── CO-PO Matrix ───────────────────────────────────── */}
+        {/* ── CO-PO Mapping Matrix ───────────────────────────── */}
         {result && coPoMappings.length > 0 && (
           <COPOMatrix
             title="CO-PO Attainment Matrix"
@@ -376,7 +376,7 @@ export default function AttainmentsPage() {
           />
         )}
 
-        {/* ── CO-PSO Matrix ──────────────────────────────────── */}
+        {/* ── CO-PSO Mapping Matrix ──────────────────────────── */}
         {result && coPsoMappings.length > 0 && (
           <COPOMatrix
             title="CO-PSO Attainment Matrix"
@@ -390,44 +390,45 @@ export default function AttainmentsPage() {
           />
         )}
 
-        {/* ── Attainment Bar Chart ───────────────────────────── */}
+        {/* ── PO Attainment Bar Chart ────────────────────────── */}
         {result && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <div className="flex items-center gap-2 mb-5">
-              <FaChartBar className="text-teal-600 h-4 w-4" />
-              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">PO Attainment Chart</h2>
+              <FaChartBar className="text-indigo-600 h-4 w-4" />
+              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Direct PO Attainment Visual Profile</h2>
             </div>
-            <div className="flex items-end gap-2 h-36">
+            <div className="flex items-end gap-2.5 h-36 border-b border-slate-100 pb-2 px-2">
               {PO_LABELS.map(po => {
                 const val = result.poAttainments[po] ?? 0;
                 const pct = (val / 3) * 100;
                 return (
-                  <div key={po} className="flex flex-col items-center flex-1 gap-1">
-                    <span className="text-[10px] font-bold text-slate-600">{val > 0 ? val.toFixed(decimalPlaces) : ""}</span>
+                  <div key={po} className="flex flex-col items-center flex-1 gap-1 h-full justify-end">
+                    <span className="text-[10px] font-bold text-slate-700">{val > 0 ? val.toFixed(decimalPlaces) : ""}</span>
                     <div
-                      className="w-full rounded-t-sm transition-all"
+                      className="w-full rounded-t transition-all max-w-[24px]"
                       style={{
                         height: `${Math.max(pct, 2)}%`,
-                        backgroundColor: val >= 2.5 ? "#059669" : val >= 1.5 ? "#d97706" : val > 0 ? "#ea580c" : "#e2e8f0"
+                        backgroundColor: val >= 2.5 ? "#10b981" : val >= 1.5 ? "#f59e0b" : val > 0 ? "#f97316" : "#cbd5e1"
                       }}
+                      title={`${po}: ${val.toFixed(2)}`}
                     />
-                    <span className="text-[9px] text-slate-400 font-medium">{po}</span>
+                    <span className="text-[9px] text-slate-400 font-bold mt-1">{po}</span>
                   </div>
                 );
               })}
             </div>
-            <div className="flex gap-4 mt-3 text-[10px] text-slate-500">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> ≥ 2.5 High</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-600 inline-block" /> ≥ 1.5 Medium</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-600 inline-block" /> &gt; 0 Low</span>
+            <div className="flex gap-5 mt-4 text-[10px] text-slate-500 font-medium">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> ≥ 2.5 High</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-500 inline-block" /> ≥ 1.5 Medium</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-500 inline-block" /> &gt; 0 Low</span>
             </div>
           </div>
         )}
 
-        {/* No marks notice */}
+        {/* Empty marks alert */}
         {result && result.coResults.every(r => r.subQuestions.length === 0) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 font-medium">
-            ⚠ No mid-exam question papers found for this subject. Please create and submit Mid-I / Mid-II papers with marks before viewing attainment.
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-xs font-semibold flex items-center gap-2">
+            ⚠️ No mid-exam papers or assignment questionnaires are mapped for this subject. Direct attainments cannot be computed until question mappings and marks are stored.
           </div>
         )}
 
@@ -437,24 +438,7 @@ export default function AttainmentsPage() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Level Badge Component
-// ─────────────────────────────────────────────────────────────
-function LevelBadge({ level }: { level: 0 | 1 | 2 | 3 }) {
-  const styles: Record<number, string> = {
-    3: "bg-emerald-100 text-emerald-800 ring-emerald-300",
-    2: "bg-amber-100 text-amber-800 ring-amber-300",
-    1: "bg-orange-100 text-orange-800 ring-orange-300",
-    0: "bg-slate-100 text-slate-400 ring-slate-200",
-  };
-  return (
-    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-extrabold ring-1 ${styles[level]}`}>
-      {level}
-    </span>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CO-PO / CO-PSO Matrix Component
+// CO-PO / CO-PSO Matrix Component (Helper)
 // ─────────────────────────────────────────────────────────────
 function COPOMatrix({
   title, coList, headerList, mappings, coAttainments, finalAttainments, headerKey, decimalPlaces
@@ -469,6 +453,7 @@ function COPOMatrix({
   decimalPlaces: number;
 }) {
   const [expanded, setExpanded] = useState(true);
+
   const getMappingWeight = (co: string, header: string) => {
     const m = mappings.find((x: any) => x.co === co && x[headerKey] === header);
     return m?.weight ?? null;
@@ -482,9 +467,9 @@ function COPOMatrix({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <button
-        className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 text-left"
+        className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 text-left hover:bg-slate-50 transition-colors cursor-pointer"
         onClick={() => setExpanded(e => !e)}
       >
         <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">{title}</h2>
@@ -495,20 +480,20 @@ function COPOMatrix({
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-bold">
-                <th className="p-2 text-left border-b border-r border-slate-200 sticky left-0 bg-slate-50">CO</th>
-                <th className="p-2 text-center border-b border-r border-slate-200 bg-teal-50 text-teal-700">Attainment</th>
+              <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                <th className="p-3 text-left border-r border-slate-200 sticky left-0 bg-slate-50 z-10">CO</th>
+                <th className="p-3 text-center border-r border-slate-200 bg-indigo-50/50 text-indigo-900 font-extrabold">Final Attainment</th>
                 {headerList.map(h => (
-                  <th key={h} className="p-2 text-center border-b border-slate-200 min-w-[60px]">{h}</th>
+                  <th key={h} className="p-3 text-center border-slate-200 border-r last:border-r-0 min-w-[64px]">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {coList.map(co => (
-                <tr key={co} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="p-2 font-bold text-slate-700 border-r border-slate-200 sticky left-0 bg-white">{co}</td>
-                  <td className="p-2 text-center border-r border-slate-200 bg-teal-50">
-                    <span className={`font-extrabold ${levelColor(coAttainments[co] ?? 0)}`}>
+                <tr key={co} className="hover:bg-slate-50/20 transition-colors">
+                  <td className="p-3 font-bold text-slate-900 border-r border-slate-200 sticky left-0 bg-white z-10">{co}</td>
+                  <td className="p-3 text-center border-r border-slate-200 bg-indigo-50/20 font-bold">
+                    <span className={levelColor(coAttainments[co] ?? 0)}>
                       {(coAttainments[co] ?? 0).toFixed(decimalPlaces)}
                     </span>
                   </td>
@@ -516,13 +501,13 @@ function COPOMatrix({
                     const w = getMappingWeight(co, h);
                     const cell = getCellAttainment(co, h);
                     return (
-                      <td key={h} className="p-2 text-center border-slate-100 border-b">
+                      <td key={h} className="p-3 text-center border-r border-slate-100 last:border-r-0">
                         {w ? (
-                          <div>
-                            <div className="text-slate-500 text-[10px]">{w}</div>
-                            <div className={`font-bold text-xs ${levelColor(cell ?? 0)}`}>
+                          <div className="flex flex-col items-center">
+                            <span className="text-slate-400 text-[10px] font-bold">Map: {w}</span>
+                            <span className={`font-bold text-xs ${levelColor(cell ?? 0)}`}>
                               {(cell ?? 0).toFixed(decimalPlaces)}
-                            </div>
+                            </span>
                           </div>
                         ) : (
                           <span className="text-slate-200">–</span>
@@ -532,20 +517,20 @@ function COPOMatrix({
                   })}
                 </tr>
               ))}
-              {/* Final attainment row */}
-              <tr className="bg-teal-50 font-bold">
-                <td className="p-2 text-xs font-extrabold text-teal-800 border-r border-slate-200 sticky left-0 bg-teal-50 uppercase">
+              {/* Overall Attainment Row */}
+              <tr className="bg-indigo-50/40 border-t border-slate-200 font-bold">
+                <td className="p-3 text-xs font-extrabold text-indigo-950 border-r border-slate-200 sticky left-0 bg-indigo-50 uppercase z-10">
                   {headerKey.toUpperCase()} Attainment
                 </td>
-                <td className="p-2 border-r border-slate-200" />
+                <td className="p-3 border-r border-slate-200 bg-indigo-50/30" />
                 {headerList.map(h => (
-                  <td key={h} className="p-2 text-center">
+                  <td key={h} className="p-3 text-center border-r border-slate-100 last:border-r-0">
                     {finalAttainments[h] !== undefined ? (
                       <span className={`text-sm ${levelColor(finalAttainments[h])}`}>
                         {finalAttainments[h].toFixed(decimalPlaces)}
                       </span>
                     ) : (
-                      <span className="text-slate-300">–</span>
+                      <span className="text-slate-300 font-bold">–</span>
                     )}
                   </td>
                 ))}

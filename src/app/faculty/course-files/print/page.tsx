@@ -160,7 +160,6 @@ export default function CourseFilePrintPage() {
 
   // ── Attainment settings from courseFile ──────────────────────
   const benchmarkPct: number = (courseFile as any)?.benchmarkPct ?? 50;
-  const surveyRating: number = (courseFile as any)?.surveyRating ?? 2;
   const attainmentDecimal: number = (courseFile as any)?.attainmentDecimal ?? 2;
 
   // ── CO list from syllabus ────────────────────────────────────
@@ -190,7 +189,6 @@ export default function CourseFilePrintPage() {
     mid2SubQuestions: flattenSQs(mid2Paper),
     allMarks,
     benchmarkPct,
-    surveyRating,
     coPoMappings: coPoMappings as any[],
     coPsoMappings: coPsoMappings as any[],
     decimalPlaces: attainmentDecimal,
@@ -1970,7 +1968,7 @@ export default function CourseFilePrintPage() {
       {/* ========================================================================= */}
       <PrintSection title="23. CO-PO & CO-PSO Attainment">
         <p className="text-xs text-slate-500 mb-4 font-semibold">
-          Benchmark: {benchmarkPct}% &nbsp;|&nbsp; Survey Rating: {surveyRating}/3 &nbsp;|&nbsp;
+          Benchmark: {benchmarkPct}% &nbsp;|&nbsp;
           Rounding: {attainmentDecimal} decimal{attainmentDecimal !== 1 ? "s" : ""}
           {(semesterResults as any[]).length > 0 ? " | University results included" : " | University results: pending"}
         </p>

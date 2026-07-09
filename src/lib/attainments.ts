@@ -127,16 +127,14 @@ function computeSubQuestionPassPct(
 }
 
 // ------------------------------------------------------------------
-// Step 3: Internal CO Score (blending pass % + survey rating 1–3)
+// Step 3: Internal CO Score (no longer blending pass % with survey rating at CO level)
 // ------------------------------------------------------------------
 
 export function computeInternalCOScore(
   combinedPassPct: number,
-  surveyRating: number  // 1–3 scale
+  surveyRating?: number  // ignored
 ): number {
-  // Convert surveyRating (1–3) to 0–100 equivalent
-  const surveyPct = (surveyRating / 3) * 100;
-  return combinedPassPct * 0.8 + surveyPct * 0.2;
+  return combinedPassPct;
 }
 
 // ------------------------------------------------------------------
@@ -218,7 +216,7 @@ export function computeAttainments(args: {
   mid2SubQuestions: SubQuestion[];   // from mid2Paper
   allMarks: MarkEntry[];             // combined mid1Marks + mid2Marks
   benchmarkPct: number;              // e.g. 50
-  surveyRating: number;              // 1–3
+  surveyRating?: number;             // 1–3 (optional, ignored in CO calculations)
   coPoMappings: COPoMapping[];
   coPsoMappings: COPsoMapping[];
   decimalPlaces: number;

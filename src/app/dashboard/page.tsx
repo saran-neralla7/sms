@@ -12,7 +12,8 @@ import {
   FaFileAlt,
   FaCogs,
   FaRupeeSign,
-  FaClipboardList
+  FaClipboardList,
+  FaChartLine
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -126,11 +127,18 @@ export default function DashboardPage() {
         color: "bg-teal-50 text-teal-600"
       },
       {
-        title: "Course Files",
+        title: "Course Files & Attainments",
         icon: <FaClipboardList className="h-6 w-6" />,
-        description: "Monitor and verify faculty course files submissions.",
+        description: "Monitor booklets submission and subject CO-PO attainments status.",
         href: "/admin/course-files",
         color: "bg-teal-50 text-teal-600"
+      },
+      {
+        title: "Batch Rollup & Gap Analysis",
+        icon: <FaChartLine className="h-6 w-6" />,
+        description: "Calculate direct/indirect attainment and analyze program gaps.",
+        href: "/admin/course-files/rollup",
+        color: "bg-indigo-50 text-indigo-600"
       },
       {
         title: role === "ADMIN" ? "Leaves Administration" : "Leaves Approval",
