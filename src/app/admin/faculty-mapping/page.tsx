@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FaSave, FaArrowLeft, FaUsers } from "react-icons/fa";
+import { FaSave, FaArrowLeft, FaUsers, FaSearch, FaTimes, FaUserPlus, FaTrashAlt, FaExchangeAlt, FaFilter } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import { useRouter } from "next/navigation";
 
@@ -29,6 +29,16 @@ export default function FacultyMappingPage() {
 
     // Modal state
     const [modalConfig, setModalConfig] = useState({ isOpen: false, message: "", isError: false });
+
+    // Faculty selection lookup modal state
+    const [assignContext, setAssignContext] = useState<{
+        subjectId: string;
+        index: number;
+        role: string;
+        subjectName: string;
+    } | null>(null);
+    const [modalSearch, setModalSearch] = useState("");
+    const [modalDeptFilter, setModalDeptFilter] = useState("");
 
     const showModal = (message: string, isError: boolean) => {
         setModalConfig({ isOpen: true, message, isError });
@@ -132,6 +142,75 @@ export default function FacultyMappingPage() {
         }
     };
 
+    // Render helper for responsive faculty mapping slot
+    const renderFacultySlot = (subjectId: string, index: number, role: string, subjectName: string) => {
+        const assignedId = mappings[subjectId]?.[index] || "";
+        const faculty = allFaculty.find(f => f.id === assignedId);
+
+        if (faculty) {
+            return (
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-all">
+                    <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-slate-800 text-sm truncate">{faculty.empName}</span>
+                        <span className="text-xxs text-slate-500 font-medium truncate">
+                            {faculty.department?.code || "N/A"} • {faculty.empCode}
+                            {faculty.shortName ? ` • ${faculty.shortName}` : ""}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setAssignContext({ subjectId, index, role, subjectName })}
+                            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors animate-in"
+                            title="Change Faculty"
+                        >
+                            <FaExchangeAlt className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const current = [...(mappings[subjectId] || [])];
+                                current[index] = "";
+                                setMappings({ ...mappings, [subjectId]: current });
+                            }}
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors animate-in"
+                            title="Remove Faculty"
+                        >
+                            <FaTrashAlt className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setAssignContext({ subjectId, index, role, subjectName })}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 text-slate-500 hover:text-blue-600 text-xs font-semibold transition-all active:scale-98"
+            >
+                <FaUserPlus className="h-3.5 w-3.5" />
+                <span>Assign {role} Faculty</span>
+            </button>
+        );
+    };
+
+    // Filter faculty list for modal
+    const filteredFaculty = allFaculty.filter(fac => {
+        if (modalDeptFilter && fac.departmentId !== modalDeptFilter) {
+            return false;
+        }
+        if (modalSearch) {
+            const query = modalSearch.toLowerCase().trim();
+            const nameMatch = (fac.empName || "").toLowerCase().includes(query);
+            const codeMatch = (fac.empCode || "").toLowerCase().includes(query);
+            const shortMatch = (fac.shortName || "").toLowerCase().includes(query);
+            const deptMatch = (fac.department?.code || "").toLowerCase().includes(query);
+            return nameMatch || codeMatch || shortMatch || deptMatch;
+        }
+        return true;
+    });
+
     return (
         <div className="mx-auto max-w-6xl animate-in fade-in">
             {/* Modal */}
@@ -227,84 +306,245 @@ export default function FacultyMappingPage() {
             </div>
 
             {subjects.length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
-                            <tr>
-                                <th className="px-6 py-4">Subject Name</th>
-                                <th className="px-6 py-4">Subject Code</th>
-                                <th className="px-6 py-4">Type</th>
-                                <th className="px-6 py-4">Assigned Faculty</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {subjects.map(sub => (
-                                <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-slate-800">{sub.name}</td>
-                                    <td className="px-6 py-4 font-mono text-slate-500">{sub.code}</td>
-                                    <td className="px-6 py-4 text-xs font-medium text-slate-500">{sub.type}</td>
-                                    <td className="px-6 py-4">
-                                        {sub.type === "LAB" ? (
-                                            <div className="flex flex-col gap-2">
-                                                <select 
-                                                    value={mappings[sub.id]?.[0] || ""}
-                                                    onChange={(e) => {
-                                                        const current = mappings[sub.id] || [];
-                                                        setMappings({ ...mappings, [sub.id]: [e.target.value, current[1] || ""] });
-                                                    }}
-                                                    className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                                >
-                                                    <option value="">-- Primary Faculty --</option>
-                                                    {allFaculty.map(fac => (
-                                                        <option key={fac.id} value={fac.id}>
-                                                            {fac.empName} ({fac.department.code}) - {fac.empCode}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <select 
-                                                    value={mappings[sub.id]?.[1] || ""}
-                                                    onChange={(e) => {
-                                                        const current = mappings[sub.id] || [];
-                                                        setMappings({ ...mappings, [sub.id]: [current[0] || "", e.target.value] });
-                                                    }}
-                                                    className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                                >
-                                                    <option value="">-- Secondary Faculty (Optional) --</option>
-                                                    {allFaculty.map(fac => (
-                                                        <option key={fac.id} value={fac.id}>
-                                                            {fac.empName} ({fac.department.code}) - {fac.empCode}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        ) : (
-                                            <select 
-                                                value={mappings[sub.id]?.[0] || ""}
-                                                onChange={(e) => setMappings({ ...mappings, [sub.id]: [e.target.value] })}
-                                                className="w-full min-w-[250px] rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                            >
-                                                <option value="">-- No Faculty Assigned --</option>
-                                                {allFaculty.map(fac => (
-                                                    <option key={fac.id} value={fac.id}>
-                                                        {fac.empName} ({fac.department.code}) - {fac.empCode}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        )}
-                                    </td>
+                <div className="space-y-4">
+                    {/* Desktop View: Table */}
+                    <div className="hidden md:block rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
+                                <tr>
+                                    <th className="px-6 py-4">Subject Name</th>
+                                    <th className="px-6 py-4">Subject Code</th>
+                                    <th className="px-6 py-4">Type</th>
+                                    <th className="px-6 py-4">Assigned Faculty</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    <div className="bg-slate-50 p-6 flex justify-end border-t border-slate-200">
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {subjects.map(sub => (
+                                    <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-slate-800">{sub.name}</td>
+                                        <td className="px-6 py-4 font-mono text-slate-500">{sub.code}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-xxs font-bold uppercase tracking-wider ${
+                                                sub.type === "LAB" ? "bg-purple-50 text-purple-700 border border-purple-100" : "bg-blue-50 text-blue-700 border border-blue-100"
+                                            }`}>
+                                                {sub.type}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 min-w-[280px]">
+                                            {sub.type === "LAB" ? (
+                                                <div className="flex flex-col gap-2">
+                                                    <div>
+                                                        <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Primary Role</p>
+                                                        {renderFacultySlot(sub.id, 0, "Primary", sub.name)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Secondary Role (Optional)</p>
+                                                        {renderFacultySlot(sub.id, 1, "Secondary", sub.name)}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                renderFacultySlot(sub.id, 0, "Primary", sub.name)
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Mobile View: Cards */}
+                    <div className="block md:hidden space-y-4 animate-in fade-in">
+                        {subjects.map(sub => (
+                            <div key={sub.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm sm:text-base leading-snug">{sub.name}</h4>
+                                        <p className="text-xxs font-mono text-slate-400 mt-0.5">{sub.code}</p>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded-full text-xxs font-bold uppercase tracking-wider ${
+                                        sub.type === "LAB" ? "bg-purple-50 text-purple-700 border border-purple-100" : "bg-blue-50 text-blue-700 border border-blue-100"
+                                    }`}>
+                                        {sub.type}
+                                    </span>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-3 space-y-3">
+                                    {sub.type === "LAB" ? (
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Primary Role</p>
+                                                {renderFacultySlot(sub.id, 0, "Primary", sub.name)}
+                                            </div>
+                                            <div>
+                                                <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Secondary Role</p>
+                                                {renderFacultySlot(sub.id, 1, "Secondary", sub.name)}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Assigned Faculty</p>
+                                            {renderFacultySlot(sub.id, 0, "Primary", sub.name)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Global Save Button */}
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-xs p-4 sm:p-6 flex justify-end">
                         <button 
                             onClick={handleSave}
                             disabled={saving}
-                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-8 py-3 font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 px-8 py-3.5 font-bold text-white shadow-md transition-all disabled:opacity-50"
                         >
                             {saving ? <LogoSpinner fullScreen={false} /> : <FaSave />}
                             Save Mappings
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Search & Selection Modal for Faculty Lookup */}
+            {assignContext && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-150 flex items-start justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">Assign Faculty</h3>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Selecting <span className="font-semibold text-blue-600">{assignContext.role}</span> faculty for <span className="font-semibold text-slate-700">{assignContext.subjectName}</span>
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setAssignContext(null)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
+                                <FaTimes className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Search & Filters */}
+                        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col gap-3 sm:flex-row">
+                            <div className="relative flex-1">
+                                <FaSearch className="absolute left-3 top-3.5 text-slate-400 h-4 w-4" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by Name, Short Name or Emp ID..."
+                                    value={modalSearch}
+                                    onChange={(e) => setModalSearch(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                                {modalSearch && (
+                                    <button
+                                        onClick={() => setModalSearch("")}
+                                        className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600"
+                                    >
+                                        <FaTimes className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="sm:w-56 flex items-center gap-2">
+                                <FaFilter className="text-slate-400 h-4 w-4" />
+                                <select
+                                    value={modalDeptFilter}
+                                    onChange={(e) => setModalDeptFilter(e.target.value)}
+                                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Scrollable List */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[45vh] min-h-[250px]">
+                            {filteredFaculty.length > 0 ? (
+                                filteredFaculty.map(fac => {
+                                    const isCurrentlySelected = mappings[assignContext.subjectId]?.[assignContext.index] === fac.id;
+                                    return (
+                                        <div 
+                                            key={fac.id} 
+                                            onClick={() => {
+                                                const current = [...(mappings[assignContext.subjectId] || [])];
+                                                current[assignContext.index] = fac.id;
+                                                setMappings({ ...mappings, [assignContext.subjectId]: current });
+                                                setAssignContext(null);
+                                            }}
+                                            className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                                                isCurrentlySelected 
+                                                    ? "border-blue-500 bg-blue-50/50 hover:bg-blue-50" 
+                                                    : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                                            }`}
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                                    <span>{fac.empName}</span>
+                                                    {fac.shortName && (
+                                                        <span className="px-1.5 py-0.5 rounded text-xxs font-bold bg-slate-100 text-slate-600 uppercase border border-slate-200">
+                                                            {fac.shortName}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="text-xs text-slate-500 font-medium mt-1">
+                                                    {fac.designation} • {fac.department?.name || "N/A"}
+                                                </p>
+                                                <p className="text-xxs font-mono text-slate-400 mt-0.5">
+                                                    ID: {fac.empCode}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${
+                                                    isCurrentlySelected
+                                                        ? "bg-blue-600 text-white shadow-sm"
+                                                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                                }`}
+                                            >
+                                                {isCurrentlySelected ? "Selected" : "Assign"}
+                                            </button>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="text-center py-12">
+                                    <p className="text-slate-400 font-medium text-sm">No faculty members found matching your filters.</p>
+                                    <button 
+                                        type="button"
+                                        onClick={() => { setModalSearch(""); setModalDeptFilter(""); }}
+                                        className="text-blue-500 hover:text-blue-700 font-bold text-xs mt-2"
+                                    >
+                                        Clear Search Filters
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-155 flex flex-col sm:flex-row justify-between gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const current = [...(mappings[assignContext.subjectId] || [])];
+                                    current[assignContext.index] = "";
+                                    setMappings({ ...mappings, [assignContext.subjectId]: current });
+                                    setAssignContext(null);
+                                }}
+                                className="px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold transition-all text-center animate-in"
+                            >
+                                Clear Assignment (Unassign)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAssignContext(null)}
+                                className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all text-center"
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
