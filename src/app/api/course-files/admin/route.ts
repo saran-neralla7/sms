@@ -135,7 +135,11 @@ export async function GET(req: NextRequest) {
       // Has semester results grades posted for this subject code
       const hasSemResults = semesterResults.some(r => {
         const gradesArr = Array.isArray(r.grades) ? r.grades : [];
-        return (gradesArr as any[]).some(g => g.subjectCode === subject.code);
+        return (gradesArr as any[]).some(g => {
+          const dbCode = (g.subjectCode || "").trim().toUpperCase();
+          const targetCode = subject.code.trim().toUpperCase();
+          return dbCode === targetCode || dbCode.split(" - ")[0].trim() === targetCode;
+        });
       });
 
       // Calculate completed items (out of 23)

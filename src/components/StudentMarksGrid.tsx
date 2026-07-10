@@ -115,9 +115,11 @@ export default function StudentMarksGrid({
     const result = semesterResults.find((r) => r.studentId === studentId);
     if (!result || !result.grades) return null;
     const gradesArr = Array.isArray(result.grades) ? result.grades : [];
-    return gradesArr.find(
-      (g: any) => (g.subjectCode || "").trim().toUpperCase() === subjectCode.trim().toUpperCase()
-    );
+    return gradesArr.find((g: any) => {
+      const dbCode = (g.subjectCode || "").trim().toUpperCase();
+      const targetCode = subjectCode.trim().toUpperCase();
+      return dbCode === targetCode || dbCode.split(" - ")[0].trim() === targetCode;
+    });
   };
 
   return (

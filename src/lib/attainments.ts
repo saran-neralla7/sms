@@ -243,9 +243,11 @@ export function computeAttainments(args: {
       continue;
     }
     const gradesArr = Array.isArray(result.grades) ? result.grades : [];
-    const entry = gradesArr.find(
-      (g: any) => (g.subjectCode || "").trim().toUpperCase() === subjectCode.trim().toUpperCase()
-    );
+    const entry = gradesArr.find((g: any) => {
+      const dbCode = (g.subjectCode || "").trim().toUpperCase();
+      const targetCode = subjectCode.trim().toUpperCase();
+      return dbCode === targetCode || dbCode.split(" - ")[0].trim() === targetCode;
+    });
     uniPctMap[student.id] = entry ? gradeToPercent(entry.grade) : null;
   }
 

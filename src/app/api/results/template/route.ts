@@ -85,7 +85,11 @@ export async function GET(request: Request) {
 
             // Process Core Subjects
             coreSubjects.forEach(sub => {
-                const gradeEntry = grades.find(g => g.subjectCode === sub.code);
+                const gradeEntry = grades.find(g => {
+                    const dbCode = (g.subjectCode || "").trim().toUpperCase();
+                    const targetCode = sub.code.trim().toUpperCase();
+                    return dbCode === targetCode || dbCode.split(" - ")[0].trim() === targetCode;
+                });
                 row[`${sub.code} - ${sub.name}`] = gradeEntry ? gradeEntry.grade : "";
             });
 
@@ -101,7 +105,11 @@ export async function GET(request: Request) {
                 );
 
                 if (studentElective) {
-                    const gradeEntry = grades.find(g => g.subjectCode === studentElective.code);
+                    const gradeEntry = grades.find(g => {
+                        const dbCode = (g.subjectCode || "").trim().toUpperCase();
+                        const targetCode = studentElective.code.trim().toUpperCase();
+                        return dbCode === targetCode || dbCode.split(" - ")[0].trim() === targetCode;
+                    });
                     row[slot] = gradeEntry ? gradeEntry.grade : "";
                 } else {
                     row[slot] = ""; // Not allocated
@@ -116,7 +124,11 @@ export async function GET(request: Request) {
                 );
 
                 if (studentElective) {
-                    const gradeEntry = grades.find(g => g.subjectCode === studentElective.code);
+                    const gradeEntry = grades.find(g => {
+                        const dbCode = (g.subjectCode || "").trim().toUpperCase();
+                        const targetCode = studentElective.code.trim().toUpperCase();
+                        return dbCode === targetCode || dbCode.split(" - ")[0].trim() === targetCode;
+                    });
                     row["ELECTIVE"] = gradeEntry ? gradeEntry.grade : "";
                 } else {
                     row["ELECTIVE"] = "";
