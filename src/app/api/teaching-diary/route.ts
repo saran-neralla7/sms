@@ -18,6 +18,7 @@ export async function GET(request: Request) {
         const search = searchParams.get("search"); // Search query for faculty name/code
         const startDateStr = searchParams.get("startDate");
         const endDateStr = searchParams.get("endDate");
+        const includeAll = searchParams.get("includeAll") === "true";
 
         const userRole = session.user.role;
         const userId = session.user.id;
@@ -32,11 +33,14 @@ export async function GET(request: Request) {
 
         // Base where clause
         let whereClause: any = {
-            topicsTaught: { not: null },
             academicYearId: academicYearId || undefined,
             subjectId: subjectId || undefined,
             sectionId: sectionId || undefined,
         };
+
+        if (!includeAll) {
+            whereClause.topicsTaught = { not: null };
+        }
 
         // Role-based restrictions
         if (userRole === "FACULTY" || userRole === "SMS_USER") {

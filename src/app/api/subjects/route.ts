@@ -14,67 +14,74 @@ export async function GET(request: Request) {
     const includeElectives = searchParams.get("includeElectives") === "true";
     const excludeElectives = searchParams.get("excludeElectives") === "true";
     const onlyElectives = searchParams.get("onlyElectives") === "true";
+    const hasSyllabus = searchParams.get("hasSyllabus") === "true";
 
     const where: any = {};
-    if (year) where.year = year;
-    if (semester) where.semester = semester;
+    if (hasSyllabus) {
+        where.syllabus = { not: null };
+    } else {
+        if (year) where.year = year;
+        if (semester) where.semester = semester;
 
-    if (onlyElectives) {
-        where.isElective = true;
-    } else if (departmentId) {
-        if (includeElectives) {
-            where.OR = [
-                { departmentId: departmentId },
-                { isElective: true }
-            ];
-        } else {
-            where.departmentId = departmentId;
-            if (excludeElectives) {
-                where.isElective = false;
+        if (onlyElectives) {
+            where.isElective = true;
+        } else if (departmentId) {
+            if (includeElectives) {
+                where.OR = [
+                    { departmentId: departmentId },
+                    { isElective: true }
+                ];
+            } else {
+                where.departmentId = departmentId;
+                if (excludeElectives) {
+                    where.isElective = false;
+                }
             }
+        } else if (excludeElectives) {
+            where.isElective = false;
         }
-    } else if (excludeElectives) {
-        where.isElective = false;
     }
 
-    const isBSH = isBSHHod(session?.user as any);
-    if (isBSH) {
-        if (year && year !== "1") {
-            return NextResponse.json([]);
-        }
-        where.year = "1";
-    }
-
-    // FACULTY SUBJECT MAPPING FALLBACK LOGIC
-    const user = session?.user as any;
-    const isFaculty = user?.role === "FACULTY";
-    if (isFaculty && user?.facultyId) {
-        const cookieStore = await cookies();
-        let academicYearId = cookieStore.get("academic-year-id")?.value;
-        if (!academicYearId) {
-            const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
-            if (activeYear) academicYearId = activeYear.id;
+    if (!hasSyllabus) {
+        const isBSH = isBSHHod(session?.user as any);
+        if (isBSH) {
+            if (year && year !== "1") {
+                return NextResponse.json([]);
+            }
+            where.year = "1";
         }
 
-        if (academicYearId) {
-            const mappings = await prisma.facultySubjectMapping.findMany({
-                where: {
-                    facultyId: user.facultyId,
-                    academicYearId: academicYearId,
-                    subject: {
-                        year: year || undefined,
-                        semester: semester || undefined,
-                        ...(onlyElectives ? { isElective: true } : (includeElectives ? {} : { departmentId: departmentId || undefined }))
-                    }
-                },
-                select: { subjectId: true }
-            });
-            const mappedIds = mappings.map(m => m.subjectId);
-            
-            // If faculty has mappings for this criteria, restrict subjects. 
-            // If empty, they fall back to seeing all subjects.
-            if (mappedIds.length > 0) {
-                where.id = { in: mappedIds };
+        // FACULTY SUBJECT MAPPING FALLBACK LOGIC
+        const user = session?.user as any;
+        const isFaculty = user?.role === "FACULTY";
+        if (isFaculty && user?.facultyId) {
+            const cookieStore = await cookies();
+            let academicYearId = cookieStore.get("academic-year-id")?.value;
+            if (!academicYearId) {
+                const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+                if (activeYear) academicYearId = activeYear.id;
+            }
+
+            if (academicYearId) {
+                const mappings = await prisma.facultySubjectMapping.findMany({
+                    where: {
+                        facultyId: user.facultyId,
+                        academicYearId: academicYearId,
+                        subject: {
+                            year: year || undefined,
+                            semester: semester || undefined,
+                            ...(onlyElectives ? { isElective: true } : (includeElectives ? {} : { departmentId: departmentId || undefined }))
+                        }
+                    },
+                    select: { subjectId: true }
+                });
+                const mappedIds = mappings.map(m => m.subjectId);
+                
+                // If faculty has mappings for this criteria, restrict subjects. 
+                // If empty, they fall back to seeing all subjects.
+                if (mappedIds.length > 0) {
+                    where.id = { in: mappedIds };
+                }
             }
         }
     }

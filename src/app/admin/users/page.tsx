@@ -38,9 +38,12 @@ export default function AdminUsersPage() {
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
 
     const [departments, setDepartments] = useState<any[]>([]);
+    const [studentLoginsDisabled, setStudentLoginsDisabled] = useState(false);
+    const [isTogglingLogins, setIsTogglingLogins] = useState(false);
 
     useEffect(() => {
         fetchUsers();
+        fetchStudentLoginSetting();
     }, []);
 
     useEffect(() => {
@@ -69,6 +72,50 @@ export default function AdminUsersPage() {
             }
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const fetchStudentLoginSetting = async () => {
+        try {
+            const res = await fetch("/api/admin/settings");
+            if (res.ok) {
+                const data = await res.json();
+                setStudentLoginsDisabled(data.value);
+            }
+        } catch (error) {
+            console.error("Failed to fetch settings:", error);
+        }
+    };
+
+    const toggleStudentLogins = async () => {
+        setIsTogglingLogins(true);
+        setStatus({ type: null, message: "" });
+        try {
+            const newValue = !studentLoginsDisabled;
+            const res = await fetch("/api/admin/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ value: newValue }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setStudentLoginsDisabled(data.value);
+                setStatus({
+                    type: "success",
+                    message: data.value 
+                        ? "Student portal logins have been disabled successfully." 
+                        : "Student portal logins have been enabled successfully."
+                });
+                setTimeout(() => setStatus({ type: null, message: "" }), 5000);
+            } else {
+                const data = await res.json();
+                setStatus({ type: "error", message: data.error || "Failed to update login status." });
+            }
+        } catch (error) {
+            console.error(error);
+            setStatus({ type: "error", message: "An error occurred while changing login status." });
+        } finally {
+            setIsTogglingLogins(false);
         }
     };
 
@@ -259,6 +306,20 @@ export default function AdminUsersPage() {
                 <div className="flex items-center gap-2">
                     {activeTab === "STUDENT" && (
                         <>
+                            {(session?.user?.role === "ADMIN" || session?.user?.role === "DIRECTOR") && (
+                                <button
+                                    onClick={toggleStudentLogins}
+                                    disabled={isTogglingLogins}
+                                    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold border transition-all duration-200 ${
+                                        studentLoginsDisabled
+                                            ? "bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                                            : "bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                                    }`}
+                                >
+                                    <span className={`inline-block h-2.5 w-2.5 rounded-full ${studentLoginsDisabled ? "bg-red-500 animate-pulse" : "bg-green-500"}`} />
+                                    {studentLoginsDisabled ? "Student Logins: Disabled" : "Student Logins: Enabled"}
+                                </button>
+                            )}
                             <button
                                 onClick={handleExportStudentLogins}
                                 className="flex items-center gap-2 rounded-lg bg-green-50 text-green-700 px-4 py-2 text-sm font-semibold hover:bg-green-100 transition-colors border border-green-200"

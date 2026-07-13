@@ -4,7 +4,7 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaEye, FaEyeSlash, FaTimes, FaPaperPlane } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaTimes, FaPaperPlane, FaExclamationTriangle } from "react-icons/fa";
 
 export default function LoginPage() {
     const [username, setUsername] = useState("");
@@ -12,6 +12,7 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [showDisabledPopup, setShowDisabledPopup] = useState(false);
     const router = useRouter();
 
     // Forgot Password State
@@ -24,6 +25,7 @@ export default function LoginPage() {
         // ... (existing login logic)
         e.preventDefault();
         setIsLoading(true);
+        setError("");
         const res = await signIn("credentials", {
             username,
             password,
@@ -32,7 +34,12 @@ export default function LoginPage() {
         setIsLoading(false);
 
         if (res?.error) {
-            setError("Invalid username or password");
+            if (res.error === "Student logins are currently disabled by the Administrator.") {
+                setError(res.error);
+                setShowDisabledPopup(true);
+            } else {
+                setError("Invalid username or password");
+            }
         } else {
             // ... (existing redirect logic)
             // Fetch session to determine role
@@ -256,6 +263,49 @@ export default function LoginPage() {
                                         )}
                                     </button>
                                 </form>
+                            </motion.div>
+                        </div>
+                    )
+                }
+                {
+                    showDisabledPopup && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setShowDisabledPopup(false)}
+                                className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+                            />
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl overflow-hidden text-center"
+                            >
+                                <div className="absolute top-0 left-0 h-1.5 w-full bg-amber-500"></div>
+                                <button
+                                    onClick={() => setShowDisabledPopup(false)}
+                                    className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    <FaTimes size={20} />
+                                </button>
+
+                                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-500">
+                                    <FaExclamationTriangle size={30} />
+                                </div>
+
+                                <h3 className="mb-3 text-2xl font-black text-slate-900 tracking-tight">Student Logins Disabled</h3>
+                                <p className="mb-8 text-slate-600 font-medium leading-relaxed">
+                                    Student portal logins have been temporarily deactivated by the Administrator. Please contact your department HOD or the college administration for assistance.
+                                </p>
+
+                                <button
+                                    onClick={() => setShowDisabledPopup(false)}
+                                    className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 py-4 text-base font-black text-white shadow-xl shadow-amber-500/20 hover:shadow-amber-500/30 transition-all active:scale-[0.98]"
+                                >
+                                    Got it
+                                </button>
                             </motion.div>
                         </div>
                     )

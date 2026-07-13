@@ -127,6 +127,13 @@ export default function DashboardPage() {
         color: "bg-teal-50 text-teal-600"
       },
       {
+        title: "Attendance Analytics",
+        icon: <FaChartLine className="h-6 w-6" />,
+        description: "View detailed statistics, trends, weekday averages, and detention risks.",
+        href: "/reports/statistics",
+        color: "bg-cyan-50 text-cyan-600"
+      },
+      {
         title: "Course Files & Attainments",
         icon: <FaClipboardList className="h-6 w-6" />,
         description: "Monitor booklets submission and subject CO-PO attainments status.",
@@ -139,6 +146,13 @@ export default function DashboardPage() {
         description: "Calculate direct/indirect attainment and analyze program gaps.",
         href: "/admin/course-files/rollup",
         color: "bg-indigo-50 text-indigo-600"
+      },
+      {
+        title: "Syllabus Analytics",
+        icon: <FaChartLine className="h-6 w-6" />,
+        description: "Track unit-wise syllabus completion rates and diaries.",
+        href: "/faculty/syllabus-analytics",
+        color: "bg-teal-50 text-teal-600"
       },
       {
         title: role === "ADMIN" ? "Leaves Administration" : "Leaves Approval",
@@ -174,7 +188,7 @@ export default function DashboardPage() {
     const isBSH = role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
     if (role === "HOD") {
       if (isBSH) {
-        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine"].includes(m.title));
+        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine", "Attendance Analytics", "Syllabus Analytics"].includes(m.title));
       } else {
         modules = modules.filter(m => m.title !== "Administration" && m.title !== "Fees");
       }

@@ -299,7 +299,7 @@ export default function StudentFeedbackPage() {
                         {/* Form Header */}
                         <div className="bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-700 px-8 py-6 text-white">
                             <h2 className="text-2xl font-extrabold tracking-tight">{form.title}</h2>
-                            <p className="text-violet-200 text-sm mt-1">Deadline: {new Date(form.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>
+                            <p className="text-violet-200 text-sm mt-1">Deadline: {new Date(form.endDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" })}</p>
                         </div>
 
                         {/* Progress Bar */}

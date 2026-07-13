@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import LogoSpinner from "@/components/LogoSpinner";
 import { calculateStudentTotal } from "@/lib/mid-exam-calc";
+import { formatISTDate } from "@/lib/dateUtils";
 
 interface Mapping {
   id: string;
@@ -40,6 +41,11 @@ function parseSchemeText(text: string): StructuredScheme | null {
     }
   } catch (e) {}
   return null;
+}
+
+function normalizeUnitName(name: string): string {
+  if (!name) return "";
+  return name.toUpperCase().replace(/[^A-Z]/g, "");
 }
 
 function parseLecturePlan(dbValue: any) {
@@ -563,9 +569,37 @@ export default function FacultyCourseFilesPage() {
       setCfData(data);
 
       const cf = data.courseFile;
+      const syllabusUnits = data.subject?.syllabus?.units;
+
       if (cf) {
         setTeachingSupportText(cf.teachingSupportText || "");
-        setLecturePlan(parseLecturePlan(cf.lecturePlan));
+        
+        let loadedPlan = parseLecturePlan(cf.lecturePlan);
+        if (syllabusUnits && Array.isArray(syllabusUnits)) {
+          loadedPlan = loadedPlan.map(p => {
+            if (!p.title) {
+              const matchedUnit = syllabusUnits.find(su => 
+                su.name && normalizeUnitName(su.name) === normalizeUnitName(p.unit)
+              );
+              if (matchedUnit) {
+                return { 
+                  ...p, 
+                  title: (matchedUnit.title || "")
+                    .replace(/<[^>]*>/g, "")
+                    .replace(/&amp;/g, "&")
+                    .replace(/&lt;/g, "<")
+                    .replace(/&gt;/g, ">")
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'")
+                    .replace(/&nbsp;/g, " ")
+                    .trim()
+                };
+              }
+            }
+            return p;
+          });
+        }
+        setLecturePlan(loadedPlan);
         setMid1SchemeText(cf.mid1SchemeText || "");
         setMid2SchemeText(cf.mid2SchemeText || "");
         setTentativeCompletionDate(cf.tentativeCompletionDate || "");
@@ -589,7 +623,31 @@ export default function FacultyCourseFilesPage() {
       } else {
         // Reset inputs
         setTeachingSupportText("");
-        setLecturePlan(parseLecturePlan(null));
+        
+        let defaultPlan = parseLecturePlan(null);
+        if (syllabusUnits && Array.isArray(syllabusUnits)) {
+          defaultPlan = defaultPlan.map(p => {
+            const matchedUnit = syllabusUnits.find(su => 
+              su.name && normalizeUnitName(su.name) === normalizeUnitName(p.unit)
+            );
+            if (matchedUnit) {
+              return { 
+                ...p, 
+                title: (matchedUnit.title || "")
+                  .replace(/<[^>]*>/g, "")
+                  .replace(/&amp;/g, "&")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&quot;/g, '"')
+                  .replace(/&#39;/g, "'")
+                  .replace(/&nbsp;/g, " ")
+                  .trim()
+              };
+            }
+            return p;
+          });
+        }
+        setLecturePlan(defaultPlan);
         setMid1SchemeText("");
         setMid2SchemeText("");
         setTentativeCompletionDate("");
@@ -1402,6 +1460,13 @@ export default function FacultyCourseFilesPage() {
 
                         {lecturePlan.map((u, uIdx) => {
                           const unitHours = getUnitHours(u);
+                          const syllabusUnits = cfData?.subject?.syllabus?.units;
+                          const matchedSyllabusUnit = syllabusUnits && Array.isArray(syllabusUnits)
+                            ? syllabusUnits.find(su => su.name && normalizeUnitName(su.name) === normalizeUnitName(u.unit))
+                            : null;
+                          const unitTopics = matchedSyllabusUnit && matchedSyllabusUnit.content
+                            ? matchedSyllabusUnit.content.split(",").map((s: string) => s.replace(/<[^>]*>/g, "").trim()).filter(Boolean)
+                            : [];
                           return (
                             <div key={u.unit} className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-4">
                               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
@@ -1461,13 +1526,35 @@ export default function FacultyCourseFilesPage() {
                                         <tr key={tIdx} className="hover:bg-slate-50/30">
                                           <td className="px-3 py-1 text-slate-400 font-semibold">{tIdx + 1}</td>
                                           <td className="px-3 py-1">
-                                            <input
-                                              type="text"
-                                              value={t.topic}
-                                              onChange={(e) => handleTopicChange(uIdx, tIdx, "topic", e.target.value)}
-                                              placeholder="Enter topic details..."
-                                              className="w-full border-b border-transparent hover:border-slate-200 focus:border-teal-500 py-1 bg-transparent text-xs font-semibold text-slate-700 outline-none"
-                                            />
+                                            <div className="flex items-center gap-2">
+                                              <input
+                                                type="text"
+                                                value={t.topic}
+                                                onChange={(e) => handleTopicChange(uIdx, tIdx, "topic", e.target.value)}
+                                                placeholder="Enter topic details..."
+                                                className="w-full border-b border-transparent hover:border-slate-200 focus:border-teal-500 py-1 bg-transparent text-xs font-semibold text-slate-700 outline-none"
+                                              />
+                                              {unitTopics.length > 0 && (
+                                                <select
+                                                  onChange={(e) => {
+                                                    if (e.target.value) {
+                                                      const currentVal = t.topic;
+                                                      const newVal = currentVal ? `${currentVal}, ${e.target.value}` : e.target.value;
+                                                      handleTopicChange(uIdx, tIdx, "topic", newVal);
+                                                      e.target.value = ""; // Reset
+                                                    }
+                                                  }}
+                                                  className="max-w-[120px] rounded border border-slate-200 bg-slate-50 text-[10px] text-slate-600 font-bold p-1 focus:outline-none cursor-pointer"
+                                                >
+                                                  <option value="">+ Add Topic</option>
+                                                  {unitTopics.map((topicStr: string, idx: number) => (
+                                                    <option key={idx} value={topicStr}>
+                                                      {topicStr.length > 40 ? topicStr.slice(0, 40) + "..." : topicStr}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              )}
+                                            </div>
                                           </td>
                                           <td className="px-3 py-1 text-center">
                                             <input
@@ -1817,6 +1904,62 @@ export default function FacultyCourseFilesPage() {
                                 <FaTrash className="h-3.5 w-3.5" />
                               </button>
                             </div>
+                          )}
+
+                          {/* Admin Configured Academic Calendar & Holidays */}
+                          {cfData && ((cfData as any).timeline || ((cfData as any).holidays && (cfData as any).holidays.length > 0)) ? (
+                            <div className="mt-4 bg-white rounded-lg border border-slate-200 p-4 text-xs text-slate-700 shadow-sm space-y-3">
+                              <h6 className="font-bold text-slate-800 text-sm border-b pb-1.5 flex items-center justify-between">
+                                <span>📅 Admin Configured Calendar</span>
+                                <span className="text-[10px] text-slate-500 font-normal">Active Session: {(cfData as any).academicYear?.name} (B.Tech Year {selectedMapping?.subject?.year} Sem {selectedMapping?.subject?.semester})</span>
+                              </h6>
+                              {(cfData as any).timeline ? (
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <span className="font-semibold text-slate-400 block uppercase tracking-wider text-[9px]">Classwork Period</span>
+                                    <div className="font-semibold text-slate-800 mt-0.5">
+                                      {formatISTDate((cfData as any).timeline.classworkStart)} - {formatISTDate((cfData as any).timeline.classworkEnd)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-slate-400 block uppercase tracking-wider text-[9px]">MID-I Exams</span>
+                                    <div className="font-semibold text-slate-800 mt-0.5">
+                                      {formatISTDate((cfData as any).timeline.mid1Start)} - {formatISTDate((cfData as any).timeline.mid1End)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-slate-400 block uppercase tracking-wider text-[9px]">MID-II Exams</span>
+                                    <div className="font-semibold text-slate-800 mt-0.5">
+                                      {formatISTDate((cfData as any).timeline.mid2Start)} - {formatISTDate((cfData as any).timeline.mid2End)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-slate-400 block uppercase tracking-wider text-[9px]">Semester Exams</span>
+                                    <div className="font-semibold text-slate-800 mt-0.5">
+                                      {formatISTDate((cfData as any).timeline.semExamStart)} - {formatISTDate((cfData as any).timeline.semExamEnd)}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-slate-500 italic">No academic timeline milestones defined for this Year & Semester.</div>
+                              )}
+                              
+                              {(cfData as any).holidays && (cfData as any).holidays.length > 0 && (
+                                <div className="border-t pt-2.5 mt-2">
+                                  <span className="font-semibold text-slate-500 block mb-1">Declared Holidays:</span>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                                    {(cfData as any).holidays.map((h: any) => (
+                                      <div key={h.id} className="bg-slate-50 p-1.5 rounded border border-slate-100 flex justify-between items-center text-[10px]">
+                                        <span className="font-bold text-slate-700 truncate max-w-[130px]" title={h.name}>{h.name}</span>
+                                        <span className="text-slate-500 font-semibold shrink-0">{formatISTDate(h.date)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-3 text-xs text-slate-400 italic">No administrative academic calendar or holidays configured for this session yet.</div>
                           )}
                         </div>
 

@@ -301,6 +301,8 @@ model AcademicYear {
   assignmentMarks       AssignmentMark[]
   CourseFile            CourseFile[]
   programSurveys        ProgramSurvey[]
+  holidays              AcademicHoliday[]
+  timelines             AcademicSemesterTimeline[]
 }
 
 model Batch {
@@ -341,6 +343,12 @@ model AuditLog {
   details     String
   performedBy String
   createdAt   DateTime @default(now())
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model PasswordResetRequest {
@@ -907,3 +915,33 @@ model ProgramSurvey {
 
   @@unique([academicYearId, departmentId, year, semester])
 }
+
+model AcademicHoliday {
+  id             String       @id @default(uuid())
+  academicYearId String
+  date           DateTime
+  endDate        DateTime?    // Optional: if set, holiday spans date..endDate (inclusive)
+  name           String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@unique([academicYearId, date])
+}
+
+model AcademicSemesterTimeline {
+  id             String       @id @default(uuid())
+  academicYearId String
+  year           String       // "1", "2", "3", "4"
+  semester       String       // "1", "2"
+  classworkStart DateTime
+  classworkEnd   DateTime
+  mid1Start      DateTime
+  mid1End        DateTime
+  mid2Start      DateTime
+  mid2End        DateTime
+  semExamStart   DateTime
+  semExamEnd     DateTime
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@unique([academicYearId, year, semester])
+}
+

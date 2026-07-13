@@ -282,7 +282,7 @@ export default function OfficeExamApplicationsPage() {
                                             </td>
                                             <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top whitespace-nowrap">₹{totalAmount}</td>
                                             <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
-                                                {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
+                                                {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "—"}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-col gap-1.5">
@@ -506,7 +506,7 @@ export default function OfficeExamApplicationsPage() {
                                         <div className="grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
                                             <div>
                                                 <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Payment Date</span>
-                                                <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN") : "—"}</span>
+                                                <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span>
                                             </div>
                                             <div>
                                                 <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Amount Paid</span>
@@ -743,7 +743,7 @@ export default function OfficeExamApplicationsPage() {
                                             [`Regular (${trackerYear}-${trackerSem}) Status`]: reg ? reg.status : "NOT APPLIED",
                                             [`Regular UTR`]: reg?.utrNumber || "",
                                             [`Regular Amount`]: reg?.amountPaid || "",
-                                            [`Regular Payment Date`]: reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN") : "",
+                                            [`Regular Payment Date`]: reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
                                             "Backlog Applications": backlogStr || "None"
                                         };
                                     });
@@ -812,7 +812,7 @@ export default function OfficeExamApplicationsPage() {
                                                 <td className={`px-4 py-3 ${statusColor}`}>{statusText}</td>
                                                 <td className="px-4 py-3 text-slate-600 text-xs">{reg?.utrNumber || "—"}</td>
                                                 <td className="px-4 py-3 text-slate-600 text-xs">{reg ? `₹${reg.amountPaid || 0}` : "—"}</td>
-                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN") : "—"}</td>
+                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                                                 <td className="px-4 py-3">
                                                     {s.backlogs.length === 0 ? (
                                                         <span className="text-slate-400 text-xs">None</span>

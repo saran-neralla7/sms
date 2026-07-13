@@ -70,14 +70,14 @@ export async function GET(request: Request) {
                     "Semester": app.semester,
                     "Subjects": app.subjects.map((s: any) => `${s.subject.code} - ${s.subject.name}`).join(", "),
                     "Status": app.status,
-                    "Submitted On": new Date(app.submittedAt).toLocaleDateString("en-IN"),
+                    "Submitted On": new Date(app.submittedAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }),
                     "Approved By": app.approvedBy || "",
                     "Remarks": app.remarks || "",
                     "UTR Number": p.utrNumber || "",
                     "Amount Paid": p.amountPaid || "",
                     "Total Amount": totalAmount,
                     "Duplicate UTR": app.duplicateUtr ? "YES" : "NO",
-                    "Payment Date": p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-IN") : "—",
+                    "Payment Date": p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—",
                 });
             });
 

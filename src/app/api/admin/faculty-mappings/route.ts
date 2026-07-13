@@ -20,7 +20,7 @@ export async function GET(req: Request) {
                     select: { id: true, empName: true, empCode: true, department: { select: { code: true } } }
                 },
                 subject: {
-                    select: { id: true, name: true, code: true, type: true }
+                    select: { id: true, name: true, code: true, type: true, departmentId: true }
                 }
             }
         });

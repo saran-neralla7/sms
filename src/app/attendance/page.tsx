@@ -86,6 +86,7 @@ export default function AttendancePage() {
     const [summaryData, setSummaryData] = useState<any>(null);
     const [submissionStep, setSubmissionStep] = useState<"confirm" | "success">("confirm");
     const [topicsTaught, setTopicsTaught] = useState("");
+    const [holidays, setHolidays] = useState<any[]>([]);
 
     // Initialize Selections
     useEffect(() => {
@@ -117,6 +118,17 @@ export default function AttendancePage() {
         const periodRes = await fetch("/api/periods");
         const per = await periodRes.json();
         setPeriods(per);
+
+        // Fetch Holidays
+        try {
+            const holidaysRes = await fetch("/api/academic-calendar/holidays");
+            if (holidaysRes.ok) {
+                const hData = await holidaysRes.json();
+                setHolidays(hData || []);
+            }
+        } catch (err) {
+            console.error("Failed to load holidays:", err);
+        }
     };
 
     // Load Sections & Batches
@@ -567,11 +579,40 @@ export default function AttendancePage() {
     };
 
 
+    const selectedDateHoliday = holidays.find(h => {
+        if (!h.date) return false;
+        try {
+            const hDateStr = new Date(h.date).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+            // Single-day holiday: exact match
+            if (!h.endDate) return hDateStr === date;
+            // Multi-day: check if selected date falls within range
+            const hEndDateStr = new Date(h.endDate).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+            return date >= hDateStr && date <= hEndDateStr;
+        } catch (e) {
+            console.error("Error parsing holiday date:", e);
+            return false;
+        }
+    });
+
     if (status === "loading") return <LogoSpinner />;
 
     return (
         <div className="mx-auto max-w-7xl px-4 py-8">
             <h1 className="mb-6 text-2xl font-bold text-slate-800">Attendance Portal</h1>
+
+            {/* Holiday Warning Banner */}
+            {selectedDateHoliday && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl mb-6 flex items-start gap-3 shadow-sm">
+                    <span className="text-xl">⚠️</span>
+                    <div>
+                        <p className="font-bold text-sm">Selected date is a declared Holiday!</p>
+                        <p className="text-xs opacity-90 mt-0.5">
+                            The selected date ({new Date(date + "T00:00:00").toLocaleDateString()}) is marked as a college holiday: <strong>{selectedDateHoliday.name}</strong>.
+                            Please double check before proceeding with marking attendance.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Mode Tabs */}
             <div className="mb-6 flex gap-4 border-b border-slate-200 pb-2 overflow-x-auto whitespace-nowrap">

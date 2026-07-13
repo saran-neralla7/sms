@@ -289,7 +289,7 @@ export default function ExamApplicationPage() {
             addRow("Name", student?.name || app.rollNumber);
             addRow("Roll Number", app.rollNumber);
             addRow("Department", app.department);
-            addRow("Date", new Date().toLocaleDateString("en-IN"));
+            addRow("Date", new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }));
             addRow("Year", app.year);
             addRow("Semester", app.semester);
             
@@ -309,7 +309,7 @@ export default function ExamApplicationPage() {
             y += 6;
             doc.text(`Amount Paid: ₹${app.amountPaid || "0"}`, 20, y);
             y += 6;
-            doc.text(`Payment Date: ${app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}`, 20, y);
+            doc.text(`Payment Date: ${app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}`, 20, y);
             y += 12;
 
             doc.setFontSize(12);
@@ -470,7 +470,7 @@ export default function ExamApplicationPage() {
                                     <div className="p-4 text-sm grid sm:grid-cols-2 gap-4">
                                         <div><span className="text-slate-500 block text-xs">UTR Number</span><span className="font-medium text-slate-800">{app.utrNumber}</span></div>
                                         <div><span className="text-slate-500 block text-xs">Amount</span><span className="font-medium text-slate-800">₹{app.amountPaid || 0}</span></div>
-                                        <div><span className="text-slate-500 block text-xs">Payment Date</span><span className="font-medium text-slate-800">{app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}</span></div>
+                                        <div><span className="text-slate-500 block text-xs">Payment Date</span><span className="font-medium text-slate-800">{app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span></div>
                                         <div className="sm:col-span-2">
                                             <span className="text-slate-500 block text-xs mb-1">Subjects</span>
                                             <div className="flex flex-wrap gap-1">

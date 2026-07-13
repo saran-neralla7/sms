@@ -687,11 +687,68 @@ function SyllabusConfigContent() {
   const [hasSavedOnce, setHasSavedOnce] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  // Cloning syllabus state
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloneSubjectsList, setCloneSubjectsList] = useState<any[]>([]);
+  const [cloneSearchQuery, setCloneSearchQuery] = useState("");
+  const [fetchingCloneSubjects, setFetchingCloneSubjects] = useState(false);
+  const [cloningSubjectId, setCloningSubjectId] = useState<string | null>(null);
+
   const databaseSyllabusRef = useRef<Syllabus | null>(null);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const openCloneModal = async () => {
+    setShowCloneModal(true);
+    setFetchingCloneSubjects(true);
+    try {
+      const res = await fetch("/api/subjects?hasSyllabus=true");
+      if (res.ok) {
+        const data = await res.json();
+        // Filter out current subject
+        setCloneSubjectsList(data.filter((s: any) => s.id !== subjectId));
+      } else {
+        showToast("Failed to fetch subjects for cloning", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Error loading subjects list", "error");
+    } finally {
+      setFetchingCloneSubjects(false);
+    }
+  };
+
+  const handleCloneSyllabus = async (sourceSubjectId: string) => {
+    setCloningSubjectId(sourceSubjectId);
+    try {
+      const res = await fetch(`/api/subjects/${sourceSubjectId}/syllabus`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.syllabus) {
+          // Merge cloned syllabus with default structure to prevent missing fields
+          const clonedSyllabus = {
+            ...defaultSyllabus,
+            ...data.syllabus,
+            credits: { ...defaultSyllabus.credits, ...(data.syllabus.credits || {}) },
+          };
+          setSyllabus(clonedSyllabus);
+          showToast(`Syllabus cloned from ${data.name} (${data.code})! Review and click 'Save' to apply.`, "success");
+          setShowCloneModal(false);
+        } else {
+          showToast("Selected subject does not have a saved syllabus", "error");
+        }
+      } else {
+        showToast("Failed to load source syllabus", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Error cloning syllabus", "error");
+    } finally {
+      setCloningSubjectId(null);
+    }
   };
 
   const loadSyllabusData = useCallback(async () => {
@@ -1306,6 +1363,13 @@ function SyllabusConfigContent() {
 
             <div className="flex items-center gap-3">
               <button
+                onClick={openCloneModal}
+                className="flex items-center gap-2 rounded-xl bg-teal-50 border border-teal-200 px-4 py-2 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-100 transition-all cursor-pointer animate-pulse"
+              >
+                <FaBookOpen /> Clone Syllabus
+              </button>
+
+              <button
                 onClick={() => generateSyllabusPDF("preview")}
                 className="flex items-center gap-2 rounded-xl bg-slate-100 border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-200 transition-all cursor-pointer"
               >
@@ -1701,6 +1765,108 @@ function SyllabusConfigContent() {
           </div>
         </div>
       </div>
+
+      {/* Clone Syllabus Modal */}
+      {showCloneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-md font-bold text-slate-900 flex items-center gap-2">
+                <FaBookOpen className="text-teal-600" size={16} />
+                <span>Clone Syllabus from Subject</span>
+              </h2>
+              <button
+                onClick={() => setShowCloneModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex-1 overflow-y-auto flex flex-col gap-4">
+              <div className="text-xs text-slate-500">
+                Search and select any subject in the system that has a syllabus defined. This will clone its units, objectives, textbooks, reference books, and credits into your current syllabus editor.
+              </div>
+
+              {/* Search Bar */}
+              <input
+                type="text"
+                placeholder="Search by code or name (e.g. Physics)..."
+                value={cloneSearchQuery}
+                onChange={(e) => setCloneSearchQuery(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+              />
+
+              {/* Subjects List */}
+              <div className="flex-1 border border-slate-200 rounded-lg overflow-y-auto max-h-[300px]">
+                {fetchingCloneSubjects ? (
+                  <div className="p-8 flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
+                    <FaSpinner className="animate-spin text-teal-600 h-5 w-5" />
+                    <span>Loading subjects...</span>
+                  </div>
+                ) : (
+                  (() => {
+                    const filtered = cloneSubjectsList.filter((s: any) =>
+                      s.name.toLowerCase().includes(cloneSearchQuery.toLowerCase()) ||
+                      s.code.toLowerCase().includes(cloneSearchQuery.toLowerCase())
+                    );
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-8 text-center text-xs text-slate-400">
+                          No subjects with saved syllabus found.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="divide-y divide-slate-100">
+                        {filtered.map((s: any) => (
+                          <div
+                            key={s.id}
+                            className="p-3 hover:bg-slate-50 flex items-center justify-between transition-colors text-xs"
+                          >
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-slate-800">{s.name} ({s.code})</span>
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                {s.department?.name || "All Departments"} • Regulation: {s.regulation?.name || "N/A"} • Year {s.year}, Sem {s.semester}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={cloningSubjectId !== null}
+                              onClick={() => handleCloneSyllabus(s.id)}
+                              className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded font-bold text-[10px] shadow-sm disabled:opacity-50 transition-colors cursor-pointer"
+                            >
+                              {cloningSubjectId === s.id ? (
+                                <FaSpinner className="animate-spin inline mr-1" />
+                              ) : null}
+                              Clone
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCloneModal(false)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Alert */}
       {toast && (

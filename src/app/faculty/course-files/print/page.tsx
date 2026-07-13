@@ -374,17 +374,17 @@ export default function CourseFilePrintPage() {
           </a>
         </div>
         
-        <div className="w-full border border-slate-200 rounded-xl overflow-hidden bg-slate-100/50 p-1 flex justify-center">
+        <div className="w-full border border-slate-200 rounded-xl overflow-hidden bg-slate-100/50 p-1 flex justify-center print-uploaded-wrapper">
           {isImg ? (
             <img
               src={path}
               alt={title}
-              className="max-w-full h-auto mx-auto object-contain max-h-[85vh] rounded-lg"
+              className="max-w-full h-auto mx-auto object-contain max-h-[85vh] rounded-lg print-uploaded-img"
             />
           ) : (
             <iframe
               src={`${path}#toolbar=0&navpanes=0&scrollbar=0`}
-              className="w-full min-h-[75vh] print:h-[95vh] border-none rounded-lg bg-white"
+              className="w-full min-h-[75vh] print:h-[95vh] border-none rounded-lg bg-white print-uploaded-iframe"
               title={title}
             />
           )}
@@ -2154,6 +2154,43 @@ export default function CourseFilePrintPage() {
           .report-page:first-child {
             page-break-before: auto !important;
             break-before: auto !important;
+          }
+
+          .print-uploaded-wrapper {
+            border: none !important;
+            background: transparent !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            overflow: visible !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            width: 100% !important;
+          }
+
+          .print-uploaded-img {
+            max-height: 180mm !important;
+            max-width: 100% !important;
+            width: auto !important;
+            height: auto !important;
+            object-fit: contain !important;
+            border-radius: 0 !important;
+            display: block !important;
+            margin: 0 auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .print-uploaded-iframe {
+            width: 100% !important;
+            height: 180mm !important;
+            min-height: 180mm !important;
+            border: none !important;
+            background: white !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
 
           table {

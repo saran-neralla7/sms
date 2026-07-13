@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen } from "react-icons/fa";
+import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen, FaChartPie } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
 
@@ -101,6 +101,36 @@ export default function FacultyIndexPage() {
                             description="View logs of topics taught, academic sections, and session summaries."
                             href="/faculty/teaching-diary"
                             colorClass="bg-emerald-50 text-emerald-600"
+                        />
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>
+                        <DashboardCard
+                            title="Attendance Analytics"
+                            icon={<FaChartBar className="h-6 w-6" />}
+                            description="View detailed charts, trends, day-of-week averages, and detention warning lists."
+                            href="/reports/statistics"
+                            colorClass="bg-cyan-50 text-cyan-600"
+                        />
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+                        <DashboardCard
+                            title="Syllabus Analytics"
+                            icon={<FaChartPie className="h-6 w-6" />}
+                            description="Track syllabus completion rates, unit-wise progress, and topics remaining."
+                            href="/faculty/syllabus-analytics"
+                            colorClass="bg-amber-50 text-amber-600"
+                        />
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>
+                        <DashboardCard
+                            title="Classwork Planner"
+                            icon={<FaCalendarAlt className="h-6 w-6" />}
+                            description="Analyze semester teaching days against holidays & exam dates to plan classes."
+                            href="/faculty/class-planner"
+                            colorClass="bg-violet-50 text-violet-600"
                         />
                     </motion.div>
                 </div>

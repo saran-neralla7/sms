@@ -28,6 +28,14 @@ export const authOptions: NextAuthOptions = {
                 }
 
                 if (user.role === "STUDENT") {
+                    const disableSetting = await prisma.systemSetting.findUnique({
+                        where: { key: "DISABLE_STUDENT_LOGIN" }
+                    });
+                    if (disableSetting && disableSetting.value === "true") {
+                        await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Deactivated: Student logins disabled by Admin" });
+                        throw new Error("Student logins are currently disabled by the Administrator.");
+                    }
+
                     const student = await prisma.student.findUnique({
                         where: { rollNumber: user.username }
                     });

@@ -54,6 +54,29 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
       },
     });
 
+    // Auto-propagate to all other subjects with the same code or name
+    if (subject.code) {
+      await prisma.subject.updateMany({
+        where: {
+          code: subject.code,
+          id: { not: subject.id }
+        },
+        data: {
+          syllabus: syllabus
+        }
+      });
+    } else if (subject.name) {
+      await prisma.subject.updateMany({
+        where: {
+          name: subject.name,
+          id: { not: subject.id }
+        },
+        data: {
+          syllabus: syllabus
+        }
+      });
+    }
+
     return NextResponse.json({ success: true, syllabus: subject.syllabus });
   } catch (error: any) {
     console.error("Save Syllabus Error:", error);

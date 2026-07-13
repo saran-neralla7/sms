@@ -60,6 +60,66 @@ export default function FacultyTeachingDiary() {
     const [formError, setFormError] = useState("");
     const [formSubmitting, setFormSubmitting] = useState(false);
 
+    // Syllabus Helper States
+    const [activeSyllabus, setActiveSyllabus] = useState<any>(null);
+    const [selectedDiaryUnit, setSelectedDiaryUnit] = useState<string>("Unit I");
+
+    // Suggest next chronologically uncovered topic(s)
+    const nextSuggestedTopics = (() => {
+        if (!activeSyllabus || !activeSyllabus.units) return [];
+        
+        // Flatten all syllabus topics chronologically
+        const allSyllabusTopics: string[] = [];
+        activeSyllabus.units.forEach((unit: any) => {
+            if (!unit.content) return;
+            const topics = unit.content
+                .split(",")
+                .map((s: string) => s.replace(/<[^>]*>/g, "").trim())
+                .filter(Boolean);
+            allSyllabusTopics.push(...topics);
+        });
+
+        // Gather all topics already taught in diaries (except current diary if editing)
+        const coveredText = diaries
+            .filter((d: any) => !currentDiary || d.id !== currentDiary.id)
+            .map((d: any) => (d.topicsTaught || "").toLowerCase())
+            .join(" | ");
+
+        // Filter out covered topics
+        const suggestions = allSyllabusTopics.filter(topic => {
+            const cleanTopic = topic.toLowerCase();
+            return !coveredText.includes(cleanTopic);
+        });
+
+        return suggestions.slice(0, 2);
+    })();
+
+    const handleSmartFill = () => {
+        if (nextSuggestedTopics.length > 0) {
+            setFormTopic(nextSuggestedTopics.join(", "));
+        }
+    };
+
+    useEffect(() => {
+        if (selectedMapping?.subjectId) {
+            fetch(`/api/subjects/${selectedMapping.subjectId}/syllabus`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.syllabus) {
+                        setActiveSyllabus(data.syllabus);
+                    } else {
+                        setActiveSyllabus(null);
+                    }
+                })
+                .catch(err => {
+                    console.error("Error fetching syllabus for teaching diary helper:", err);
+                    setActiveSyllabus(null);
+                });
+        } else {
+            setActiveSyllabus(null);
+        }
+    }, [selectedMapping]);
+
     useEffect(() => {
         if (status === "unauthenticated") {
             router.push("/auth/signin");
@@ -106,6 +166,7 @@ export default function FacultyTeachingDiary() {
             const params = new URLSearchParams();
             params.append("subjectId", selectedMapping.subjectId);
             params.append("sectionId", selectedMapping.sectionId);
+            params.append("includeAll", "true");
             if (filterStartDate) params.append("startDate", filterStartDate);
             if (filterEndDate) params.append("endDate", filterEndDate);
 
@@ -195,6 +256,7 @@ export default function FacultyTeachingDiary() {
 
     // Modal action handlers
     const openAddModal = () => {
+        setCurrentDiary(null);
         setFormDate(new Date().toISOString().split("T")[0]);
         setFormPeriodId(periods[0]?.id || "");
         setFormTopic("");
@@ -579,7 +641,8 @@ export default function FacultyTeachingDiary() {
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
                                                     <FaCalendarAlt className="text-blue-500" />
-                                                    {new Date(diary.date).toLocaleDateString("en-US", {
+                                                    {new Date(diary.date).toLocaleDateString("en-IN", {
+                                                        timeZone: "Asia/Kolkata",
                                                         weekday: "short",
                                                         year: "numeric",
                                                         month: "short",
@@ -597,6 +660,15 @@ export default function FacultyTeachingDiary() {
                                             </div>
 
                                             <div className="flex items-center gap-2">
+                                                {diary.topicsTaught ? (
+                                                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                        Completed
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                                                        Pending
+                                                    </span>
+                                                )}
                                                 {diary.subject && (
                                                     <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded uppercase tracking-wider">
                                                         {diary.subject.code}
@@ -617,30 +689,49 @@ export default function FacultyTeachingDiary() {
                                                 </h3>
                                             )}
 
-                                            <div className="prose prose-sm max-w-none text-slate-700 bg-slate-50/50 rounded-xl p-4 border border-slate-100 mb-2">
-                                                <div
-                                                    dangerouslySetInnerHTML={{
-                                                        __html: renderTopicText(diary.topicsTaught)
-                                                    }}
-                                                />
-                                            </div>
+                                            {diary.topicsTaught ? (
+                                                <div className="prose prose-sm max-w-none text-slate-700 bg-slate-50/50 rounded-xl p-4 border border-slate-100 mb-2">
+                                                    <div
+                                                        dangerouslySetInnerHTML={{
+                                                            __html: renderTopicText(diary.topicsTaught)
+                                                        }}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-3 text-amber-800 bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm font-medium mb-2">
+                                                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping"></span>
+                                                    <span className="flex-grow">Diary entry is missing for this marked attendance session. Please fill in the topics taught.</span>
+                                                </div>
+                                            )}
 
                                             {/* Card Actions Footer */}
                                             <div className="flex justify-end gap-2 mt-4 pt-2 border-t border-slate-100">
-                                                <button
-                                                    onClick={() => openEditModal(diary)}
-                                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                                                >
-                                                    <FaEdit size={12} />
-                                                    <span>Edit</span>
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteEntry(diary.id)}
-                                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                                                >
-                                                    <FaTrashAlt size={12} />
-                                                    <span>Delete</span>
-                                                </button>
+                                                {diary.topicsTaught ? (
+                                                    <>
+                                                        <button
+                                                            onClick={() => openEditModal(diary)}
+                                                            className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                                                        >
+                                                            <FaEdit size={12} />
+                                                            <span>Edit</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteEntry(diary.id)}
+                                                            className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                                                        >
+                                                            <FaTrashAlt size={12} />
+                                                            <span>Delete</span>
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => openEditModal(diary)}
+                                                        className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition-colors"
+                                                    >
+                                                        <FaPlus size={12} />
+                                                        <span>Fill Diary Entry</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     </motion.div>
@@ -737,7 +828,23 @@ export default function FacultyTeachingDiary() {
 
                                 {/* Topic */}
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-600 mb-1">Topics Taught / Description</label>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-xs font-bold text-slate-600">Topics Taught / Description</label>
+                                        {nextSuggestedTopics.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={handleSmartFill}
+                                                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                                            >
+                                                ✨ Smart Fill
+                                            </button>
+                                        )}
+                                    </div>
+                                    {nextSuggestedTopics.length > 0 && (
+                                        <p className="text-[10px] text-slate-500 mb-1.5 bg-slate-50 border border-slate-100 p-1.5 rounded">
+                                            <strong>Suggested next topic(s):</strong> {nextSuggestedTopics.join(", ")}
+                                        </p>
+                                    )}
                                     <textarea
                                         required
                                         rows={4}
@@ -746,6 +853,55 @@ export default function FacultyTeachingDiary() {
                                         onChange={(e) => setFormTopic(e.target.value)}
                                         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700"
                                     />
+                                    {/* Syllabus Topics Helper */}
+                                    {activeSyllabus && activeSyllabus.units && (
+                                        <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Syllabus Topic Helper</span>
+                                                <select
+                                                    value={selectedDiaryUnit}
+                                                    onChange={(e) => setSelectedDiaryUnit(e.target.value)}
+                                                    className="px-2 py-1 text-[10px] font-semibold border border-slate-200 rounded bg-white text-slate-700 focus:outline-none cursor-pointer"
+                                                >
+                                                    {activeSyllabus.units.map((u: any, idx: number) => (
+                                                        <option key={idx} value={u.name || `Unit ${idx+1}`}>
+                                                            {u.name || `Unit ${idx+1}`}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            
+                                            {/* List of parsed topics for selected unit */}
+                                            <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto pt-1">
+                                                {(() => {
+                                                    const matchedUnit = activeSyllabus.units.find(
+                                                        (u: any) => (u.name || "").toUpperCase().replace(/[^A-Z]/g, "") === selectedDiaryUnit.toUpperCase().replace(/[^A-Z]/g, "")
+                                                    );
+                                                    if (!matchedUnit || !matchedUnit.content) {
+                                                        return <span className="text-[10px] text-slate-400">No topics defined in syllabus for this unit.</span>;
+                                                    }
+                                                    const topics = matchedUnit.content.split(",").map((s: string) => s.replace(/<[^>]*>/g, "").trim()).filter(Boolean);
+                                                    if (topics.length === 0) {
+                                                        return <span className="text-[10px] text-slate-400">No topics defined.</span>;
+                                                    }
+                                                    return topics.map((t: string, idx: number) => (
+                                                        <button
+                                                            key={idx}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const currentVal = formTopic;
+                                                                const newVal = currentVal ? `${currentVal}, ${t}` : t;
+                                                                setFormTopic(newVal);
+                                                            }}
+                                                            className="px-2 py-1 text-[10px] font-medium bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-slate-700 hover:text-teal-800 rounded transition-colors text-left flex items-center gap-1 cursor-pointer"
+                                                        >
+                                                            <span>+ {t}</span>
+                                                        </button>
+                                                    ));
+                                                })()}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Actions */}
@@ -822,9 +978,10 @@ export default function FacultyTeachingDiary() {
                                         <input
                                             type="date"
                                             required
+                                            disabled={true}
                                             value={formDate}
                                             onChange={(e) => setFormDate(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700"
+                                            className="w-full px-3 py-2 text-sm border border-slate-200 bg-slate-50 text-slate-500 rounded-lg focus:outline-none cursor-not-allowed"
                                         />
                                     </div>
 
@@ -833,9 +990,10 @@ export default function FacultyTeachingDiary() {
                                         <label className="block text-xs font-bold text-slate-600 mb-1">Period</label>
                                         <select
                                             required
+                                            disabled={true}
                                             value={formPeriodId}
                                             onChange={(e) => setFormPeriodId(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 bg-white"
+                                            className="w-full px-3 py-2 text-sm border border-slate-200 bg-slate-50 text-slate-500 rounded-lg focus:outline-none cursor-not-allowed"
                                         >
                                             <option value="">Select Period</option>
                                             {periods.map((p) => (
@@ -849,7 +1007,23 @@ export default function FacultyTeachingDiary() {
 
                                 {/* Topic */}
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-600 mb-1">Topics Taught / Description</label>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-xs font-bold text-slate-600">Topics Taught / Description</label>
+                                        {nextSuggestedTopics.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={handleSmartFill}
+                                                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                                            >
+                                                ✨ Smart Fill
+                                            </button>
+                                        )}
+                                    </div>
+                                    {nextSuggestedTopics.length > 0 && (
+                                        <p className="text-[10px] text-slate-500 mb-1.5 bg-slate-50 border border-slate-100 p-1.5 rounded">
+                                            <strong>Suggested next topic(s):</strong> {nextSuggestedTopics.join(", ")}
+                                        </p>
+                                    )}
                                     <textarea
                                         required
                                         rows={4}
@@ -858,6 +1032,55 @@ export default function FacultyTeachingDiary() {
                                         onChange={(e) => setFormTopic(e.target.value)}
                                         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700"
                                     />
+                                    {/* Syllabus Topics Helper */}
+                                    {activeSyllabus && activeSyllabus.units && (
+                                        <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Syllabus Topic Helper</span>
+                                                <select
+                                                    value={selectedDiaryUnit}
+                                                    onChange={(e) => setSelectedDiaryUnit(e.target.value)}
+                                                    className="px-2 py-1 text-[10px] font-semibold border border-slate-200 rounded bg-white text-slate-700 focus:outline-none cursor-pointer"
+                                                >
+                                                    {activeSyllabus.units.map((u: any, idx: number) => (
+                                                        <option key={idx} value={u.name || `Unit ${idx+1}`}>
+                                                            {u.name || `Unit ${idx+1}`}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            
+                                            {/* List of parsed topics for selected unit */}
+                                            <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto pt-1">
+                                                {(() => {
+                                                    const matchedUnit = activeSyllabus.units.find(
+                                                        (u: any) => (u.name || "").toUpperCase().replace(/[^A-Z]/g, "") === selectedDiaryUnit.toUpperCase().replace(/[^A-Z]/g, "")
+                                                    );
+                                                    if (!matchedUnit || !matchedUnit.content) {
+                                                        return <span className="text-[10px] text-slate-400">No topics defined in syllabus for this unit.</span>;
+                                                    }
+                                                    const topics = matchedUnit.content.split(",").map((s: string) => s.replace(/<[^>]*>/g, "").trim()).filter(Boolean);
+                                                    if (topics.length === 0) {
+                                                        return <span className="text-[10px] text-slate-400">No topics defined.</span>;
+                                                    }
+                                                    return topics.map((t: string, idx: number) => (
+                                                        <button
+                                                            key={idx}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const currentVal = formTopic;
+                                                                const newVal = currentVal ? `${currentVal}, ${t}` : t;
+                                                                setFormTopic(newVal);
+                                                            }}
+                                                            className="px-2 py-1 text-[10px] font-medium bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-slate-700 hover:text-teal-800 rounded transition-colors text-left flex items-center gap-1 cursor-pointer"
+                                                        >
+                                                            <span>+ {t}</span>
+                                                        </button>
+                                                    ));
+                                                })()}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Actions */}

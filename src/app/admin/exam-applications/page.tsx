@@ -373,10 +373,10 @@ export default function AdminExamApplicationsPage() {
                                             </td>
                                             <td className="px-4 py-3 font-bold text-slate-800 bg-slate-50/50 align-top whitespace-nowrap">₹{totalAmount}</td>
                                             <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
-                                                {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}
+                                                {app.submittedAt ? new Date(app.submittedAt).toLocaleString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "—"}
                                             </td>
                                             <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
-                                                {app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN") : "—"}
+                                                {app.paymentDate ? new Date(app.paymentDate).toLocaleDateString("en-IN", { timeZone: 'Asia/Kolkata' }) : "—"}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-col gap-1.5">
@@ -566,7 +566,7 @@ export default function AdminExamApplicationsPage() {
                                     <div className="grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
                                         <div>
                                             <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Payment Date</span>
-                                            <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN") : "—"}</span>
+                                            <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span>
                                         </div>
                                         <div>
                                             <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Amount Paid</span>
@@ -574,7 +574,7 @@ export default function AdminExamApplicationsPage() {
                                         </div>
                                         <div>
                                             <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Submitted At</span>
-                                            <span className="text-sm font-medium text-slate-900">{viewModal.submittedAt ? new Date(viewModal.submittedAt).toLocaleString("en-IN") : "—"}</span>
+                                            <span className="text-sm font-medium text-slate-900">{viewModal.submittedAt ? new Date(viewModal.submittedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span>
                                         </div>
                                     </div>
 
@@ -781,9 +781,9 @@ export default function AdminExamApplicationsPage() {
                                             </td>
                                             <td className="px-4 py-3 font-medium">{s.year}</td>
                                             <td className="px-4 py-3">{s.semester}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(s.startDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(s.endDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap">{s.lateFeeEndDate ? new Date(s.lateFeeEndDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(s.startDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">{new Date(s.endDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">{s.lateFeeEndDate ? new Date(s.lateFeeEndDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "—"}</td>
                                             <td className="px-4 py-3 flex gap-2">
                                                 <button onClick={() => handleEditSettingClick(s)} className="rounded-lg bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-200">
                                                     <FaEdit />
@@ -946,7 +946,7 @@ export default function AdminExamApplicationsPage() {
                                             [`Regular (${trackerYear}-${trackerSem}) Status`]: reg ? reg.status : "NOT APPLIED",
                                             [`Regular UTR`]: reg?.utrNumber || "",
                                             [`Regular Amount`]: reg?.amountPaid || "",
-                                            [`Regular Payment Date`]: reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN") : "",
+                                            [`Regular Payment Date`]: reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
                                             "Backlog Applications": backlogStr || "None"
                                         };
                                     });
@@ -1015,7 +1015,7 @@ export default function AdminExamApplicationsPage() {
                                                 <td className={`px-4 py-3 ${statusColor}`}>{statusText}</td>
                                                 <td className="px-4 py-3 text-slate-600 text-xs">{reg?.utrNumber || "\u2014"}</td>
                                                 <td className="px-4 py-3 text-slate-600 text-xs">{reg ? `\u20b9${reg.amountPaid || 0}` : "\u2014"}</td>
-                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN") : "\u2014"}</td>
+                                                <td className="px-4 py-3 text-slate-600 text-xs">{reg?.paymentDate ? new Date(reg.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "\u2014"}</td>
                                                 <td className="px-4 py-3">
                                                     {s.backlogs.length === 0 ? (
                                                         <span className="text-slate-400 text-xs">None</span>

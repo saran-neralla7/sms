@@ -257,6 +257,22 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    // 10. Fetch Semester Timeline and Holidays for Academic Calendar popup
+    const timeline = await prisma.academicSemesterTimeline.findUnique({
+      where: {
+        academicYearId_year_semester: {
+          academicYearId,
+          year,
+          semester
+        }
+      }
+    });
+
+    const holidays = await prisma.academicHoliday.findMany({
+      where: { academicYearId },
+      orderBy: { date: "asc" }
+    });
+
     return NextResponse.json({
       courseFile,
       academicYear,
@@ -274,7 +290,9 @@ export async function GET(req: NextRequest) {
       internalMarks,
       assignmentMarks,
       semesterResults,
-      faculty
+      faculty,
+      timeline,
+      holidays
     });
   } catch (error: any) {
     console.error("Error in GET /api/course-files:", error);

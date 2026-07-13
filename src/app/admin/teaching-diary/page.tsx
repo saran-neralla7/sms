@@ -244,7 +244,8 @@ export default function AdminTeachingDiary() {
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
                                                 <FaCalendarAlt className="text-blue-500" />
-                                                {new Date(diary.date).toLocaleDateString("en-US", {
+                                                {new Date(diary.date).toLocaleDateString("en-IN", {
+                                                    timeZone: "Asia/Kolkata",
                                                     weekday: "short",
                                                     year: "numeric",
                                                     month: "short",
