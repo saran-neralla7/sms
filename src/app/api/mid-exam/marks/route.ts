@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal } from "@/lib/mid-exam-calc";
+import { getElectiveBatches } from "@/lib/elective-batches";
 
 // GET marks grid for a paper
 export async function GET(req: NextRequest) {
@@ -16,7 +17,11 @@ export async function GET(req: NextRequest) {
     const paper = await prisma.midExamPaper.findUnique({
       where: { id: paperId },
       include: {
-        subject: true,
+        subject: {
+          include: {
+            electiveSlotRelation: true
+          }
+        },
         section: true,
         masterPaper: {
           include: {
@@ -41,6 +46,10 @@ export async function GET(req: NextRequest) {
     });
     if (!paper) return NextResponse.json({ error: "Paper not found" }, { status: 404 });
 
+    const isOE = paper.subject.isElective && 
+      (paper.subject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OE") || 
+       paper.subject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OPEN"));
+
     if (paper.masterPaperId && paper.masterPaper) {
       (paper as any).questions = paper.masterPaper.questions;
     }
@@ -49,21 +58,30 @@ export async function GET(req: NextRequest) {
     const studentWhereClause: any = {
       year: paper.year,
       semester: paper.semester,
-      sectionId: paper.sectionId,
       isAlumni: false,
       isLeftCollege: false,
       isDetained: false,
     };
 
-    if (paper.subject.isElective) {
+    if (isOE) {
+      studentWhereClause.subjects = { some: { id: paper.subjectId } };
+    } else if (paper.subject.isElective) {
+      studentWhereClause.sectionId = paper.sectionId;
       studentWhereClause.subjects = { some: { id: paper.subjectId } };
     } else {
+      studentWhereClause.sectionId = paper.sectionId;
       studentWhereClause.departmentId = paper.subject.departmentId;
     }
 
     const students = await prisma.student.findMany({
       where: studentWhereClause,
-      select: { id: true, rollNumber: true, name: true },
+      select: { 
+        id: true, 
+        rollNumber: true, 
+        name: true,
+        department: { select: { code: true } },
+        section: { select: { name: true } }
+      },
       orderBy: { rollNumber: "asc" }
     });
 
@@ -110,16 +128,23 @@ export async function GET(req: NextRequest) {
       }))
     );
 
+    const allBatches = getElectiveBatches();
+
     // Build grid rows
     const rows = students.map(student => {
       const studentData = studentMarksMap[student.id] || { marks: {}, isAbsent: false, isDraft: true };
+      const batchKey = `${student.id}_${paper.subjectId}`;
+      const batchName = allBatches[batchKey] || null;
       return {
         studentId: student.id,
         rollNumber: student.rollNumber,
         name: student.name,
+        department: student.department,
+        section: student.section,
         isAbsent: studentData.isAbsent,
         isDraft: studentData.isDraft,
         marks: studentData.marks,
+        batchName,
       };
     });
 

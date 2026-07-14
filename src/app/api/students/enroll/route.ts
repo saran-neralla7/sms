@@ -37,6 +37,37 @@ export async function POST(request: Request) {
                     }
                 }
             });
+
+            // Handle automatic shifting: unenroll these studentIds from other subjects in the same ElectiveSlot
+            const subject = await prisma.subject.findUnique({
+                where: { id: subjectId },
+                select: { electiveSlotId: true }
+            });
+
+            if (subject?.electiveSlotId) {
+                const otherSubjects = await prisma.subject.findMany({
+                    where: {
+                        electiveSlotId: subject.electiveSlotId,
+                        id: { not: subjectId }
+                    },
+                    select: { id: true }
+                });
+
+                if (otherSubjects.length > 0) {
+                    await prisma.$transaction(
+                        otherSubjects.map(otherSub =>
+                            prisma.subject.update({
+                                where: { id: otherSub.id },
+                                data: {
+                                    students: {
+                                        disconnect: studentIds.map((id: string) => ({ id }))
+                                    }
+                                }
+                            })
+                        )
+                    );
+                }
+            }
         }
 
         return NextResponse.json({ success: true });

@@ -130,6 +130,14 @@ export default function FacultyMidExamPage() {
   const [fetchingAnalysis, setFetchingAnalysis] = useState<boolean>(false);
   const [selectedAnalysisExamType, setSelectedAnalysisExamType] = useState<"MID_I" | "MID_II" | "FINAL" | "COMPARISON">("MID_I");
 
+  const availableDeptsForAnalysis = useMemo(() => {
+    if (!analysisData) return [];
+    if (analysisData.isComparison) {
+      return analysisData.mid1?.metadata?.availableDepartments || [];
+    }
+    return analysisData.metadata?.availableDepartments || [];
+  }, [analysisData]);
+
   const theoryAnalysis = useMemo(() => {
     if (!analysisData?.subjectAnalysis) return [];
     return analysisData.subjectAnalysis.filter((sub: any) => {
@@ -215,6 +223,23 @@ export default function FacultyMidExamPage() {
   // Reports states
   const [previewData, setPreviewData] = useState<any | null>(null);
   const [previewType, setPreviewType] = useState<"MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL" | "SUBJECT" | null>(null);
+  const [reportDeptFilter, setReportDeptFilter] = useState<string>("ALL");
+  const availableDeptsForReport = useMemo(() => {
+    if (!previewData || !previewData.rows) return [];
+    const depts = new Set<string>();
+    previewData.rows.forEach((row: any) => {
+      if (row.department?.code) depts.add(row.department.code);
+    });
+    return Array.from(depts).sort();
+  }, [previewData]);
+
+  const filteredReportRows = useMemo(() => {
+    if (!previewData || !previewData.rows) return [];
+    if (!reportDeptFilter || reportDeptFilter === "ALL") return previewData.rows;
+    return previewData.rows.filter((r: any) => r.department?.code === reportDeptFilter);
+  }, [previewData, reportDeptFilter]);
+
+  const [analysisDeptFilter, setAnalysisDeptFilter] = useState<string>("ALL");
   const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
   const [fetchingReport, setFetchingReport] = useState<boolean>(false);
   const [tableWidth, setTableWidth] = useState(0);
@@ -393,11 +418,26 @@ export default function FacultyMidExamPage() {
     setFetchingAnalysis(true);
     try {
       const deptId = mapping.subject.departmentId || (session?.user as any).departmentId;
+      const isOE = isOpenElective(mapping.subject);
+      
+      const getUrl = (examType: string) => {
+        let base = `/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&examType=${examType}`;
+        if (isOE) {
+          base += `&subjectId=${mapping.subject.id}`;
+          if (analysisDeptFilter && analysisDeptFilter !== "ALL") {
+            base += `&filterDeptCode=${analysisDeptFilter}`;
+          }
+        } else {
+          base += `&departmentId=${deptId}&sectionId=${mapping.section.id}`;
+        }
+        return base;
+      };
+
       if (selectedAnalysisExamType === "COMPARISON") {
         const [mid1Res, mid2Res, finalRes] = await Promise.all([
-          fetch(`/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=MID_I`),
-          fetch(`/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=MID_II`),
-          fetch(`/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=FINAL`),
+          fetch(getUrl("MID_I")),
+          fetch(getUrl("MID_II")),
+          fetch(getUrl("FINAL")),
         ]);
         if (!mid1Res.ok || !mid2Res.ok || !finalRes.ok) {
           showToast("Failed to fetch comparative analysis data", "error");
@@ -414,9 +454,7 @@ export default function FacultyMidExamPage() {
           metadata: mid1.metadata
         });
       } else {
-        const res = await fetch(
-          `/api/mid-exam/analysis?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&examType=${selectedAnalysisExamType}`
-        );
+        const res = await fetch(getUrl(selectedAnalysisExamType));
         if (!res.ok) {
           showToast("Failed to fetch analysis data", "error");
           return;
@@ -430,13 +468,13 @@ export default function FacultyMidExamPage() {
     } finally {
       setFetchingAnalysis(false);
     }
-  }, [selectedMappingId, selectedAnalysisExamType, mappings, session]);
+  }, [selectedMappingId, selectedAnalysisExamType, analysisDeptFilter, mappings, session]);
 
   useEffect(() => {
     if (activeTab === "analysis" && selectedMappingId) {
       fetchAnalysis();
     }
-  }, [activeTab, selectedMappingId, selectedAnalysisExamType, fetchAnalysis]);
+  }, [activeTab, selectedMappingId, selectedAnalysisExamType, analysisDeptFilter, fetchAnalysis]);
 
   const downloadAnalysisExcel = () => {
     if (!analysisData) return;
@@ -719,7 +757,11 @@ export default function FacultyMidExamPage() {
     setFetchingReport(true);
     try {
       const deptId = mapping.subject.departmentId || (session?.user as any).departmentId;
-      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}`);
+      const isOE = isOpenElective(mapping.subject);
+      const url = isOE
+        ? `/api/mid-exam/reports/memo?academicYearId=${mapping.academicYear.id}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&subjectId=${mapping.subject.id}`
+        : `/api/mid-exam/reports/memo?academicYearId=${mapping.academicYear.id}&departmentId=${deptId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}`;
+      const res = await fetch(url);
       if (!res.ok) {
         showToast("Failed to fetch report data", "error");
         return;
@@ -732,6 +774,7 @@ export default function FacultyMidExamPage() {
       };
       setPreviewData(filteredData);
       setPreviewType(reportType);
+      setReportDeptFilter("ALL");
       setShowAttendance(false);
       setAttendanceMap({});
       
@@ -843,6 +886,12 @@ export default function FacultyMidExamPage() {
       }
     }
 
+    const activeDeptFilter = reportDeptFilter;
+    const exportRows = (previewData.rows || []).filter((r: any) => {
+      if (!activeDeptFilter || activeDeptFilter === "ALL") return true;
+      return r.department?.code === activeDeptFilter;
+    });
+
     const rowsList: any[] = [];
     rowsList.push([`${previewType === "SUBJECT" ? "SUBJECT DETAILED EVALUATION SHEET" : previewType.replace("_", " ") + " MARKS MEMO"}`]);
     rowsList.push([`Department: ${previewData.meta.department}`]);
@@ -869,7 +918,7 @@ export default function FacultyMidExamPage() {
       });
       rowsList.push(headers);
 
-      previewData.rows.forEach((row: any, idx: number) => {
+      exportRows.forEach((row: any, idx: number) => {
         const rowData: any[] = [idx + 1, row.rollNumber, row.name];
         if (includeAttendance) {
           rowData.push(currentAttendanceMap[row.studentId] !== undefined ? `${currentAttendanceMap[row.studentId]}%` : "");
@@ -904,7 +953,7 @@ export default function FacultyMidExamPage() {
       rowsList.push(headers);
 
       const subId = previewData.subjects[0]?.id;
-      previewData.rows.forEach((row: any, idx: number) => {
+      exportRows.forEach((row: any, idx: number) => {
         const marksObj = row.subjects[subId] || {};
         const m1 = marksObj.mid1Scaled;
         const m2 = marksObj.mid2Scaled;
@@ -983,7 +1032,10 @@ export default function FacultyMidExamPage() {
         if (isLab) return reportType === "FINAL" ? true : showLabMarks;
         return true;
       });
-      const rows = cachedData.rows || [];
+      const rows = (cachedData.rows || []).filter((r: any) => {
+        if (!reportDeptFilter || reportDeptFilter === "ALL") return true;
+        return r.department?.code === reportDeptFilter;
+      });
       const margin = 12;
 
       // Header Banner & Logo
@@ -1301,7 +1353,10 @@ export default function FacultyMidExamPage() {
 
       const meta = cachedData.meta;
       const subjects = cachedData.subjects || [];
-      const rows = cachedData.rows || [];
+      const rows = (cachedData.rows || []).filter((r: any) => {
+        if (!reportDeptFilter || reportDeptFilter === "ALL") return true;
+        return r.department?.code === reportDeptFilter;
+      });
 
       const targetSubject = subjects[0];
       const subjectName = targetSubject ? targetSubject.name : "Subject";
@@ -2505,14 +2560,25 @@ export default function FacultyMidExamPage() {
     }
   };
 
+  function isOpenElective(subject: any) {
+    return subject.isElective && 
+      (subject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OE") || 
+       subject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OPEN"));
+  }
+
   const getPaperForMapping = (mapping: Mapping, examType: string) =>
-    papers.find(p => p.subjectId === mapping.subject.id && p.sectionId === mapping.section.id && p.examType === examType);
+    papers.find(p => p.subjectId === mapping.subject.id && 
+      (isOpenElective(mapping.subject) ? true : p.sectionId === mapping.section.id) && 
+      p.examType === examType);
 
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
 
-  // Group mappings by subject
+  // Group mappings by subject, consolidating open electives
   const uniqueSubjects = Array.from(new Map(
-    mappings.map(m => [m.subject.id + m.section.id, m])
+    mappings.map(m => {
+      const key = isOpenElective(m.subject) ? m.subject.id : (m.subject.id + m.section.id);
+      return [key, m];
+    })
   ).values());
 
   return (
@@ -2659,7 +2725,10 @@ export default function FacultyMidExamPage() {
                           <h3 className="font-semibold text-slate-900">{mapping.subject.name}</h3>
                           <p className="text-sm text-slate-500">
                             {mapping.subject.code} · Year {mapping.subject.year} · Sem {mapping.subject.semester} ·
-                            <span className="ml-1 inline-flex items-center gap-1"><FaLayerGroup className="h-3 w-3" /> Section {mapping.section.name}</span>
+                            <span className="ml-1 inline-flex items-center gap-1">
+                              <FaLayerGroup className="h-3 w-3" /> 
+                              {isOpenElective(mapping.subject) ? "Open Elective (All Sections)" : `Section ${mapping.section.name}`}
+                            </span>
                           </p>
                         </div>
                         <span className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -3046,6 +3115,21 @@ export default function FacultyMidExamPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
+                    {availableDeptsForReport.length > 1 && (
+                      <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm text-xs font-semibold">
+                        <span className="text-slate-500">Dept Filter:</span>
+                        <select
+                          value={reportDeptFilter}
+                          onChange={(e) => setReportDeptFilter(e.target.value)}
+                          className="font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                        >
+                          <option value="ALL">All Departments</option>
+                          {availableDeptsForReport.map((code) => (
+                            <option key={code} value={code}>{code}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {/* Heatmap Toggle */}
                     <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 cursor-pointer hover:bg-slate-100">
                       <input
@@ -3194,7 +3278,7 @@ export default function FacultyMidExamPage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150 text-slate-700">
-                              {previewData.rows.map((row: any, idx: number) => (
+                              {filteredReportRows.map((row: any, idx: number) => (
                                 <tr key={row.rollNumber} className="hover:bg-slate-50/50">
                                   <td className="px-4 py-2.5 text-center border border-black">{idx + 1}</td>
                                   <td className="px-4 py-2.5 text-center border border-black">
@@ -3407,7 +3491,7 @@ export default function FacultyMidExamPage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150 text-slate-700">
-                              {previewData.rows.map((row: any, idx: number) => {
+                              {filteredReportRows.map((row: any, idx: number) => {
                                 const marksObj = row.subjects[previewSubjectId] || { mid1: null, mid1Scaled: null, mid2: null, mid2Scaled: null, assignment: null, internal: 0 };
                                 
                                 const m1 = marksObj.mid1Scaled;
@@ -3547,7 +3631,7 @@ export default function FacultyMidExamPage() {
 
             {/* Selection filters */}
             <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className={`grid grid-cols-1 gap-6 ${availableDeptsForAnalysis.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Target Class Context</label>
                   <select
@@ -3585,6 +3669,24 @@ export default function FacultyMidExamPage() {
                     ))}
                   </div>
                 </div>
+
+                {availableDeptsForAnalysis.length > 1 && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Department Filter</label>
+                    <select
+                      value={analysisDeptFilter}
+                      onChange={e => setAnalysisDeptFilter(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    >
+                      <option value="ALL">All Departments</option>
+                      {availableDeptsForAnalysis.map((code: string) => (
+                        <option key={code} value={code}>
+                          {code}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 

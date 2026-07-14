@@ -143,7 +143,7 @@ export async function GET(request: Request) {
                     section: true,
                     department: true,
                     batch: true,
-                    subjects: includeSubjects ? { select: { id: true } } : false
+                    subjects: includeSubjects ? { select: { id: true, name: true, code: true, electiveSlotId: true } } : false
                 },
                 orderBy: { rollNumber: "asc" },
                 skip,

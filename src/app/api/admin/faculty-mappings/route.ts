@@ -50,8 +50,20 @@ export async function POST(req: Request) {
         await prisma.$transaction(async (tx) => {
             // Delete existing mappings for this section, academic year and DEPARTMENT
             // Since section is shared across departments, we must only delete the subjects belonging to the currently edited department
+            // Exclude OPEN_ELECTIVE type subjects from deletion here to protect their mappings
             const subjectsInDept = await tx.subject.findMany({
-                where: { departmentId: departmentId },
+                where: { 
+                    departmentId: departmentId,
+                    NOT: {
+                        isElective: true,
+                        electiveSlotRelation: {
+                            OR: [
+                                { name: { startsWith: "OE", mode: "insensitive" } },
+                                { name: { startsWith: "OPEN", mode: "insensitive" } }
+                            ]
+                        }
+                    }
+                },
                 select: { id: true }
             });
             const subjectIds = subjectsInDept.map(s => s.id);
@@ -66,17 +78,34 @@ export async function POST(req: Request) {
                 });
             }
 
-            // Insert new mappings
+            // Insert new mappings, filtering out any accidental OPEN_ELECTIVE subjects
             if (mappings && mappings.length > 0) {
-                await tx.facultySubjectMapping.createMany({
-                    data: mappings.map((m: any) => ({
-                        facultyId: m.facultyId,
-                        subjectId: m.subjectId,
-                        sectionId,
-                        academicYearId
-                    })),
-                    skipDuplicates: true
+                const openElectiveSubjects = await tx.subject.findMany({
+                    where: {
+                        isElective: true,
+                        electiveSlotRelation: {
+                            OR: [
+                                { name: { startsWith: "OE", mode: "insensitive" } },
+                                { name: { startsWith: "OPEN", mode: "insensitive" } }
+                            ]
+                        }
+                    },
+                    select: { id: true }
                 });
+                const openElectiveIds = new Set(openElectiveSubjects.map(s => s.id));
+                const filteredMappings = mappings.filter((m: any) => !openElectiveIds.has(m.subjectId));
+
+                if (filteredMappings.length > 0) {
+                    await tx.facultySubjectMapping.createMany({
+                        data: filteredMappings.map((m: any) => ({
+                            facultyId: m.facultyId,
+                            subjectId: m.subjectId,
+                            sectionId,
+                            academicYearId
+                        })),
+                        skipDuplicates: true
+                    });
+                }
             }
         });
 

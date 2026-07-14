@@ -74,8 +74,33 @@ export async function GET(req: NextRequest) {
         }
 
         // Fetch student list for each subject mapping
-        const mappingsWithStudents = await Promise.all(
-            faculty.FacultySubjectMapping.map(async (m) => {
+        // For OPEN_ELECTIVE (isElective) subjects, merge students from all section mappings into one card
+        const oeSubjectIds = new Set(
+            faculty.FacultySubjectMapping
+                .filter(m => m.subject.isElective)
+                .map(m => m.subjectId)
+        );
+
+        // Build merged OE mappings (one per unique subjectId) and normal per-section mappings
+        const oeMergedMap: Record<string, any> = {};
+        const normalMappings: any[] = [];
+
+        for (const m of faculty.FacultySubjectMapping) {
+            if (m.subject.isElective) {
+                if (!oeMergedMap[m.subjectId]) {
+                    oeMergedMap[m.subjectId] = { ...m, _sections: [m.section], _allSectionIds: [m.sectionId] };
+                } else {
+                    oeMergedMap[m.subjectId]._sections.push(m.section);
+                    oeMergedMap[m.subjectId]._allSectionIds.push(m.sectionId);
+                }
+            } else {
+                normalMappings.push(m);
+            }
+        }
+
+        // Fetch students for normal mappings
+        const normalMappingsWithStudents = await Promise.all(
+            normalMappings.map(async (m) => {
                 const students = await prisma.student.findMany({
                     where: {
                         departmentId: m.subject.departmentId,
@@ -86,60 +111,108 @@ export async function GET(req: NextRequest) {
                         isAlumni: false,
                         isLeftCollege: false
                     },
-                    select: {
-                        id: true,
-                        rollNumber: true,
-                        name: true
+                    select: { id: true, rollNumber: true, name: true },
+                    orderBy: { rollNumber: "asc" }
+                });
+                return { ...m, students };
+            })
+        );
+
+        // Fetch enrolled students for each OE subject (cross-section, using StudentToSubject implicit many-to-many)
+        const oeMappingsWithStudents = await Promise.all(
+            Object.values(oeMergedMap).map(async (m: any) => {
+                const students = await prisma.student.findMany({
+                    where: {
+                        subjects: { some: { id: m.subjectId } },
+                        isDetained: false,
+                        isAlumni: false,
+                        isLeftCollege: false
                     },
-                    orderBy: {
-                        rollNumber: "asc"
-                    }
+                    select: { id: true, rollNumber: true, name: true },
+                    orderBy: { rollNumber: "asc" }
                 });
                 return {
                     ...m,
+                    // Show "All Sections" for OE subject section label
+                    section: { name: m._sections.map((s: any) => s?.name).join(", ") || "All" },
                     students
                 };
             })
         );
 
-        // 1. Personal Timetable
-        const mappings = faculty.FacultySubjectMapping;
-        const personalOrConditions = mappings.map(m => ({
-            subjectId: m.subjectId,
-            sectionId: m.sectionId
-        }));
+        const mappingsWithStudents = [...normalMappingsWithStudents, ...oeMappingsWithStudents];
+
+
+        // 1. Personal Timetable — match by subjectId OR electiveSlotId (for OE classes)
+        const mappedSubjectIds = Array.from(new Set(faculty.FacultySubjectMapping.map(m => m.subjectId))).filter(Boolean);
+        const mappedElecSlotIds = faculty.FacultySubjectMapping
+            .map(m => m.subject.electiveSlotId).filter(Boolean) as string[];
+
+        // Build unique year+semester+section combos from faculty mappings
+        const sectionCombos: { sectionId: string; sectionName: string; year: string; semester: string }[] = [];
+        const seenCombos = new Set<string>();
+        for (const m of faculty.FacultySubjectMapping) {
+            const key = `${m.sectionId}_${m.subject.year}_${m.subject.semester}`;
+            if (!seenCombos.has(key)) {
+                seenCombos.add(key);
+                sectionCombos.push({
+                    sectionId: m.sectionId,
+                    sectionName: (m.section as any)?.name || '',
+                    year: m.subject.year,
+                    semester: m.subject.semester
+                });
+            }
+        }
+
+        const personalOrConditions: any[] = [];
+        if (mappedSubjectIds.length > 0) personalOrConditions.push({ subjectId: { in: mappedSubjectIds }, validTo: null });
+        if (mappedElecSlotIds.length > 0) personalOrConditions.push({ electiveSlotId: { in: mappedElecSlotIds }, validTo: null });
 
         let personalTimetable: any[] = [];
         if (personalOrConditions.length > 0) {
             personalTimetable = await prisma.timetable.findMany({
-                where: { 
-                    OR: personalOrConditions
-                },
+                where: { OR: personalOrConditions },
                 include: {
                     period: true,
-                    subject: true,
-                    section: true
+                    subject: { include: { department: true } },
+                    section: true,
+                    electiveSlot: true
                 },
                 orderBy: [{ dayOfWeek: 'asc' }, { period: { order: 'asc' } }]
             });
         }
 
-        // 2. Section Timetables (Full timetables of the sections they teach)
-        const sectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
-        let sectionTimetables: any[] = [];
-        if (sectionIds.length > 0) {
-            sectionTimetables = await prisma.timetable.findMany({
-                where: { 
-                    sectionId: { in: sectionIds }
+        // Fetch ALL periods for the timetable grid
+        const allPeriods = await prisma.period.findMany({ orderBy: { order: 'asc' } });
+
+        // 2. Section Timetables — scoped by exact year+semester per combo so other years don't bleed
+        const sectionTimetableGroups: any[] = [];
+        for (const combo of sectionCombos) {
+            const entries = await prisma.timetable.findMany({
+                where: {
+                    sectionId: combo.sectionId,
+                    year: combo.year,
+                    semester: combo.semester,
+                    validTo: null
                 },
                 include: {
                     period: true,
-                    subject: true,
+                    subject: { include: { department: true } },
                     section: true
                 },
-                orderBy: [{ sectionId: 'asc' }, { dayOfWeek: 'asc' }, { period: { order: 'asc' } }]
+                orderBy: [{ dayOfWeek: 'asc' }, { period: { order: 'asc' } }]
             });
+            if (entries.length > 0) {
+                sectionTimetableGroups.push({
+                    sectionId: combo.sectionId,
+                    sectionName: combo.sectionName,
+                    year: combo.year,
+                    semester: combo.semester,
+                    entries
+                });
+            }
         }
+        const sectionTimetables = sectionTimetableGroups;
 
         // 3. Feedback Calculations
         const feedbacks = faculty.FeedbackResponse;
@@ -210,6 +283,7 @@ export async function GET(req: NextRequest) {
                 mobile: faculty.mobile
             },
             subjects: mappingsWithStudents,
+            allPeriods,
             personalTimetable,
             sectionTimetables,
             feedback: {

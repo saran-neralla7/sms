@@ -15,28 +15,123 @@ export async function GET(req: NextRequest) {
   const semester = searchParams.get("semester");
   const sectionId = searchParams.get("sectionId");
   const examType = searchParams.get("examType"); // MID_I or MID_II
+  const subjectId = searchParams.get("subjectId");
+  const filterDeptCode = searchParams.get("filterDeptCode");
 
-  if (!academicYearId || !departmentId || !year || !semester || !sectionId || !examType) {
-    return NextResponse.json({ error: "All filters required" }, { status: 400 });
+  if (!academicYearId || !year || !semester || !examType) {
+    return NextResponse.json({ error: "Required filters missing" }, { status: 400 });
   }
 
   try {
+    let isOE = false;
+    let oeSubject: any = null;
+
+    if (subjectId) {
+      oeSubject = await prisma.subject.findUnique({
+        where: { id: subjectId },
+        include: {
+          electiveSlotRelation: true,
+          department: { select: { id: true, name: true, code: true } }
+        }
+      });
+      if (oeSubject?.isElective && 
+         (oeSubject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OE") || 
+          oeSubject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OPEN"))) {
+        isOE = true;
+      }
+    }
+
+    if (!isOE && (!departmentId || !sectionId)) {
+      return NextResponse.json({ error: "departmentId and sectionId are required for regular subjects" }, { status: 400 });
+    }
+
     // 1. Fetch academic class details
-    const [students, academicYear, department, section, subjects] = await Promise.all([
-      prisma.student.findMany({
-        where: { departmentId, year, semester, sectionId, isAlumni: false, isLeftCollege: false, isDetained: false },
-        select: { id: true, rollNumber: true, name: true },
-        orderBy: { rollNumber: "asc" }
-      }),
-      prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } }),
-      prisma.department.findUnique({ where: { id: departmentId }, select: { name: true, code: true } }),
-      prisma.section.findUnique({ where: { id: sectionId }, select: { name: true } }),
-      prisma.subject.findMany({
-        where: { departmentId, year, semester },
-        select: { id: true, name: true, code: true, shortName: true, type: true },
-        orderBy: { code: "asc" }
-      })
-    ]);
+    let students: any[] = [];
+    let academicYear: any = null;
+    let department: any = null;
+    let section: any = null;
+    let subjects: any[] = [];
+    let availableDepartments: string[] = [];
+
+    if (isOE) {
+      const [allOeStudents, ayData] = await Promise.all([
+        prisma.student.findMany({
+          where: {
+            year,
+            semester,
+            subjects: { some: { id: subjectId as string } },
+            isAlumni: false,
+            isLeftCollege: false,
+            isDetained: false
+          },
+          select: { 
+            id: true, 
+            rollNumber: true, 
+            name: true,
+            sectionId: true,
+            department: { select: { code: true } }
+          },
+          orderBy: { rollNumber: "asc" }
+        }),
+        prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } })
+      ]);
+
+      const depts = new Set<string>();
+      (allOeStudents as any[]).forEach(s => {
+        if (s.department?.code) depts.add(s.department.code);
+      });
+      availableDepartments = Array.from(depts).sort();
+
+      if (filterDeptCode && filterDeptCode !== "ALL") {
+        students = (allOeStudents as any[]).filter(s => s.department?.code === filterDeptCode);
+      } else {
+        students = allOeStudents;
+      }
+
+      academicYear = ayData;
+      department = { name: oeSubject.department.name, code: oeSubject.department.code };
+      section = { name: "All Sections" };
+      subjects = [oeSubject];
+    } else {
+      const [studentsData, ayData, deptData, secData, subjectsData] = await Promise.all([
+        prisma.student.findMany({
+          where: {
+            departmentId: departmentId || undefined,
+            year: year || undefined,
+            semester: semester || undefined,
+            sectionId: sectionId || undefined,
+            isAlumni: false,
+            isLeftCollege: false,
+            isDetained: false
+          },
+          select: { 
+            id: true, 
+            rollNumber: true, 
+            name: true,
+            sectionId: true,
+            department: { select: { code: true } }
+          },
+          orderBy: { rollNumber: "asc" }
+        }),
+        prisma.academicYear.findUnique({ where: { id: academicYearId || undefined }, select: { name: true } }),
+        prisma.department.findUnique({ where: { id: departmentId as string }, select: { name: true, code: true } }),
+        prisma.section.findUnique({ where: { id: sectionId as string }, select: { name: true } }),
+        prisma.subject.findMany({
+          where: {
+            departmentId: departmentId || undefined,
+            year: year || undefined,
+            semester: semester || undefined
+          },
+          select: { id: true, name: true, code: true, shortName: true, type: true },
+          orderBy: { code: "asc" }
+        })
+      ]);
+      students = studentsData;
+      academicYear = ayData;
+      department = deptData;
+      section = secData;
+      subjects = subjectsData;
+    }
 
     const isFacultyOnly = session.user.role === "FACULTY";
     let allowedSubjectIds = subjects.map(s => s.id);
@@ -55,8 +150,8 @@ export async function GET(req: NextRequest) {
         const facultyMappings = await prisma.facultySubjectMapping.findMany({
           where: {
             facultyId,
-            academicYearId,
-            sectionId
+            academicYearId: academicYearId || undefined,
+            sectionId: isOE ? undefined : (sectionId || undefined)
           },
           select: {
             subjectId: true
@@ -76,8 +171,8 @@ export async function GET(req: NextRequest) {
     let papers = await prisma.midExamPaper.findMany({
       where: {
         subjectId: { in: subjectIds },
-        sectionId,
-        academicYearId,
+        sectionId: isOE ? undefined : (sectionId || undefined),
+        academicYearId: academicYearId || undefined,
         examType: examType === "FINAL" ? undefined : examType,
       },
       include: {
@@ -100,7 +195,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Handle common papers questions mapping
-    for (const paper of papers) {
+    for (const paper of papers as any[]) {
       if (paper.masterPaperId && paper.masterPaper) {
         (paper as any).questions = paper.masterPaper.questions;
       }
@@ -143,20 +238,28 @@ export async function GET(req: NextRequest) {
       }),
       prisma.assignmentMark.findMany({
         where: {
-          academicYearId, departmentId, year, semester,
-          sectionId,
+          academicYearId,
+          departmentId: isOE ? undefined : (departmentId || undefined),
+          year: year || undefined,
+          semester: semester || undefined,
+          sectionId: isOE ? undefined : (sectionId || undefined),
           studentId: { in: studentIds },
+          subjectId: { in: subjectIds },
           isDraft: false,
         }
       })
     ]) : [[], []];
 
-    // 5. Fetch attendance records for this section in the semester
+    // 5. Fetch attendance records for this section/sections in the semester
+    const sectionIds = isOE 
+      ? Array.from(new Set(students.map(s => s.sectionId).filter(Boolean)))
+      : [sectionId];
+
     const attendanceRecords = await prisma.attendanceHistory.findMany({
       where: {
-        sectionId,
-        year,
-        semester,
+        sectionId: isOE ? { in: sectionIds as string[] } : (sectionId || undefined),
+        year: year || undefined,
+        semester: semester || undefined,
         user: { role: { not: "USER" } },
         type: "ACADEMIC"
       }
@@ -306,7 +409,7 @@ export async function GET(req: NextRequest) {
 
       papers = mockPapers;
     } else {
-      papers.forEach(paper => {
+      (papers as any[]).forEach(paper => {
         paperStudentTotals[paper.id] = {};
         const paperChoiceGroups = choiceGroups.filter(cg => cg.paperId === (paper.masterPaperId || paper.id));
 
@@ -335,7 +438,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 8. Compute subject-wise statistics
-    const subjectAnalysis = papers.map((paper, idx) => {
+    const subjectAnalysis = (papers as any[]).map((paper, idx) => {
       const totalsMap = paperStudentTotals[paper.id];
       const totalsList = Object.values(totalsMap || {});
 
@@ -477,6 +580,7 @@ export async function GET(req: NextRequest) {
         year,
         semester,
         examType,
+        availableDepartments,
       },
       subjectAnalysis,
       performance: {

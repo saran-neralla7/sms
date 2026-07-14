@@ -115,6 +115,9 @@ export async function GET(req: Request) {
           { departmentId: student.departmentId },
           { students: { some: { id: student.id } } }
         ]
+      },
+      include: {
+        electiveSlotRelation: true
       }
     });
 
@@ -122,11 +125,15 @@ export async function GET(req: Request) {
     const studentMarks: any[] = [];
 
     for (const sub of subjects) {
+      const isOE = sub.isElective && 
+        (sub.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OE") || 
+         sub.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OPEN"));
+
       // Find papers for MID I and MID II
       const papers = await prisma.midExamPaper.findMany({
         where: {
           subjectId: sub.id,
-          sectionId: student.sectionId,
+          sectionId: isOE ? undefined : student.sectionId,
           academicYearId: targetAYId || undefined,
           isFrozen: true
         },

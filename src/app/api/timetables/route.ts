@@ -9,6 +9,8 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const sectionId = searchParams.get("sectionId");
+        const year = searchParams.get("year") || undefined;
+        const semester = searchParams.get("semester") || undefined;
         const dateStr = searchParams.get("date");
 
         if (!sectionId) {
@@ -38,7 +40,9 @@ export async function GET(request: Request) {
         const timetables = await prisma.timetable.findMany({
             where: {
                 sectionId,
-                year: isBSH ? "1" : undefined,
+                // Scope to exact year+semester when provided so different years don't bleed
+                year: isBSH ? "1" : (year || undefined),
+                semester: semester || undefined,
                 ...dateCondition
             },
             include: {
@@ -96,10 +100,13 @@ export async function POST(request: Request) {
 
         // Wrap in transaction to ensure consistency
         await prisma.$transaction(async (tx) => {
-            // Mark existing active timetables for this section as outdated
+            // Mark existing active timetables for this EXACT section+year+semester as outdated
+            // (Do NOT touch other years/semesters for the same section)
             await tx.timetable.updateMany({
                 where: {
                     sectionId,
+                    year,
+                    semester,
                     validTo: null
                 },
                 data: {

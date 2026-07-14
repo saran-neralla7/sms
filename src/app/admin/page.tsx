@@ -225,6 +225,13 @@ export default function AdminDashboardPage() {
             color: "bg-cyan-50 text-cyan-600"
         },
         {
+            title: "OE Batch Division",
+            icon: <FaLayerGroup className="h-6 w-6" />,
+            description: "Divide open elective students into batches for faculty.",
+            href: "/admin/electives/batches",
+            color: "bg-indigo-50 text-indigo-600"
+        },
+        {
             title: "SMS Logs",
             icon: <FaSms className="h-6 w-6" />,
             description: "View and audit all sent SMS messages.",

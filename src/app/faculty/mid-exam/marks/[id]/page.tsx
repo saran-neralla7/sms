@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +32,16 @@ interface StudentRow {
   isDraft: boolean;
   marks: Record<string, number | null>; // subQuestionId -> marks
   calculatedTotal?: number;
+  department?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  section?: {
+    id: string;
+    name: string;
+  };
+  batchName?: string | null;
 }
 
 interface PaperInfo {
@@ -57,6 +67,37 @@ export default function MarksGridPage() {
   const [paper, setPaper] = useState<PaperInfo | null>(null);
   const [subQuestions, setSubQuestions] = useState<SubQuestion[]>([]);
   const [rows, setRows] = useState<StudentRow[]>([]);
+  const [deptFilter, setDeptFilter] = useState("ALL");
+  const [batchFilter, setBatchFilter] = useState("ALL");
+
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      const matchesDept = deptFilter === "ALL" || r.department?.code === deptFilter;
+      const matchesBatch = batchFilter === "ALL" || r.batchName === batchFilter || (batchFilter === "Unassigned" && !r.batchName);
+      return matchesDept && matchesBatch;
+    });
+  }, [rows, deptFilter, batchFilter]);
+
+  const departments = useMemo(() => {
+    const depts = new Set<string>();
+    rows.forEach(r => {
+      if (r.department?.code) depts.add(r.department.code);
+    });
+    return ["ALL", ...Array.from(depts).sort()];
+  }, [rows]);
+
+  const batches = useMemo(() => {
+    const bSet = new Set<string>();
+    rows.forEach(r => {
+      if (r.batchName) bSet.add(r.batchName);
+    });
+    const list = Array.from(bSet).sort();
+    if (list.length > 0) {
+      return ["ALL", ...list, "Unassigned"];
+    }
+    return [];
+  }, [rows]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -101,9 +142,9 @@ export default function MarksGridPage() {
   };
 
   const downloadExcel = () => {
-    if (!paper || rows.length === 0) return;
+    if (!paper || filteredRows.length === 0) return;
 
-    const data = rows.map(row => {
+    const data = filteredRows.map(row => {
       const record: Record<string, any> = {
         "Roll Number": row.rollNumber,
         "Name": row.name,
@@ -294,7 +335,7 @@ export default function MarksGridPage() {
 
       // Start by moving one step in the direction of movement
       if (direction === "enter_next_row") {
-        if (currRow < rows.length - 1) {
+        if (currRow < filteredRows.length - 1) {
           currRow += 1;
           currSq = 0;
         } else {
@@ -303,7 +344,7 @@ export default function MarksGridPage() {
       } else if (direction === "right") {
         if (currSq < subQuestions.length - 1) {
           currSq += 1;
-        } else if (currRow < rows.length - 1) {
+        } else if (currRow < filteredRows.length - 1) {
           currSq = 0;
           currRow += 1;
         } else {
@@ -319,7 +360,7 @@ export default function MarksGridPage() {
           return;
         }
       } else if (direction === "down") {
-        if (currRow < rows.length - 1) {
+        if (currRow < filteredRows.length - 1) {
           currRow += 1;
         } else {
           return;
@@ -335,7 +376,7 @@ export default function MarksGridPage() {
       // Keep moving until we find a non-disabled input
       while (true) {
         const targetSqId = subQuestions[currSq]?.id;
-        const targetStudentId = rows[currRow]?.studentId;
+        const targetStudentId = filteredRows[currRow]?.studentId;
         const targetRefKey = `${targetStudentId}_${targetSqId}`;
         const inputEl = gridRefs.current[targetRefKey];
 
@@ -351,7 +392,7 @@ export default function MarksGridPage() {
         if (direction === "enter_next_row" || direction === "right") {
           if (currSq < subQuestions.length - 1) {
             currSq += 1;
-          } else if (currRow < rows.length - 1) {
+          } else if (currRow < filteredRows.length - 1) {
             currSq = 0;
             currRow += 1;
           } else {
@@ -367,7 +408,7 @@ export default function MarksGridPage() {
             break;
           }
         } else if (direction === "down") {
-          if (currRow < rows.length - 1) {
+          if (currRow < filteredRows.length - 1) {
             currRow += 1;
           } else {
             break;
@@ -510,6 +551,34 @@ export default function MarksGridPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              {departments.length > 2 && (
+                <select
+                  value={deptFilter}
+                  onChange={e => setDeptFilter(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                >
+                  {departments.map(d => (
+                    <option key={d} value={d}>
+                      {d === "ALL" ? "All Departments" : `${d} Department`}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {batches.length > 2 && (
+                <select
+                  value={batchFilter}
+                  onChange={e => setBatchFilter(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                >
+                  {batches.map(b => (
+                    <option key={b} value={b}>
+                      {b === "ALL" ? "All Batches" : b === "Unassigned" ? "Unassigned Students" : `${b}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {paper.isLocked && (
                 <span className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-100">
                   <FaUserSlash size={10} /> Locked / Published
@@ -632,7 +701,7 @@ export default function MarksGridPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((row, rowIndex) => (
+                {filteredRows.map((row, rowIndex) => (
                   <tr
                     key={row.studentId}
                     className={`hover:bg-slate-50/50 transition-colors ${
@@ -642,7 +711,16 @@ export default function MarksGridPage() {
                     {/* Student Info */}
                     <td className="sticky left-0 bg-white hover:bg-slate-50/50 px-3 py-2 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-100" title={row.name}>
                       <p className="font-bold text-slate-900 text-sm font-mono leading-tight">{row.rollNumber}</p>
-                      <p className="text-[10px] text-slate-500 truncate max-w-[130px] leading-tight">{row.name}</p>
+                      <p className="text-[10px] text-slate-500 truncate max-w-[130px] leading-tight">
+                        {row.name} {row.department?.code && `(${row.department.code}-${row.section?.name || ""})`}
+                      </p>
+                      {row.batchName && (
+                        <div className="mt-1">
+                          <span className="inline-block rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 border border-indigo-100 leading-none">
+                            {row.batchName}
+                          </span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Absent Toggle Button */}

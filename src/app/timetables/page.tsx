@@ -87,7 +87,7 @@ export default function TimetablesPage() {
             const [periodsRes, subjectsRes, timetableRes, batchesRes, slotsRes] = await Promise.all([
                 fetch("/api/periods"),
                 fetch(`/api/subjects?departmentId=${departmentId}&year=${year}&semester=${semester}`),
-                fetch(`/api/timetables?sectionId=${sectionId}`),
+                fetch(`/api/timetables?sectionId=${sectionId}&year=${year}&semester=${semester}`),
                 fetch(`/api/sections/${sectionId}/batches?departmentId=${departmentId}&year=${year}&semester=${semester}`),
                 fetch("/api/elective-slots")
             ]);
@@ -555,7 +555,7 @@ export default function TimetablesPage() {
                                                                 </div>
                                                             ))}
 
-                                                            {!isCellLunch && cellBlocks[0].subjectId !== "" && (
+                                                            {!isCellLunch && cellBlocks[0]?.subjectId && cellBlocks[0].subjectId !== "" && (
                                                                 <button 
                                                                     onClick={() => handleCellChange(day.id, period.id, 0, "add")}
                                                                     className="text-[10px] text-slate-500 hover:text-orange-600 font-semibold text-center border border-dashed border-slate-300 rounded p-1 transition-colors"

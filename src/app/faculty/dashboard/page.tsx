@@ -18,6 +18,7 @@ export default function FacultyDashboard() {
     const [expandedMappings, setExpandedMappings] = useState<Record<string, boolean>>({});
     const [studentSearch, setStudentSearch] = useState<Record<string, string>>({});
     const [semFilter, setSemFilter] = useState<string>("ALL");
+    const [selectedSectionIdx, setSelectedSectionIdx] = useState<number>(0);
 
     const toggleMapping = (id: string) => {
         setExpandedMappings(prev => ({ ...prev, [id]: !prev[id] }));
@@ -74,36 +75,20 @@ export default function FacultyDashboard() {
         );
     }
 
-    const { profile, subjects, personalTimetable, sectionTimetables, feedback } = data;
+    const { profile, subjects, allPeriods, personalTimetable, sectionTimetables, feedback } = data;
 
     // Helper for Timetable Grid
     const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     
-    // Process unique periods for personal timetable
-    const uniquePeriods = Array.from(new Set(personalTimetable.map((t: any) => t.period.id)))
-        .map(id => personalTimetable.find((t: any) => t.period.id === id)?.period)
-        .filter(Boolean)
-        .sort((a: any, b: any) => a.order - b.order) as any[];
+    // All periods come from the API (so grid always shows complete period columns)
+    const uniquePeriods = (allPeriods || []) as any[];
 
-    // Process section timetables by grouping by sectionId
-    const groupedSectionTimetables: Record<string, { sectionName: string, entries: any[], periods: any[] }> = {};
-    sectionTimetables.forEach((t: any) => {
-        if (!groupedSectionTimetables[t.sectionId]) {
-            groupedSectionTimetables[t.sectionId] = {
-                sectionName: t.section.name,
-                entries: [],
-                periods: []
-            };
-        }
-        groupedSectionTimetables[t.sectionId].entries.push(t);
-    });
-    
-    Object.values(groupedSectionTimetables).forEach(group => {
-        group.periods = Array.from(new Set(group.entries.map((t: any) => t.period.id)))
-            .map(id => group.entries.find((t: any) => t.period.id === id)?.period)
-            .filter(Boolean)
-            .sort((a: any, b: any) => a.order - b.order) as any[];
-    });
+    // Section timetable groups come directly from API (already scoped by year+semester)
+    // sectionTimetables is now an array of { sectionId, sectionName, year, semester, entries }
+    const sectionGroups = (sectionTimetables || []) as any[];
+    const currentGroup = sectionGroups[selectedSectionIdx] || null;
+    // Derive periods for the selected section from allPeriods (show all)
+    const sectionPeriods = uniquePeriods;
 
     return (
         <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
@@ -266,6 +251,11 @@ export default function FacultyDashboard() {
                                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
                                                                         {mapping.subject?.department?.code || "DEPT"} - Year {mapping.subject?.year} Sem {mapping.subject?.semester}
                                                                     </span>
+                                                                    {mapping.subject?.isElective && (
+                                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                                                                            Open Elective
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <h4 className="font-bold text-slate-900 text-lg leading-tight">{mapping.subject?.name}</h4>
                                                                 <p className="text-sm font-mono text-slate-500 mt-1">{mapping.subject?.code}</p>
@@ -274,7 +264,10 @@ export default function FacultyDashboard() {
                                                         <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
                                                             <span className="text-sm font-medium text-slate-600 flex items-center gap-2">
                                                                 <FaChalkboard className="text-slate-400" />
-                                                                Section {mapping.section?.name}
+                                                                {mapping.subject?.isElective
+                                                                    ? `Sections: ${mapping.section?.name}`
+                                                                    : `Section ${mapping.section?.name}`
+                                                                }
                                                             </span>
                                                         </div>
 
@@ -401,7 +394,7 @@ export default function FacultyDashboard() {
                                 <div className="rounded-lg bg-blue-100 p-2 text-blue-600"><FaClock /></div>
                                 <div>
                                     <h2 className="text-xl font-bold text-slate-900">My Assigned Timetable</h2>
-                                    <p className="text-sm text-slate-500">Shows periods where you are assigned to teach.</p>
+                                    <p className="text-sm text-slate-500">All periods where you are assigned to teach, including Open Elective classes.</p>
                                 </div>
                             </div>
 
@@ -427,12 +420,23 @@ export default function FacultyDashboard() {
                                                         <td className="px-4 py-4 font-bold text-slate-700 bg-slate-50/50 border-r border-slate-200">{day}</td>
                                                         {uniquePeriods.map(p => {
                                                             const entry = personalTimetable.find((t: any) => t.dayOfWeek === dayNum && t.periodId === p.id);
+                                                            const isOESlot = !entry?.subject && !!entry?.electiveSlot;
+                                                            const isOE = entry?.subject?.isElective || isOESlot;
+                                                            const displayName = entry?.subject?.shortName || entry?.subject?.name || entry?.subject?.code || entry?.electiveSlot?.name || 'OE Class';
                                                             return (
-                                                                <td key={p.id} className="p-2 border-r border-slate-100 last:border-r-0 text-center align-middle h-20">
+                                                                <td key={p.id} className="p-2 border-r border-slate-100 last:border-r-0 text-center align-middle h-24">
                                                                     {entry ? (
-                                                                        <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-indigo-50 border border-indigo-100 shadow-sm h-full w-full min-w-[100px]">
-                                                                            <span className="font-bold text-indigo-700 text-xs text-center">{entry.subject?.shortName || entry.subject?.code}</span>
-                                                                            <span className="text-[10px] font-semibold text-slate-600 mt-1 bg-white px-2 py-0.5 rounded-full shadow-sm border border-slate-100">Sec: {entry.section?.name}</span>
+                                                                        <div className={`flex flex-col items-center justify-center p-2 rounded-lg shadow-sm h-full w-full min-w-[110px] ${isOE ? 'bg-emerald-50 border border-emerald-200' : 'bg-indigo-50 border border-indigo-100'}`}>
+                                                                            <span className={`font-bold text-xs text-center leading-tight ${isOE ? 'text-emerald-800' : 'text-indigo-700'}`}>
+                                                                                {displayName}
+                                                                            </span>
+                                                                            {isOE && <span className="mt-0.5 text-[9px] font-bold text-emerald-600 uppercase tracking-wide">Open Elective</span>}
+                                                                            <span className="text-[10px] text-slate-500 mt-1">
+                                                                                {entry.subject?.department?.code || ''}{entry.subject?.department?.code ? ' · ' : ''}Yr{entry.year || entry.subject?.year} S{entry.semester || entry.subject?.semester}
+                                                                            </span>
+                                                                            <span className="text-[10px] font-semibold text-slate-600 mt-0.5 bg-white px-2 py-0.5 rounded-full border border-slate-100">
+                                                                                Sec: {entry.section?.name}
+                                                                            </span>
                                                                         </div>
                                                                     ) : (
                                                                         <div className="text-slate-300 text-xs">-</div>
@@ -458,70 +462,102 @@ export default function FacultyDashboard() {
                 )}
 
                 {activeTab === "section-timetable" && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-                        {Object.keys(groupedSectionTimetables).length > 0 ? (
-                            Object.values(groupedSectionTimetables).map((group, idx) => (
-                                <div key={idx} className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                                    <div className="flex items-center gap-3 mb-6">
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                        {sectionGroups.length > 0 ? (
+                            <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                                    <div className="flex items-center gap-3">
                                         <div className="rounded-lg bg-green-100 p-2 text-green-600"><FaChalkboard /></div>
                                         <div>
-                                            <h2 className="text-xl font-bold text-slate-900">Section {group.sectionName} Timetable</h2>
-                                            <p className="text-sm text-slate-500">Full class schedule for this section.</p>
+                                            <h2 className="text-xl font-bold text-slate-900">Section Timetable</h2>
+                                            <p className="text-sm text-slate-500">Full class schedule — only for sections you teach.</p>
                                         </div>
                                     </div>
-
-                                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                        <table className="w-full text-left text-sm border-collapse min-w-[800px]">
-                                            <thead className="bg-slate-50 text-slate-600">
-                                                <tr>
-                                                    <th className="px-4 py-3 font-bold border-b border-r border-slate-200 w-32">Day</th>
-                                                    {group.periods.map(p => (
-                                                        <th key={p.id} className="px-4 py-3 font-semibold text-center border-b border-r border-slate-200 last:border-r-0">
-                                                            {p.name}<br />
-                                                            <span className="text-[10px] font-normal text-slate-400">{p.startTime} - {p.endTime}</span>
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {daysOfWeek.map((day, dayIndex) => {
-                                                    const dayNum = dayIndex + 1;
-                                                    return (
-                                                        <tr key={day} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50">
-                                                            <td className="px-4 py-4 font-bold text-slate-700 bg-slate-50/50 border-r border-slate-200">{day}</td>
-                                                            {group.periods.map(p => {
-                                                                const entry = group.entries.find((t: any) => t.dayOfWeek === dayNum && t.periodId === p.id);
-                                                                // Highlight if this is the current faculty's subject
-                                                                const isMySubject = subjects.some((s: any) => s.subjectId === entry?.subjectId && s.sectionId === entry?.sectionId);
-                                                                
-                                                                return (
-                                                                    <td key={p.id} className={`p-2 border-r border-slate-100 last:border-r-0 text-center align-middle h-20 ${isMySubject ? 'bg-indigo-50/50' : ''}`}>
-                                                                        {entry ? (
-                                                                            <div className={`flex flex-col items-center justify-center p-2 rounded-lg h-full w-full min-w-[100px] ${isMySubject ? 'bg-indigo-100 border border-indigo-200 shadow-sm' : 'bg-slate-50 border border-slate-100'}`}>
-                                                                                <span className={`font-bold text-xs text-center ${isMySubject ? 'text-indigo-800' : 'text-slate-700'}`}>
-                                                                                    {entry.subject?.shortName || entry.subject?.code || "Subject"}
-                                                                                </span>
-                                                                                {isMySubject && <span className="mt-1 bg-indigo-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">You</span>}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="text-slate-300 text-xs">-</div>
-                                                                        )}
-                                                                    </td>
-                                                                );
-                                                            })}
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                    {sectionGroups.length > 1 && (
+                                        <select
+                                            value={selectedSectionIdx}
+                                            onChange={e => setSelectedSectionIdx(Number(e.target.value))}
+                                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-green-500 bg-white"
+                                        >
+                                            {sectionGroups.map((g: any, i: number) => (
+                                                <option key={i} value={i}>
+                                                    Sec {g.sectionName} · Year {g.year} · Sem {g.semester}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
-                            ))
+
+                                {currentGroup && (
+                                    <>
+                                        <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">
+                                            Section {currentGroup.sectionName} &nbsp;·&nbsp; Year {currentGroup.year} &nbsp;·&nbsp; Semester {currentGroup.semester}
+                                        </p>
+                                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                            <table className="w-full text-left text-sm border-collapse min-w-[800px]">
+                                                <thead className="bg-slate-50 text-slate-600">
+                                                    <tr>
+                                                        <th className="px-4 py-3 font-bold border-b border-r border-slate-200 w-32">Day</th>
+                                                        {sectionPeriods.map((p: any) => (
+                                                            <th key={p.id} className="px-4 py-3 font-semibold text-center border-b border-r border-slate-200 last:border-r-0">
+                                                                {p.name}<br />
+                                                                <span className="text-[10px] font-normal text-slate-400">{p.startTime} - {p.endTime}</span>
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {daysOfWeek.map((day, dayIndex) => {
+                                                        const dayNum = dayIndex + 1;
+                                                        return (
+                                                            <tr key={day} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50">
+                                                                <td className="px-4 py-4 font-bold text-slate-700 bg-slate-50/50 border-r border-slate-200">{day}</td>
+                                                                {sectionPeriods.map((p: any) => {
+                                                                    const entry = currentGroup.entries.find((t: any) => t.dayOfWeek === dayNum && t.periodId === p.id);
+                                                                    const isMySubject = subjects.some((s: any) => s.subjectId === entry?.subjectId && s.sectionId === entry?.sectionId);
+                                                                    const isLunch = entry?.isLunch;
+                                                                    return (
+                                                                        <td key={p.id} className={`p-1.5 border-r border-slate-100 last:border-r-0 text-center align-middle h-24 ${isMySubject ? 'bg-indigo-50/40' : ''}`}>
+                                                                            {entry ? (
+                                                                                <div className={`flex flex-col items-center justify-center p-1.5 rounded-lg h-full w-full min-w-[100px] ${
+                                                                                    isLunch ? 'bg-orange-50 border border-orange-200' :
+                                                                                    isMySubject ? 'bg-indigo-100 border border-indigo-200 shadow-sm' :
+                                                                                    'bg-slate-50 border border-slate-100'
+                                                                                }`}>
+                                                                                    {isLunch ? (
+                                                                                        <span className="text-xs font-semibold text-orange-600">🍕 Lunch</span>
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            <span className={`font-bold text-[11px] text-center leading-tight ${isMySubject ? 'text-indigo-800' : 'text-slate-700'}`}>
+                                                                                                {entry.subject?.shortName || entry.subject?.name || 'Subject'}
+                                                                                            </span>
+                                                                                            <span className="text-[9px] text-slate-400 mt-0.5">
+                                                                                                {entry.subject?.department?.code} · Y{entry.year} S{entry.semester}
+                                                                                            </span>
+                                                                                            {isMySubject && <span className="mt-0.5 bg-indigo-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">You</span>}
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="text-slate-300 text-xs">-</div>
+                                                                            )}
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         ) : (
                             <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200 text-center py-16">
                                 <FaChalkboard className="mx-auto text-4xl text-slate-300 mb-4" />
                                 <p className="font-medium text-slate-600">No Section Timetables Available</p>
-                                <p className="text-sm text-slate-500 mt-1">You are not assigned to any sections with timetables yet.</p>
+                                <p className="text-sm text-slate-500 mt-1">You are not assigned to any sections with configured timetables yet.</p>
                             </div>
                         )}
                     </motion.div>

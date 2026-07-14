@@ -18,6 +18,7 @@ export default function FacultyMappingPage() {
     const [subjects, setSubjects] = useState<any[]>([]);
 
     // Selections
+    const [activeTab, setActiveTab] = useState<"section" | "open-elective">("section");
     const [selectedAy, setSelectedAy] = useState("");
     const [selectedDept, setSelectedDept] = useState("");
     const [year, setYear] = useState("");
@@ -60,6 +61,12 @@ export default function FacultyMappingPage() {
         });
     }, []);
 
+    // Reset subjects and mappings on tab change
+    useEffect(() => {
+        setSubjects([]);
+        setMappings({});
+    }, [activeTab]);
+
     useEffect(() => {
         if (selectedDept) {
             fetch(`/api/sections?departmentId=${selectedDept}`)
@@ -72,6 +79,35 @@ export default function FacultyMappingPage() {
     }, [selectedDept]);
 
     const handleLoadSubjects = async () => {
+        if (activeTab === "open-elective") {
+            if (!selectedAy || !year || !semester) {
+                showModal("Please select Academic Year, Year and Semester.", true);
+                return;
+            }
+            setLoading(true);
+            try {
+                const res = await fetch(`/api/admin/faculty-mappings/open-electives?academicYearId=${selectedAy}&year=${year}&semester=${semester}`);
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    setSubjects(data);
+                    const currentMappings: Record<string, string[]> = {};
+                    data.forEach(item => {
+                        currentMappings[item.id] = (item.facultyIds && item.facultyIds.length > 0) ? item.facultyIds : [""];
+                    });
+                    setMappings(currentMappings);
+                } else {
+                    setSubjects([]);
+                    setMappings({});
+                }
+            } catch (e) {
+                console.error(e);
+                showModal("Error loading open elective subjects.", true);
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
         if (!selectedAy || !selectedDept || !year || !semester || !selectedSection) {
             showModal("Please select all fields.", true);
             return;
@@ -82,7 +118,14 @@ export default function FacultyMappingPage() {
             // 1. Fetch Subjects for this context
             const subRes = await fetch(`/api/subjects?departmentId=${selectedDept}&year=${year}&semester=${semester}`);
             const subData = await subRes.json();
-            setSubjects(subData || []);
+            const filteredSubs = Array.isArray(subData) ? subData.filter((s: any) => {
+                const isOpenElective = s.isElective && s.electiveSlotRelation?.name && (
+                    s.electiveSlotRelation.name.toUpperCase().startsWith("OE") ||
+                    s.electiveSlotRelation.name.toUpperCase().startsWith("OPEN")
+                );
+                return !isOpenElective;
+            }) : [];
+            setSubjects(filteredSubs);
 
             // 2. Fetch existing mappings
             const mapRes = await fetch(`/api/admin/faculty-mappings?sectionId=${selectedSection}&academicYearId=${selectedAy}`);
@@ -109,6 +152,29 @@ export default function FacultyMappingPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
+            if (activeTab === "open-elective") {
+                const payload = Object.entries(mappings).map(([subjectId, facultyIds]) => ({
+                    subjectId,
+                    facultyIds: facultyIds.filter(Boolean)
+                }));
+
+                const res = await fetch("/api/admin/faculty-mappings/open-electives", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        academicYearId: selectedAy,
+                        mappings: payload
+                    })
+                });
+
+                if (res.ok) {
+                    showModal("Open Elective mappings saved successfully across all sections!", false);
+                } else {
+                    showModal("Failed to save open elective mappings.", true);
+                }
+                return;
+            }
+
             const payload: any[] = [];
             Object.entries(mappings).forEach(([subjectId, facultyIds]) => {
                 facultyIds.forEach(facultyId => {
@@ -170,10 +236,17 @@ export default function FacultyMappingPage() {
                             type="button"
                             onClick={() => {
                                 const current = [...(mappings[subjectId] || [])];
-                                current[index] = "";
+                                if (activeTab === "open-elective") {
+                                    current.splice(index, 1);
+                                    if (current.length === 0) {
+                                        current.push("");
+                                    }
+                                } else {
+                                    current[index] = "";
+                                }
                                 setMappings({ ...mappings, [subjectId]: current });
                             }}
-                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors animate-in"
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-55 rounded-lg transition-colors animate-in"
                             title="Remove Faculty"
                         >
                             <FaTrashAlt className="h-3.5 w-3.5" />
@@ -259,7 +332,33 @@ export default function FacultyMappingPage() {
                 </div>
             </div>
 
-            <div className="mb-8 grid gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-5">
+            {/* Tab Switching Buttons */}
+            <div className="mb-6 flex gap-4 border-b border-slate-200 pb-2">
+                <button
+                    onClick={() => setActiveTab("section")}
+                    className={`pb-2 text-sm font-semibold transition-colors ${
+                        activeTab === "section"
+                            ? "border-b-2 border-blue-600 text-blue-600 font-bold"
+                            : "text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    Section-wise Mapping (Core / Professional Elective)
+                </button>
+                <button
+                    onClick={() => setActiveTab("open-elective")}
+                    className={`pb-2 text-sm font-semibold transition-colors ${
+                        activeTab === "open-elective"
+                            ? "border-b-2 border-blue-600 text-blue-600 font-bold"
+                            : "text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                    Open Elective Mapping (Global across Sections)
+                </button>
+            </div>
+
+            <div className={`mb-8 grid gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm ${
+                activeTab === "open-elective" ? "md:grid-cols-3" : "md:grid-cols-5"
+            }`}>
                 <div>
                     <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Academic Year</label>
                     <select value={selectedAy} onChange={(e) => setSelectedAy(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
@@ -267,13 +366,15 @@ export default function FacultyMappingPage() {
                         {academicYears.map(ay => <option key={ay.id} value={ay.id}>{ay.name}</option>)}
                     </select>
                 </div>
-                <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Department</label>
-                    <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        <option value="">Select Dept</option>
-                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                </div>
+                {activeTab !== "open-elective" && (
+                    <div>
+                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Department</label>
+                        <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="">Select Dept</option>
+                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                    </div>
+                )}
                 <div>
                     <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Year & Sem</label>
                     <div className="flex gap-2">
@@ -287,13 +388,15 @@ export default function FacultyMappingPage() {
                         </select>
                     </div>
                 </div>
-                <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Section</label>
-                    <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        <option value="">Select Section</option>
-                        {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                </div>
+                {activeTab !== "open-elective" && (
+                    <div>
+                        <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Section</label>
+                        <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="">Select Section</option>
+                            {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    </div>
+                )}
                 <div className="flex items-end">
                     <button 
                         onClick={handleLoadSubjects}
@@ -331,7 +434,29 @@ export default function FacultyMappingPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 min-w-[280px]">
-                                            {sub.type === "LAB" ? (
+                                            {activeTab === "open-elective" ? (
+                                                <div className="flex flex-col gap-2">
+                                                    {(mappings[sub.id] || [""]).map((_, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2">
+                                                            <div className="flex-1">
+                                                                {renderFacultySlot(sub.id, idx, `Faculty ${idx + 1}`, sub.name)}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const current = [...(mappings[sub.id] || [""])];
+                                                            current.push("");
+                                                            setMappings({ ...mappings, [sub.id]: current });
+                                                        }}
+                                                        className="w-full text-left text-xs font-semibold text-blue-600 hover:text-blue-800 p-1 flex items-center gap-1"
+                                                    >
+                                                        <FaUserPlus className="h-3 w-3" />
+                                                        <span>Add another Faculty member</span>
+                                                    </button>
+                                                </div>
+                                            ) : sub.type === "LAB" ? (
                                                 <div className="flex flex-col gap-2">
                                                     <div>
                                                         <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Primary Role</p>
@@ -369,7 +494,30 @@ export default function FacultyMappingPage() {
                                 </div>
 
                                 <div className="border-t border-slate-100 pt-3 space-y-3">
-                                    {sub.type === "LAB" ? (
+                                    {activeTab === "open-elective" ? (
+                                        <div className="space-y-2">
+                                            <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Assigned Faculty</p>
+                                            {(mappings[sub.id] || [""]).map((_, idx) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                    <div className="flex-1">
+                                                        {renderFacultySlot(sub.id, idx, `Faculty ${idx + 1}`, sub.name)}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = [...(mappings[sub.id] || [""])];
+                                                    current.push("");
+                                                    setMappings({ ...mappings, [sub.id]: current });
+                                                }}
+                                                className="w-full text-left text-xs font-semibold text-blue-600 hover:text-blue-800 p-1 flex items-center gap-1"
+                                            >
+                                                <FaUserPlus className="h-3 w-3" />
+                                                <span>Add another Faculty member</span>
+                                            </button>
+                                        </div>
+                                    ) : sub.type === "LAB" ? (
                                         <div className="space-y-3">
                                             <div>
                                                 <p className="text-xxs font-bold text-slate-400 uppercase mb-1">Primary Role</p>

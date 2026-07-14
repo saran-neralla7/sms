@@ -2093,37 +2093,149 @@ export default function AdminMidExamDashboard() {
       const sectionsData = await Promise.all(fetchPromises);
       const zip = new JSZip();
 
+      // ── PDFs: one file per section, all flat at ZIP root ──────────────────
       for (const { secId, data } of sectionsData) {
         const secName = sections.find(s => s.id === secId)?.name || secId;
-        const secFolder = zip.folder(`Section_${secName}`);
-
-        if (!secFolder) continue;
-
-        const mid1PDFBuffer = buildClassReportPDFBuffer("MID_I", data, logoBase64);
-        const mid2PDFBuffer = buildClassReportPDFBuffer("MID_II", data, logoBase64);
-        const assignPDFBuffer = buildClassReportPDFBuffer("ASSIGNMENT", data, logoBase64);
-        const finalPDFBuffer = buildClassReportPDFBuffer("FINAL", data, logoBase64);
-
         const deptCode = data.meta.departmentCode || "Dept";
-        const sectionNameStr = data.meta.section || "Sec";
+        const sectionNameStr = data.meta.section || secName;
 
-        secFolder.file(`MID_I_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, mid1PDFBuffer);
-        secFolder.file(`MID_II_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, mid2PDFBuffer);
-        secFolder.file(`Assignment_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, assignPDFBuffer);
-        secFolder.file(`Final_Internal_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, finalPDFBuffer);
+        const mid1PDFBuffer   = buildClassReportPDFBuffer("MID_I",      data, logoBase64);
+        const mid2PDFBuffer   = buildClassReportPDFBuffer("MID_II",     data, logoBase64);
+        const assignPDFBuffer = buildClassReportPDFBuffer("ASSIGNMENT", data, logoBase64);
+        const finalPDFBuffer  = buildClassReportPDFBuffer("FINAL",      data, logoBase64);
 
-        // Subject-wise detailed report PDFs
+        zip.file(`MID_I_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`,   mid1PDFBuffer);
+        zip.file(`MID_II_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`,  mid2PDFBuffer);
+        zip.file(`Assignment_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, assignPDFBuffer);
+        zip.file(`Final_Internal_Marks_Memo_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, finalPDFBuffer);
+
+        // Subject-wise detailed PDFs
         const subjects = data.subjects || [];
         for (const sub of subjects) {
           const subjectPDFBuffer = buildSubjectReportPDFBuffer(sub.id, sub.name, sub.code, data, logoBase64);
           const safeSubName = sub.name.replace(/[^a-zA-Z0-9]/g, "_");
-          secFolder.file(`Subject_Marks_Memo_${sub.code}_${safeSubName}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, subjectPDFBuffer);
+          zip.file(`Subject_Memo_${sub.code}_${safeSubName}_Sem${selectedSem}_Sec_${sectionNameStr}.pdf`, subjectPDFBuffer);
+        }
+      }
+
+      // ── Excel: one merged workbook with a tab per section ─────────────────
+      if (!isBSH) {
+        const wb = XLSX.utils.book_new();
+        const reportTypes: ("MID_I" | "MID_II" | "ASSIGNMENT" | "FINAL")[] = ["MID_I", "MID_II", "ASSIGNMENT", "FINAL"];
+        const firstMeta = sectionsData[0]?.data?.meta;
+
+        for (const reportType of reportTypes) {
+          // Build combined rows across all sections for this report type
+          const combinedRows: any[][] = [];
+          let titleLabel = "";
+          if (reportType === "MID_I")      titleLabel = "MID-I MARKS MEMO";
+          else if (reportType === "MID_II") titleLabel = "MID-II MARKS MEMO";
+          else if (reportType === "ASSIGNMENT") titleLabel = "ASSIGNMENTS MARKS MEMO";
+          else if (reportType === "FINAL") titleLabel = "FINAL INTERNAL MARKS MEMO";
+
+          combinedRows.push([titleLabel]);
+          combinedRows.push([`Department: ${firstMeta?.department || ""}`]);
+          combinedRows.push([`Academic Year: ${firstMeta?.academicYear || ""} | B.Tech Year: ${firstMeta?.year || ""} | Semester: ${firstMeta?.semester || ""} | All Sections`]);
+          combinedRows.push([]);
+
+          // Use subjects from first section (same for all sections in the dept)
+          const subjects = sectionsData[0]?.data?.subjects || [];
+          const filteredSubs = subjects.filter((sub: any) => {
+            const isLab = sub.type?.toUpperCase() === "LAB";
+            if (isLab) return reportType === "FINAL" ? true : showLabMarks;
+            return true;
+          });
+
+          const headers = ["S.No", "Roll Number", "Student Name", "Section"];
+          filteredSubs.forEach((sub: any) => {
+            const isLab = sub.type?.toUpperCase() === "LAB";
+            let suffix = "";
+            if (isLab) {
+              suffix = reportType === "MID_I" ? "MID I 50M" : reportType === "MID_II" ? "MID II 50M" : reportType === "ASSIGNMENT" ? "Assign 10M" : "Final 50M";
+            } else {
+              suffix = reportType === "MID_I" ? "MID I 30M" : reportType === "MID_II" ? "MID II 30M" : reportType === "ASSIGNMENT" ? "Assign 10M" : "Final 30M";
+            }
+            headers.push(`${sub.shortName || sub.name} (${suffix})`);
+          });
+          if (reportType === "FINAL") headers.push("Total Marks");
+          combinedRows.push(headers);
+
+          let globalIdx = 0;
+          for (const { data } of sectionsData) {
+            const secRows: any[] = data.rows || [];
+            const secLabel = data.meta?.section || "";
+            secRows.forEach((row: any) => {
+              globalIdx++;
+              const rd: any[] = [globalIdx, row.rollNumber, row.name, secLabel];
+              filteredSubs.forEach((sub: any) => {
+                const m = row.subjects[sub.id] || {};
+                let val: number | null = null;
+                let isAbsent = false;
+                if (reportType === "MID_I")        { val = m.mid1; isAbsent = m.isMid1Absent; }
+                else if (reportType === "MID_II")  { val = m.mid2; isAbsent = m.isMid2Absent; }
+                else if (reportType === "ASSIGNMENT") { val = m.assignment; }
+                else if (reportType === "FINAL")   { val = m.internal; }
+
+                if (isAbsent) rd.push("AB");
+                else rd.push(val !== null && val !== undefined ? (reportType === "FINAL" ? Math.ceil(val) : Math.round(val)) : "");
+              });
+              if (reportType === "FINAL") {
+                const total = filteredSubs.reduce((s: number, sub: any) => s + (row.subjects[sub.id]?.internal || 0), 0);
+                rd.push(Math.ceil(total));
+              }
+              combinedRows.push(rd);
+            });
+          }
+
+          const ws = XLSX.utils.aoa_to_sheet(combinedRows);
+          let sheetName = reportType === "MID_I" ? "MID-I" : reportType === "MID_II" ? "MID-II" : reportType === "ASSIGNMENT" ? "Assignment" : "Final";
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
         }
 
-        if (!isBSH) {
-          const excelBuffer = buildConsolidatedExcelBuffer(data);
-          secFolder.file(`Consolidated_Marks_Report_${deptCode}_Sem${selectedSem}_Sec_${sectionNameStr}.xlsx`, excelBuffer);
+        // Subject-wise sheets (combined all sections)
+        const allSubjects = sectionsData[0]?.data?.subjects || [];
+        for (const sub of allSubjects) {
+          const subRows: any[][] = [];
+          subRows.push(["SUBJECT DETAILED EVALUATION SHEET"]);
+          subRows.push([`Department: ${firstMeta?.department || ""}`]);
+          subRows.push([`Academic Year: ${firstMeta?.academicYear || ""} | Year: ${firstMeta?.year || ""} | Sem: ${firstMeta?.semester || ""} | All Sections`]);
+          subRows.push([`Subject: ${sub.name} (${sub.code})`]);
+          subRows.push([]);
+          subRows.push(["S.No", "Roll Number", "Student Name", "Section", "MID-I (30M)", "MID-I (20M)", "MID-II (30M)", "MID-II (20M)", "MID Avg (20M)", "Assign (10M)", "Final (30M)"]);
+
+          let idx = 0;
+          for (const { data } of sectionsData) {
+            const secLabel = data.meta?.section || "";
+            (data.rows || []).forEach((row: any) => {
+              idx++;
+              const m = row.subjects[sub.id] || {};
+              const m1s = m.mid1Scaled, m2s = m.mid2Scaled;
+              const avail = [m1s, m2s].filter((v: any) => v !== null && v !== undefined) as number[];
+              const midAvg = avail.length > 0 ? avail.reduce((a: number, b: number) => a + b, 0) / avail.length : null;
+              subRows.push([
+                idx, row.rollNumber, row.name, secLabel,
+                m.isMid1Absent ? "AB" : (m.mid1 !== null ? Math.round(m.mid1) : ""),
+                m.isMid1Absent ? 0   : (m1s !== null ? Math.ceil(m1s) : ""),
+                m.isMid2Absent ? "AB" : (m.mid2 !== null ? Math.round(m.mid2) : ""),
+                m.isMid2Absent ? 0   : (m2s !== null ? Math.ceil(m2s) : ""),
+                midAvg !== null ? Math.ceil(midAvg) : "",
+                m.assignment !== null ? Math.round(m.assignment) : "",
+                m.internal   !== null ? Math.ceil(m.internal)   : ""
+              ]);
+            });
+          }
+
+          const ws = XLSX.utils.aoa_to_sheet(subRows);
+          let sheetName = (sub.shortName || sub.code || "").toString().replace(/[\\/*?[\]:]/g, "").substring(0, 31);
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
         }
+
+        const deptCode = firstMeta?.departmentCode || "Dept";
+        const scopeName = bulkDownloadScope === "CURRENT"
+          ? `Sec_${sections.find(s => s.id === selectedSection)?.name || "Current"}`
+          : "All_Sections";
+        const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        zip.file(`Consolidated_Marks_Report_${deptCode}_Sem${selectedSem}_${scopeName}.xlsx`, excelBuffer);
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -2145,6 +2257,7 @@ export default function AdminMidExamDashboard() {
       setBulkDownloading(false);
     }
   };
+
 
 
   const handleViewSubjectReport = async () => {

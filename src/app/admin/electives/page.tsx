@@ -28,6 +28,8 @@ export default function ElectivesPage() {
     const [activeTab, setActiveTab] = useState<"enroll" | "view">("enroll");
     const [crossEnrolledStudents, setCrossEnrolledStudents] = useState<any[]>([]);
     const [crossSearch, setCrossSearch] = useState("");
+    const [studentBatches, setStudentBatches] = useState<Record<string, string>>({});
+    const [savingBatches, setSavingBatches] = useState(false);
 
     useEffect(() => {
         fetchDepartments();
@@ -61,6 +63,7 @@ export default function ElectivesPage() {
     const fetchCrossEnrolledStudents = async () => {
         if (!subjectId) {
             setCrossEnrolledStudents([]);
+            setStudentBatches({});
             return;
         }
         try {
@@ -69,8 +72,42 @@ export default function ElectivesPage() {
                 const json = await res.json();
                 setCrossEnrolledStudents(json.data || json || []);
             }
+
+            // Fetch batches
+            const batchRes = await fetch(`/api/admin/electives/batches?subjectId=${subjectId}`);
+            if (batchRes.ok) {
+                const batchesJson = await batchRes.json();
+                setStudentBatches(batchesJson);
+            } else {
+                setStudentBatches({});
+            }
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const handleSaveBatches = async () => {
+        if (!subjectId) return;
+        setSavingBatches(true);
+        try {
+            const res = await fetch("/api/admin/electives/batches", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    subjectId,
+                    studentBatches
+                })
+            });
+            if (res.ok) {
+                alert("Batch assignments saved successfully!");
+            } else {
+                alert("Failed to save batch assignments.");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error saving batch assignments.");
+        } finally {
+            setSavingBatches(false);
         }
     };
 
@@ -386,6 +423,10 @@ export default function ElectivesPage() {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                 {filteredStudents.map(student => {
                                     const isEnrolled = enrolledStudentIds.has(student.id);
+                                    const selectedSub = subjects.find(s => s.id === subjectId);
+                                    const otherElective = !isEnrolled && selectedSub?.electiveSlotId
+                                        ? student.subjects?.find((sub: any) => sub.electiveSlotId === selectedSub.electiveSlotId && sub.id !== subjectId)
+                                        : null;
                                     return (
                                         <div
                                             key={student.id}
@@ -400,6 +441,13 @@ export default function ElectivesPage() {
                                                     <p className="font-mono font-bold text-slate-900">{student.rollNumber}</p>
                                                     <p className="text-sm text-slate-600">{student.name}</p>
                                                     <p className="text-xs text-slate-400 mt-1">Sec: {student.section?.name}</p>
+                                                    {otherElective && (
+                                                        <div className="mt-2">
+                                                             <span className="rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                                                                 Enrolled: {otherElective.code} (Auto-shifts)
+                                                             </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 {isEnrolled && <FaCheck className="text-green-600" />}
                                             </div>
@@ -417,15 +465,24 @@ export default function ElectivesPage() {
             {activeTab === "view" && subjectId && (
                 <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="relative w-full sm:w-72">
-                            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Search enrolled students..."
-                                value={crossSearch}
-                                onChange={(e) => setCrossSearch(e.target.value)}
-                                className="w-full rounded-full border border-slate-200 py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
-                            />
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <div className="relative w-full sm:w-72">
+                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search enrolled students..."
+                                    value={crossSearch}
+                                    onChange={(e) => setCrossSearch(e.target.value)}
+                                    className="w-full rounded-full border border-slate-200 py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                                />
+                            </div>
+                            <button
+                                onClick={handleSaveBatches}
+                                disabled={savingBatches}
+                                className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 shadow-sm disabled:opacity-50"
+                            >
+                                {savingBatches ? "Saving..." : "Save Batch Assignments"}
+                            </button>
                         </div>
                         <p className="text-sm font-semibold text-slate-500">
                             Showing {filteredCrossStudents.length} of {crossEnrolledStudents.length} enrolled students
@@ -441,6 +498,7 @@ export default function ElectivesPage() {
                                         <th className="p-3">Name</th>
                                         <th className="p-3">Department</th>
                                         <th className="p-3">Section</th>
+                                        <th className="p-3">Batch Allocation</th>
                                         <th className="p-3 text-right">Actions</th>
                                     </tr>
                                 </thead>
@@ -451,6 +509,25 @@ export default function ElectivesPage() {
                                             <td className="p-3 text-slate-700 font-medium">{student.name}</td>
                                             <td className="p-3 text-slate-500">{student.department?.code || student.department?.name || "N/A"}</td>
                                             <td className="p-3 text-slate-500">{student.section?.name || "N/A"}</td>
+                                            <td className="p-3">
+                                                <select
+                                                    value={studentBatches[student.id] || ""}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setStudentBatches(prev => ({
+                                                            ...prev,
+                                                            [student.id]: val
+                                                        }));
+                                                    }}
+                                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-medium text-slate-700 focus:border-blue-500 focus:outline-none"
+                                                >
+                                                    <option value="">None (All)</option>
+                                                    <option value="Batch 1">Batch 1</option>
+                                                    <option value="Batch 2">Batch 2</option>
+                                                    <option value="Batch 3">Batch 3</option>
+                                                    <option value="Batch 4">Batch 4</option>
+                                                </select>
+                                            </td>
                                             <td className="p-3 text-right">
                                                 <button
                                                     onClick={() => handleUnenrollCross(student.id)}
