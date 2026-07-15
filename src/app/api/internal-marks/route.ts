@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export async function GET(request: NextRequest) {
     try {
@@ -17,28 +18,16 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch students
-        const studentWhere: any = {
+        const students = await getStudentsForClass({
+            academicYearId,
             departmentId,
-            year: year,
-            semester: semester,
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-        };
-        if (sectionId) {
-            studentWhere.sectionId = sectionId;
-        }
-
-        const students = await prisma.student.findMany({
-            where: studentWhere,
-            select: {
-                id: true,
-                rollNumber: true,
-                name: true,
+            year,
+            semester,
+            sectionId: sectionId || undefined,
+            include: {
                 section: { select: { name: true } },
                 batch: { select: { name: true } }
-            },
-            orderBy: { rollNumber: 'asc' }
+            }
         });
 
         const studentIds = students.map(s => s.id);
@@ -65,7 +54,7 @@ export async function GET(request: NextRequest) {
         });
 
         // Group by student
-        const result = students.map(student => {
+        const result = (students as any[]).map(student => {
             const studentMarks = filteredMarks.filter(m => m.studentId === student.id);
             const subjectsObj: any = {};
             

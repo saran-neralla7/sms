@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks } from "@/lib/mid-exam-calc";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -55,23 +56,14 @@ export async function GET(req: NextRequest) {
 
     if (isOE) {
       const [allOeStudents, ayData] = await Promise.all([
-        prisma.student.findMany({
-          where: {
-            year,
-            semester,
-            subjects: { some: { id: subjectId as string } },
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-          },
-          select: { 
-            id: true, 
-            rollNumber: true, 
-            name: true,
-            sectionId: true,
+        getStudentsForClass({
+          academicYearId: academicYearId as string,
+          year,
+          semester,
+          subjectId: subjectId as string,
+          include: {
             department: { select: { code: true } }
-          },
-          orderBy: { rollNumber: "asc" }
+          }
         }),
         prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } })
       ]);
@@ -94,24 +86,15 @@ export async function GET(req: NextRequest) {
       subjects = [oeSubject];
     } else {
       const [studentsData, ayData, deptData, secData, subjectsData] = await Promise.all([
-        prisma.student.findMany({
-          where: {
-            departmentId: departmentId || undefined,
-            year: year || undefined,
-            semester: semester || undefined,
-            sectionId: sectionId || undefined,
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-          },
-          select: { 
-            id: true, 
-            rollNumber: true, 
-            name: true,
-            sectionId: true,
+        getStudentsForClass({
+          academicYearId: academicYearId as string,
+          departmentId: departmentId || undefined,
+          year: year || "",
+          semester: semester || "",
+          sectionId: sectionId || undefined,
+          include: {
             department: { select: { code: true } }
-          },
-          orderBy: { rollNumber: "asc" }
+          }
         }),
         prisma.academicYear.findUnique({ where: { id: academicYearId || undefined }, select: { name: true } }),
         prisma.department.findUnique({ where: { id: departmentId as string }, select: { name: true, code: true } }),

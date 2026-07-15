@@ -541,6 +541,10 @@ function SyllabusRichField({
           .syllabus-rich-content li {
             margin-bottom: 2px !important;
           }
+          .syllabus-rich-content p {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           .syllabus-rich-content[contenteditable]:empty::before {
             content: attr(data-placeholder);
             color: #94a3b8;
@@ -663,6 +667,10 @@ function SyllabusRichField({
         }
         .syllabus-rich-content li {
           margin-bottom: 2px !important;
+        }
+        .syllabus-rich-content p {
+          margin: 0 !important;
+          padding: 0 !important;
         }
       `}</style>
       {hasContent ? (
@@ -1537,8 +1545,8 @@ function SyllabusConfigContent() {
               </div>
               <div className="space-y-2">
                 {syllabus.objectives.map((obj, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <span className="text-xs font-bold text-slate-400 w-6">{index + 1}.</span>
+                  <div key={index} className="flex gap-2 items-start">
+                    <span className="text-xs font-bold text-slate-400 w-6 mt-2">{index + 1}.</span>
                     <SyllabusRichField
                       value={obj}
                       onChange={(val) => handleObjectiveChange(index, val)}
@@ -1548,7 +1556,7 @@ function SyllabusConfigContent() {
                     <button
                       type="button"
                       onClick={() => removeObjective(index)}
-                      className="text-red-500 hover:text-red-700 transition-colors p-1"
+                      className="text-red-500 hover:text-red-700 transition-colors p-1 mt-2"
                     >
                       <FaTrash size={12} />
                     </button>
@@ -1708,8 +1716,8 @@ function SyllabusConfigContent() {
                 </div>
                 <div className="space-y-2">
                   {syllabus.textbooks.map((tb, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      <span className="text-xs font-bold text-slate-400 w-6">{index + 1}.</span>
+                    <div key={index} className="flex gap-2 items-start">
+                      <span className="text-xs font-bold text-slate-400 w-6 mt-2">{index + 1}.</span>
                       <SyllabusRichField
                         value={tb}
                         onChange={(val) => handleTextbookChange(index, val)}
@@ -1719,7 +1727,7 @@ function SyllabusConfigContent() {
                       <button
                         type="button"
                         onClick={() => removeTextbook(index)}
-                        className="text-red-500 hover:text-red-700 transition-colors p-1"
+                        className="text-red-500 hover:text-red-700 transition-colors p-1 mt-2"
                       >
                         <FaTrash size={12} />
                       </button>
@@ -1742,8 +1750,8 @@ function SyllabusConfigContent() {
                 </div>
                 <div className="space-y-2">
                   {syllabus.referenceBooks.map((refB, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      <span className="text-xs font-bold text-slate-400 w-6">{index + 1}.</span>
+                    <div key={index} className="flex gap-2 items-start">
+                      <span className="text-xs font-bold text-slate-400 w-6 mt-2">{index + 1}.</span>
                       <SyllabusRichField
                         value={refB}
                         onChange={(val) => handleReferenceChange(index, val)}
@@ -1753,7 +1761,7 @@ function SyllabusConfigContent() {
                       <button
                         type="button"
                         onClick={() => removeReference(index)}
-                        className="text-red-500 hover:text-red-700 transition-colors p-1"
+                        className="text-red-500 hover:text-red-700 transition-colors p-1 mt-2"
                       >
                         <FaTrash size={12} />
                       </button>

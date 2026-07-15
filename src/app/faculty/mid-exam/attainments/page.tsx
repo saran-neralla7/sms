@@ -50,6 +50,7 @@ export default function AttainmentsPage() {
   const semester       = searchParams?.get("semester") || "";
   const sectionId      = searchParams?.get("sectionId") || "";
   const subjectId      = searchParams?.get("subjectId") || "";
+  const batch          = searchParams?.get("batch") || "";
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
@@ -68,7 +69,7 @@ export default function AttainmentsPage() {
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !subjectId) return;
     setLoading(true);
     fetch(
-      `/api/course-files?academicYearId=${academicYearId}&departmentId=${departmentId}&year=${year}&semester=${semester}&sectionId=${sectionId}&subjectId=${subjectId}`
+      `/api/course-files?academicYearId=${academicYearId}&departmentId=${departmentId}&year=${year}&semester=${semester}&sectionId=${sectionId}&subjectId=${subjectId}&batch=${batch}`
     )
       .then(r => r.json())
       .then(d => {
@@ -79,7 +80,7 @@ export default function AttainmentsPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [academicYearId, departmentId, year, semester, sectionId, subjectId]);
+  }, [academicYearId, departmentId, year, semester, sectionId, subjectId, batch]);
 
   // ── Re-calculate whenever settings or data change ──────────
   useEffect(() => {
@@ -130,7 +131,7 @@ export default function AttainmentsPage() {
       setTimeout(() => setSaveMsg(""), 2500);
     }
     setSaving(false);
-  }, [academicYearId, departmentId, year, semester, sectionId, subjectId, benchmarkPct, decimalPlaces]);
+  }, [academicYearId, departmentId, year, semester, sectionId, subjectId, batch, benchmarkPct, decimalPlaces]);
 
   // ── Loading ─────────────────────────────────────────────────
   if (loading) {
@@ -216,7 +217,10 @@ export default function AttainmentsPage() {
             <div className="border-t md:border-t-0 md:border-l border-slate-100 md:pl-6 pt-4 md:pt-0">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Faculty & Section</span>
               <p className="text-sm font-bold text-slate-700">{data.faculty?.empName || data.faculty?.name || "No faculty assigned"}</p>
-              <p className="text-xs text-slate-500 mt-1">Section: {data.section?.name || "—"} | Branch: {data.department?.name || "—"}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {batch ? `Batch: ${batch}` : `Section: ${data.section?.name || "—"}`}
+                {data.mappedSections && data.mappedSections.length > 1 && ` (Sections: ${data.mappedSections.map((s: any) => s.name).join(", ")})`} | Branch: {data.department?.name || "—"}
+              </p>
             </div>
             <div className="border-t md:border-t-0 md:border-l border-slate-100 md:pl-6 pt-4 md:pt-0">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Academic Year & Semester</span>

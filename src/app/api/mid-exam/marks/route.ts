@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal } from "@/lib/mid-exam-calc";
 import { getElectiveBatches } from "@/lib/elective-batches";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 // GET marks grid for a paper
 export async function GET(req: NextRequest) {
@@ -55,34 +56,17 @@ export async function GET(req: NextRequest) {
     }
 
     // Get students for this academic class
-    const studentWhereClause: any = {
+    const students = await getStudentsForClass({
+      academicYearId: paper.academicYearId,
+      departmentId: isOE || paper.subject.isElective ? undefined : paper.subject.departmentId,
       year: paper.year,
       semester: paper.semester,
-      isAlumni: false,
-      isLeftCollege: false,
-      isDetained: false,
-    };
-
-    if (isOE) {
-      studentWhereClause.subjects = { some: { id: paper.subjectId } };
-    } else if (paper.subject.isElective) {
-      studentWhereClause.sectionId = paper.sectionId;
-      studentWhereClause.subjects = { some: { id: paper.subjectId } };
-    } else {
-      studentWhereClause.sectionId = paper.sectionId;
-      studentWhereClause.departmentId = paper.subject.departmentId;
-    }
-
-    const students = await prisma.student.findMany({
-      where: studentWhereClause,
-      select: { 
-        id: true, 
-        rollNumber: true, 
-        name: true,
+      sectionId: isOE ? undefined : paper.sectionId,
+      subjectId: paper.subjectId,
+      include: {
         department: { select: { code: true } },
         section: { select: { name: true } }
-      },
-      orderBy: { rollNumber: "asc" }
+      }
     });
 
     // Get existing marks entries for this paper

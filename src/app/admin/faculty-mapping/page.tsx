@@ -27,6 +27,7 @@ export default function FacultyMappingPage() {
 
     // Mappings state: subjectId -> array of facultyIds
     const [mappings, setMappings] = useState<Record<string, string[]>>({});
+    const [electiveBatches, setElectiveBatches] = useState<Record<string, Record<string, string>>>({});
 
     // Modal state
     const [modalConfig, setModalConfig] = useState({ isOpen: false, message: "", isError: false });
@@ -65,6 +66,7 @@ export default function FacultyMappingPage() {
     useEffect(() => {
         setSubjects([]);
         setMappings({});
+        setElectiveBatches({});
     }, [activeTab]);
 
     useEffect(() => {
@@ -91,13 +93,22 @@ export default function FacultyMappingPage() {
                 if (Array.isArray(data)) {
                     setSubjects(data);
                     const currentMappings: Record<string, string[]> = {};
+                    const currentBatches: Record<string, Record<string, string>> = {};
                     data.forEach(item => {
                         currentMappings[item.id] = (item.facultyIds && item.facultyIds.length > 0) ? item.facultyIds : [""];
+                        currentBatches[item.id] = {};
+                        if (item.faculties && Array.isArray(item.faculties)) {
+                            item.faculties.forEach((f: any) => {
+                                currentBatches[item.id][f.facultyId] = f.batch || "";
+                            });
+                        }
                     });
                     setMappings(currentMappings);
+                    setElectiveBatches(currentBatches);
                 } else {
                     setSubjects([]);
                     setMappings({});
+                    setElectiveBatches({});
                 }
             } catch (e) {
                 console.error(e);
@@ -153,10 +164,17 @@ export default function FacultyMappingPage() {
         setSaving(true);
         try {
             if (activeTab === "open-elective") {
-                const payload = Object.entries(mappings).map(([subjectId, facultyIds]) => ({
-                    subjectId,
-                    facultyIds: facultyIds.filter(Boolean)
-                }));
+                const payload = Object.entries(mappings).map(([subjectId, facultyIds]) => {
+                    const mappedFaculties = facultyIds.filter(Boolean).map(fid => ({
+                        facultyId: fid,
+                        batch: electiveBatches[subjectId]?.[fid] || null
+                    }));
+                    return {
+                        subjectId,
+                        faculties: mappedFaculties,
+                        facultyIds: facultyIds.filter(Boolean)
+                    };
+                });
 
                 const res = await fetch("/api/admin/faculty-mappings/open-electives", {
                     method: "POST",
@@ -216,13 +234,38 @@ export default function FacultyMappingPage() {
         if (faculty) {
             return (
                 <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-all">
-                    <div className="flex flex-col min-w-0">
+                    <div className="flex flex-col min-w-0 flex-1">
                         <span className="font-bold text-slate-800 text-sm truncate">{faculty.empName}</span>
                         <span className="text-xxs text-slate-500 font-medium truncate">
                             {faculty.department?.code || "N/A"} • {faculty.empCode}
                             {faculty.shortName ? ` • ${faculty.shortName}` : ""}
                         </span>
                     </div>
+                    {activeTab === "open-elective" && (
+                        <div className="flex-shrink-0">
+                            <select
+                                value={electiveBatches[subjectId]?.[faculty.id] || ""}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setElectiveBatches(prev => ({
+                                        ...prev,
+                                        [subjectId]: {
+                                            ...(prev[subjectId] || {}),
+                                            [faculty.id]: val
+                                        }
+                                    }));
+                                }}
+                                className="rounded-md border border-slate-350 px-2 py-1 text-xs bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                title="Optional Batch Mapping"
+                            >
+                                <option value="">No Batch (All)</option>
+                                <option value="Batch 1">Batch 1</option>
+                                <option value="Batch 2">Batch 2</option>
+                                <option value="Batch 3">Batch 3</option>
+                                <option value="Batch 4">Batch 4</option>
+                            </select>
+                        </div>
+                    )}
                     <div className="flex items-center gap-1 flex-shrink-0">
                         <button
                             type="button"

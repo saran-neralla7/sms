@@ -35,6 +35,9 @@ export default function AttendancePage() {
     // -- VIEW MODE --
     const [viewMode, setViewMode] = useState<"manual" | "elective" | "bulk">("manual");
     const [electiveDeptFilter, setElectiveDeptFilter] = useState("");
+    const [facultyHasBatchConstraint, setFacultyHasBatchConstraint] = useState(false);
+    const [facultyMappedBatch, setFacultyMappedBatch] = useState<string | null>(null);
+    const [selectedElectiveBatch, setSelectedElectiveBatch] = useState<string>("");
 
     // Clear state on viewMode change
     useEffect(() => {
@@ -44,6 +47,9 @@ export default function AttendancePage() {
         setSelectedSectionIds([]);
         setSelectedLabBatch("");
         setElectiveDeptFilter("");
+        setSelectedElectiveBatch("");
+        setFacultyHasBatchConstraint(false);
+        setFacultyMappedBatch(null);
     }, [viewMode]);
 
     // -- SELECTIONS --
@@ -69,7 +75,14 @@ export default function AttendancePage() {
 
     // -- DATA --
     const [students, setStudents] = useState<Student[]>([]);
-    const displayedStudents = students.filter(s => viewMode !== "elective" || !electiveDeptFilter || s.departmentId === electiveDeptFilter);
+    const displayedStudents = students.filter(s => {
+        if (viewMode === "elective") {
+            const matchesDept = !electiveDeptFilter || s.departmentId === electiveDeptFilter;
+            const matchesBatch = !selectedElectiveBatch || (s as any).electiveBatch === selectedElectiveBatch;
+            return matchesDept && matchesBatch;
+        }
+        return true;
+    });
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const isSubmittingRef = useRef(false);
@@ -87,6 +100,8 @@ export default function AttendancePage() {
     const [submissionStep, setSubmissionStep] = useState<"confirm" | "success">("confirm");
     const [topicsTaught, setTopicsTaught] = useState("");
     const [holidays, setHolidays] = useState<any[]>([]);
+    const [activeSyllabus, setActiveSyllabus] = useState<any>(null);
+    const [selectedDiaryUnit, setSelectedDiaryUnit] = useState<string>("Unit I");
 
     // Initialize Selections
     useEffect(() => {
@@ -197,6 +212,33 @@ export default function AttendancePage() {
         }
     }, [viewMode, selectedDept, year, semester, session]);
 
+    useEffect(() => {
+        setSelectedElectiveBatch("");
+        setFacultyHasBatchConstraint(false);
+        setFacultyMappedBatch(null);
+        setStudents([]);
+    }, [selectedSubject]);
+
+    useEffect(() => {
+        if (selectedSubject) {
+            fetch(`/api/subjects/${selectedSubject}/syllabus`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.syllabus) {
+                        setActiveSyllabus(data.syllabus);
+                    } else {
+                        setActiveSyllabus(null);
+                    }
+                })
+                .catch(err => {
+                    console.error("Error fetching syllabus for teaching diary helper:", err);
+                    setActiveSyllabus(null);
+                });
+        } else {
+            setActiveSyllabus(null);
+        }
+    }, [selectedSubject]);
+
     // -- HANDLERS: MANUAL MODE --
 
     // Period Toggle - Restored
@@ -298,6 +340,11 @@ export default function AttendancePage() {
             const res = await fetch(`/api/students?${query.toString()}`);
             const data = await res.json();
             const studentList = data.data || data; // Handle pagination wrapper or direct array
+            const isConstrained = data.facultyHasBatchConstraint || false;
+            const constrainedBatch = data.facultyMappedBatch || null;
+
+            setFacultyHasBatchConstraint(isConstrained);
+            setFacultyMappedBatch(constrainedBatch);
 
             if (Array.isArray(studentList)) {
                 let filtered = studentList;
@@ -823,6 +870,30 @@ export default function AttendancePage() {
                                             </div>
                                         )}
 
+                                        {/* Batch Filter for Electives */}
+                                        {viewMode === "elective" && (
+                                            facultyHasBatchConstraint ? (
+                                                <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold uppercase">
+                                                    <span>Locked to: {facultyMappedBatch}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-semibold text-slate-500 uppercase">Filter Batch:</span>
+                                                    <select
+                                                        value={selectedElectiveBatch}
+                                                        onChange={(e) => setSelectedElectiveBatch(e.target.value)}
+                                                        className="rounded-md border border-slate-300 px-2 py-1 text-xs bg-white text-slate-700 font-medium"
+                                                    >
+                                                        <option value="">All Batches</option>
+                                                        <option value="Batch 1">Batch 1</option>
+                                                        <option value="Batch 2">Batch 2</option>
+                                                        <option value="Batch 3">Batch 3</option>
+                                                        <option value="Batch 4">Batch 4</option>
+                                                    </select>
+                                                </div>
+                                            )
+                                        )}
+
                                         <div className="flex gap-2 text-xs sm:text-sm font-semibold">
                                             <button onClick={() => markAll("Present")} className="text-green-600 hover:underline bg-green-50 px-2.5 py-1 rounded border border-green-200 hover:bg-green-100 transition-colors">All Present</button>
                                             <span className="text-slate-300 self-center">|</span>
@@ -867,13 +938,70 @@ export default function AttendancePage() {
                                 {/* Teaching Diary section - Academic Mode Only */}
                                 {!["USER", "SMS_USER"].includes((session?.user?.role || "").toUpperCase()) && selectedSubject && (
                                     <div className="mt-8 bg-slate-50 border border-slate-200 rounded-xl p-6">
-                                        <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
-                                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">New</span>
-                                            Session Teaching Diary (Topics Taught)
-                                        </h4>
-                                        <p className="text-xs text-slate-500 mb-4">
-                                            Optional: Document the concepts, syllabus topics, or lab exercises covered during this class session.
-                                        </p>
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                                                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">New</span>
+                                                    Session Teaching Diary (Topics Taught)
+                                                </h4>
+                                                <p className="text-xs text-slate-500">
+                                                    Optional: Document the concepts, syllabus topics, or lab exercises covered during this class session.
+                                                </p>
+                                            </div>
+                                            
+                                            {activeSyllabus?.units && activeSyllabus.units.length > 0 && (
+                                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm self-start md:self-auto">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Syllabus Helper</span>
+                                                    <select
+                                                        value={selectedDiaryUnit}
+                                                        onChange={(e) => setSelectedDiaryUnit(e.target.value)}
+                                                        className="px-2 py-1 text-[10px] font-semibold border border-slate-200 rounded bg-white text-slate-700 focus:outline-none cursor-pointer"
+                                                    >
+                                                        {activeSyllabus.units.map((u: any, idx: number) => (
+                                                            <option key={idx} value={u.name || `Unit ${idx+1}`}>
+                                                                {u.name || `Unit ${idx+1}`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* List of parsed topics for selected unit */}
+                                        {activeSyllabus?.units && activeSyllabus.units.length > 0 && (
+                                            <div className="mb-4 bg-white border border-slate-200 rounded-lg p-3">
+                                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Select topics to append:</div>
+                                                <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto">
+                                                    {(() => {
+                                                        const matchedUnit = activeSyllabus.units.find(
+                                                            (u: any) => (u.name || "").toUpperCase().replace(/[^A-Z]/g, "") === selectedDiaryUnit.toUpperCase().replace(/[^A-Z]/g, "")
+                                                        );
+                                                        if (!matchedUnit || !matchedUnit.content) {
+                                                            return <span className="text-[10px] text-slate-400">No topics defined in syllabus for this unit.</span>;
+                                                        }
+                                                        const topics = matchedUnit.content.split(",").map((s: string) => s.replace(/<[^>]*>/g, "").trim()).filter(Boolean);
+                                                        if (topics.length === 0) {
+                                                            return <span className="text-[10px] text-slate-400">No topics defined.</span>;
+                                                        }
+                                                        return topics.map((t: string, idx: number) => (
+                                                            <button
+                                                                key={idx}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const cleanVal = topicsTaught.replace(/<[^>]*>/g, "").trim();
+                                                                    const appended = cleanVal ? `${cleanVal}, ${t}` : t;
+                                                                    setTopicsTaught(appended);
+                                                                }}
+                                                                className="px-2 py-1 text-[10px] font-medium bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-800 rounded transition-colors text-left flex items-center gap-1 cursor-pointer"
+                                                            >
+                                                                <span>+ {t}</span>
+                                                            </button>
+                                                        ));
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <RichTextEditor
                                             value={topicsTaught}
                                             onChange={setTopicsTaught}

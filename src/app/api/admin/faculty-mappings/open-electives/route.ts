@@ -48,20 +48,26 @@ export async function GET(req: Request) {
             }
         });
 
-        // Group mappings by subjectId to get a unique list of assigned faculty IDs
-        const subjectFacultyMap = new Map<string, Set<string>>();
+        // Group mappings by subjectId to get a unique list of assigned faculty IDs and their batches
+        const subjectFacultyMap = new Map<string, Map<string, string | null>>();
         mappings.forEach(m => {
             if (!subjectFacultyMap.has(m.subjectId)) {
-                subjectFacultyMap.set(m.subjectId, new Set());
+                subjectFacultyMap.set(m.subjectId, new Map());
             }
-            subjectFacultyMap.get(m.subjectId)!.add(m.facultyId);
+            subjectFacultyMap.get(m.subjectId)!.set(m.facultyId, m.batch || null);
         });
 
         // Construct response structure
         const result = subjects.map(sub => {
-            const facultyIds = Array.from(subjectFacultyMap.get(sub.id) || []);
+            const facultyMap = subjectFacultyMap.get(sub.id) || new Map();
+            const faculties = Array.from(facultyMap.entries()).map(([facultyId, batch]) => ({
+                facultyId,
+                batch
+            }));
+            const facultyIds = faculties.map(f => f.facultyId);
             return {
                 ...sub,
+                faculties: faculties,
                 facultyIds: facultyIds
             };
         });
@@ -82,7 +88,7 @@ export async function POST(req: Request) {
 
         const body = await req.json();
         const { academicYearId, mappings } = body;
-        // mappings is array of { subjectId, facultyIds: string[] }
+        // mappings is array of { subjectId, facultyIds: string[], faculties: { facultyId, batch }[] }
 
         if (!academicYearId || !mappings || !Array.isArray(mappings)) {
             return NextResponse.json({ error: "academicYearId and mappings array are required" }, { status: 400 });
@@ -94,7 +100,7 @@ export async function POST(req: Request) {
         // Transaction to sync elective mappings across all sections
         await prisma.$transaction(async (tx) => {
             for (const m of mappings) {
-                const { subjectId, facultyIds } = m;
+                const { subjectId, facultyIds, faculties } = m;
                 if (!subjectId) continue;
 
                 // Delete existing mapping for this subject & academic year across all sections
@@ -105,28 +111,41 @@ export async function POST(req: Request) {
                     }
                 });
 
-                // Create new mappings for each section if facultyIds are provided
-                if (facultyIds && Array.isArray(facultyIds) && facultyIds.length > 0) {
-                    const dataToInsert: any[] = [];
-                    sections.forEach((sec) => {
+                // Create new mappings for each section
+                const dataToInsert: any[] = [];
+                sections.forEach((sec) => {
+                    if (faculties && Array.isArray(faculties) && faculties.length > 0) {
+                        faculties.forEach((f) => {
+                            if (f.facultyId) {
+                                dataToInsert.push({
+                                    facultyId: f.facultyId,
+                                    subjectId,
+                                    sectionId: sec.id,
+                                    academicYearId,
+                                    batch: f.batch || null
+                                });
+                            }
+                        });
+                    } else if (facultyIds && Array.isArray(facultyIds) && facultyIds.length > 0) {
                         facultyIds.forEach((fid) => {
                             if (fid) {
                                 dataToInsert.push({
                                     facultyId: fid,
                                     subjectId,
                                     sectionId: sec.id,
-                                    academicYearId
+                                    academicYearId,
+                                    batch: null
                                 });
                             }
                         });
-                    });
-
-                    if (dataToInsert.length > 0) {
-                        await tx.facultySubjectMapping.createMany({
-                            data: dataToInsert,
-                            skipDuplicates: true
-                        });
                     }
+                });
+
+                if (dataToInsert.length > 0) {
+                    await tx.facultySubjectMapping.createMany({
+                        data: dataToInsert,
+                        skipDuplicates: true
+                    });
                 }
             }
         });

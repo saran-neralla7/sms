@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 // GET existing lab marks for a given section & subject (examType === "LAB")
 export async function GET(req: NextRequest) {
@@ -28,25 +29,17 @@ export async function GET(req: NextRequest) {
     if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
 
     // Get active students mapped to this section & subject department
-    const studentWhereClause: any = {
+    const students = await getStudentsForClass({
+      academicYearId,
+      departmentId: subject.isElective ? undefined : subject.departmentId,
       year,
       semester,
       sectionId,
-      isAlumni: false,
-      isLeftCollege: false,
-      isDetained: false,
-    };
-
-    if (subject.isElective) {
-      studentWhereClause.subjects = { some: { id: subjectId } };
-    } else {
-      studentWhereClause.departmentId = subject.departmentId;
-    }
-
-    const students = await prisma.student.findMany({
-      where: studentWhereClause,
-      select: { id: true, rollNumber: true, name: true },
-      orderBy: { rollNumber: "asc" }
+      subjectId,
+      include: {
+        department: { select: { code: true } },
+        section: { select: { name: true } }
+      }
     });
 
     // Get existing internal marks with examType = "LAB"

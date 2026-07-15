@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks } from "@/lib/mid-exam-calc";
 import { sendMarksSMS } from "@/lib/sms";
 import { isBSHHod } from "@/lib/permissions";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 // POST — lock and/or publish marks (writes to InternalMark table)
 export async function POST(req: NextRequest) {
@@ -80,25 +81,13 @@ export async function POST(req: NextRequest) {
       const { sendSMS, facultyMobiles } = body;
 
       // Get all students for this academic class
-      const students = await prisma.student.findMany({
-        where: {
-          year: paper.year,
-          semester: paper.semester,
-          sectionId: paper.sectionId,
-          departmentId: paper.subject.departmentId,
-          isAlumni: false,
-          isLeftCollege: false,
-          isDetained: false,
-        },
-        select: {
-          id: true,
-          name: true,
-          rollNumber: true,
-          mobile: true,
-          studentContactNumber: true,
-          year: true,
-          semester: true,
-        }
+      const students = await getStudentsForClass({
+        academicYearId: paper.academicYearId,
+        departmentId: paper.subject.isElective ? undefined : paper.subject.departmentId,
+        year: paper.year,
+        semester: paper.semester,
+        sectionId: paper.sectionId,
+        subjectId: paper.subjectId
       });
 
       // Get all marks entries

@@ -325,6 +325,90 @@ export async function POST(request: Request) {
 
         const records = await prisma.$transaction(transactions);
 
+        // Sync topicsTaught to other sections mapped to the same faculty for the same subject, date, and periods
+        if (topicsTaught && finalSubjectId) {
+            try {
+                const recordType = userRole === "SMS_USER" ? "SMS" : "ACADEMIC";
+                // 1. Resolve facultyId for the logged-in user
+                let resolvedFacultyId: string | null = null;
+                const userObj = await prisma.user.findUnique({
+                    where: { id: (session.user as any).id },
+                    select: { facultyId: true }
+                });
+                resolvedFacultyId = userObj?.facultyId || null;
+
+                if (resolvedFacultyId) {
+                    // 2. Find other sections mapped to this subject for this faculty
+                    const mappings = await prisma.facultySubjectMapping.findMany({
+                        where: {
+                            academicYearId: resolvedAcademicYearId || undefined,
+                            subjectId: finalSubjectId,
+                            facultyId: resolvedFacultyId
+                        },
+                        select: { sectionId: true }
+                    });
+
+                    const allMappedSectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
+                    const otherSectionIds = allMappedSectionIds.filter(sid => !targetSectionIds.includes(sid));
+
+                    if (otherSectionIds.length > 0) {
+                        const subject = await prisma.subject.findUnique({
+                            where: { id: finalSubjectId }
+                        });
+
+                        if (subject) {
+                            for (const sid of otherSectionIds) {
+                                for (const pid of finalPeriodIds) {
+                                    // Check if existing record exists
+                                    const existingOther = await prisma.attendanceHistory.findFirst({
+                                        where: {
+                                            date: new Date(date),
+                                            sectionId: sid,
+                                            periodId: pid,
+                                            year: String(year),
+                                            departmentId: subject.departmentId
+                                        }
+                                    });
+
+                                    if (existingOther) {
+                                        await prisma.attendanceHistory.update({
+                                            where: { id: existingOther.id },
+                                            data: {
+                                                topicsTaught,
+                                                subjectId: finalSubjectId,
+                                                downloadedBy: (session.user as any).id
+                                            }
+                                        });
+                                    } else {
+                                        await prisma.attendanceHistory.create({
+                                            data: {
+                                                date: new Date(date),
+                                                year: String(year),
+                                                semester: String(semester),
+                                                sectionId: sid,
+                                                departmentId: subject.departmentId,
+                                                academicYearId: resolvedAcademicYearId || null,
+                                                subjectId: finalSubjectId,
+                                                periodId: pid,
+                                                status: "Completed",
+                                                type: recordType,
+                                                fileName: "Manual Entry (Sync)",
+                                                downloadedBy: (session.user as any).id,
+                                                details: "[]",
+                                                topicsTaught
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to sync teaching diary in attendance route:", err);
+            }
+        }
+
         // Audit Log for Attendance Submission
         await logActivity(
             (session.user as any).id,

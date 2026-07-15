@@ -30,6 +30,7 @@ export default function OEBatchDivisionPage() {
     const [saved, setSaved] = useState(false);
     const [search, setSearch] = useState("");
     const [batchFilter, setBatchFilter] = useState("All");
+    const [deptFilter, setDeptFilter] = useState("All");
     const [transferStudent, setTransferStudent] = useState<Student | null>(null);
     const [transferTo, setTransferTo] = useState("");
     const [transferring, setTransferring] = useState(false);
@@ -62,9 +63,9 @@ export default function OEBatchDivisionPage() {
     }, [visibleSubjects]);
 
     useEffect(() => {
-        if (!subjectId) { setStudents([]); setBatches({}); return; }
+        if (!subjectId) { setStudents([]); setBatches({}); setDeptFilter("All"); return; }
         (async () => {
-            setLoadingStudents(true); setSaved(false);
+            setLoadingStudents(true); setSaved(false); setDeptFilter("All");
             const [sRes, bRes] = await Promise.all([
                 fetch(`/api/students?subjectId=${subjectId}&limit=-1`),
                 fetch(`/api/admin/electives/batches?subjectId=${subjectId}`)
@@ -109,11 +110,30 @@ export default function OEBatchDivisionPage() {
         return c;
     }, [students, batches]);
 
+    const uniqueDepts = useMemo(() => {
+        const depts = new Set<string>();
+        students.forEach(s => {
+            if (s.department?.code) depts.add(s.department.code);
+        });
+        return Array.from(depts).sort();
+    }, [students]);
+
+    const deptCounts = useMemo(() => {
+        const c: Record<string, number> = {};
+        students.forEach(s => {
+            if (s.department?.code) {
+                c[s.department.code] = (c[s.department.code] || 0) + 1;
+            }
+        });
+        return c;
+    }, [students]);
+
     const filtered = useMemo(() => students.filter(s => {
         const ms = !search || s.rollNumber.toLowerCase().includes(search.toLowerCase()) || s.name.toLowerCase().includes(search.toLowerCase());
         const mb = batchFilter === "All" || (batches[s.id] || "Unassigned") === batchFilter;
-        return ms && mb;
-    }), [students, batches, search, batchFilter]);
+        const md = deptFilter === "All" || s.department?.code === deptFilter;
+        return ms && mb && md;
+    }), [students, batches, search, batchFilter, deptFilter]);
 
     const selSub = allSubjects.find(s => s.id === subjectId);
     const otherSubs = allSubjects.filter(s => s.id !== subjectId);
@@ -267,22 +287,87 @@ export default function OEBatchDivisionPage() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {/* Search + filter */}
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="relative w-full sm:w-72">
-                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
-                                <input type="text" placeholder="Search roll no. or name..." value={search} onChange={e => setSearch(e.target.value)}
-                                    className="w-full rounded-full border border-slate-200 bg-white py-2 pl-9 pr-4 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
+                        {/* Search + filters + bulk assignments */}
+                        <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div className="relative w-full md:w-80">
+                                    <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                                    <input type="text" placeholder="Search roll no. or name..." value={search} onChange={e => setSearch(e.target.value)}
+                                        className="w-full rounded-full border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all" />
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Batch:</span>
+                                    {["All", ...BATCHES, "Unassigned"].map(f => (
+                                        <button key={f} onClick={() => setBatchFilter(f)}
+                                            className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${batchFilter === f ? "bg-indigo-600 text-white shadow-sm" : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                                            {f}{f !== "All" && <span className="ml-1 opacity-70">({counts[f] ?? 0})</span>}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs text-slate-500 font-medium">Filter:</span>
-                                {["All", ...BATCHES, "Unassigned"].map(f => (
-                                    <button key={f} onClick={() => setBatchFilter(f)}
-                                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${batchFilter === f ? "bg-indigo-600 text-white shadow-sm" : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"}`}>
-                                        {f}{f !== "All" && <span className="ml-1 opacity-70">({counts[f] ?? 0})</span>}
+
+                            {/* Department Filters */}
+                            <div className="flex items-center gap-2 flex-wrap border-t border-slate-100 pt-3">
+                                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Dept:</span>
+                                <button
+                                    onClick={() => setDeptFilter("All")}
+                                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${deptFilter === "All" ? "bg-indigo-600 text-white shadow-sm" : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                                >
+                                    All ({students.length})
+                                </button>
+                                {uniqueDepts.map(dept => (
+                                    <button
+                                        key={dept}
+                                        onClick={() => setDeptFilter(dept)}
+                                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${deptFilter === dept ? "bg-indigo-600 text-white shadow-sm" : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                                    >
+                                        {dept} ({deptCounts[dept] ?? 0})
                                     </button>
                                 ))}
                             </div>
+
+                            {/* Bulk Assignment Bar */}
+                            {filtered.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 rounded-xl bg-indigo-50/50 border border-indigo-100 px-4 py-2 text-xs border-dashed">
+                                    <span className="font-bold text-slate-700">Bulk Assign ({filtered.length} visible):</span>
+                                    {BATCHES.map(bn => {
+                                        const bc = BC[bn];
+                                        return (
+                                            <button
+                                                key={bn}
+                                                onClick={() => {
+                                                    setSaved(false);
+                                                    setBatches(prev => {
+                                                        const updated = { ...prev };
+                                                        filtered.forEach(s => {
+                                                            updated[s.id] = bn;
+                                                        });
+                                                        return updated;
+                                                    });
+                                                }}
+                                                className={`rounded-lg px-2.5 py-1 text-[10px] font-bold ${bc.badge} hover:opacity-90 transition-all active:scale-95 shadow-sm`}
+                                            >
+                                                Assign All to {bn}
+                                            </button>
+                                        );
+                                    })}
+                                    <button
+                                        onClick={() => {
+                                            setSaved(false);
+                                            setBatches(prev => {
+                                                const updated = { ...prev };
+                                                filtered.forEach(s => {
+                                                    delete updated[s.id];
+                                                });
+                                                return updated;
+                                            });
+                                        }}
+                                        className="rounded-lg px-2.5 py-1 text-[10px] font-bold bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 transition-all active:scale-95 shadow-sm"
+                                    >
+                                        Clear Visible
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Student Cards */}

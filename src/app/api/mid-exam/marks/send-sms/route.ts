@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendMarksSMS } from "@/lib/sms";
 import { isBSHHod } from "@/lib/permissions";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -78,23 +79,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Fetch students in the section
-    const allStudents = await prisma.student.findMany({
-      where: {
-        departmentId,
-        year,
-        semester,
-        sectionId,
-        isAlumni: false,
-        isLeftCollege: false,
-        isDetained: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        rollNumber: true,
-        mobile: true,
-        studentContactNumber: true,
-      }
+    const allStudents = await getStudentsForClass({
+      academicYearId,
+      departmentId,
+      year,
+      semester,
+      sectionId
     });
 
     if (allStudents.length === 0) {

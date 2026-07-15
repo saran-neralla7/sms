@@ -31,12 +31,33 @@ export async function GET(request: Request) {
             if (currentYear) academicYearId = currentYear.id;
         }
 
+        // Find all sections mapped to this subject in the current academic year
+        let sectionIds: string[] = [];
+        if (subjectId) {
+            const mappings = await prisma.facultySubjectMapping.findMany({
+                where: {
+                    academicYearId: academicYearId || undefined,
+                    subjectId
+                },
+                select: { sectionId: true }
+            });
+            sectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
+            if (sectionId && !sectionIds.includes(sectionId)) {
+                sectionIds.push(sectionId);
+            }
+        } else if (sectionId) {
+            sectionIds = [sectionId];
+        }
+
         // Base where clause
         let whereClause: any = {
             academicYearId: academicYearId || undefined,
             subjectId: subjectId || undefined,
-            sectionId: sectionId || undefined,
         };
+
+        if (sectionIds.length > 0) {
+            whereClause.sectionId = { in: sectionIds };
+        }
 
         if (!includeAll) {
             whereClause.topicsTaught = { not: null };
@@ -44,8 +65,36 @@ export async function GET(request: Request) {
 
         // Role-based restrictions
         if (userRole === "FACULTY" || userRole === "SMS_USER") {
-            // Faculty only sees their own logged diaries
-            whereClause.downloadedBy = userId;
+            // Faculty only sees their own logged diaries or diaries for mapped subjects and sections
+            const userObj = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { facultyId: true }
+            });
+            if (userObj?.facultyId) {
+                const facultyMappings = await prisma.facultySubjectMapping.findMany({
+                    where: {
+                        academicYearId: academicYearId || undefined,
+                        facultyId: userObj.facultyId
+                    },
+                    select: { subjectId: true, sectionId: true }
+                });
+
+                if (facultyMappings.length > 0) {
+                    whereClause.OR = [
+                        { downloadedBy: userId },
+                        {
+                            AND: [
+                                { subjectId: { in: facultyMappings.map(m => m.subjectId) } },
+                                { sectionId: { in: facultyMappings.map(m => m.sectionId) } }
+                            ]
+                        }
+                    ];
+                } else {
+                    whereClause.downloadedBy = userId;
+                }
+            } else {
+                whereClause.downloadedBy = userId;
+            }
         } else if (userRole === "HOD") {
             // HOD sees their own department diaries only
             const userProfile = await prisma.user.findUnique({
@@ -142,7 +191,40 @@ export async function GET(request: Request) {
             orderBy: { date: "desc" }
         });
 
-        return NextResponse.json(diaries);
+        // Group/De-duplicate diaries that belong to the same date, period, subject, downloadedBy, and topicsTaught
+        const seen = new Set<string>();
+        const uniqueDiaries: typeof diaries = [];
+        for (const d of diaries) {
+            const dateKey = d.date instanceof Date ? d.date.toISOString().split("T")[0] : String(d.date).split("T")[0];
+            const key = `${dateKey}_${d.periodId || "no-period"}_${d.subjectId || "no-subject"}_${d.downloadedBy || "no-user"}_${(d.topicsTaught || "").trim()}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueDiaries.push(d);
+            } else {
+                const existingIdx = uniqueDiaries.findIndex(u => {
+                    const uDateKey = u.date instanceof Date ? u.date.toISOString().split("T")[0] : String(u.date).split("T")[0];
+                    return uDateKey === dateKey && 
+                           u.periodId === d.periodId && 
+                           u.subjectId === d.subjectId && 
+                           u.downloadedBy === d.downloadedBy && 
+                           (u.topicsTaught || "").trim() === (d.topicsTaught || "").trim();
+                });
+                if (existingIdx !== -1 && d.section?.name && uniqueDiaries[existingIdx].section?.name) {
+                    const currentSectionName = uniqueDiaries[existingIdx].section.name;
+                    if (!currentSectionName.includes(d.section.name)) {
+                        uniqueDiaries[existingIdx] = {
+                            ...uniqueDiaries[existingIdx],
+                            section: {
+                                ...uniqueDiaries[existingIdx].section,
+                                name: `${currentSectionName}, ${d.section.name}`
+                            }
+                        };
+                    }
+                }
+            }
+        }
+
+        return NextResponse.json(uniqueDiaries);
 
     } catch (error) {
         console.error("Failed to fetch teaching diary:", error);
@@ -192,9 +274,10 @@ export async function POST(request: Request) {
             }
         });
 
+        let record;
         if (existing) {
             // Update existing record
-            const updated = await prisma.attendanceHistory.update({
+            record = await prisma.attendanceHistory.update({
                 where: { id: existing.id },
                 data: {
                     topicsTaught,
@@ -202,28 +285,103 @@ export async function POST(request: Request) {
                     downloadedBy: session.user.id
                 }
             });
-            return NextResponse.json(updated);
+        } else {
+            // Create new record
+            record = await prisma.attendanceHistory.create({
+                data: {
+                    date: new Date(date),
+                    year: subject.year,
+                    semester: subject.semester,
+                    sectionId,
+                    departmentId: subject.departmentId,
+                    academicYearId: academicYearId || null,
+                    subjectId,
+                    periodId,
+                    status: "Completed",
+                    type: "ACADEMIC",
+                    fileName: "Manual Entry",
+                    downloadedBy: session.user.id,
+                    details: "[]",
+                    topicsTaught
+                }
+            });
         }
 
-        // Create new record
-        const record = await prisma.attendanceHistory.create({
-            data: {
-                date: new Date(date),
-                year: subject.year,
-                semester: subject.semester,
-                sectionId,
-                departmentId: subject.departmentId,
-                academicYearId: academicYearId || null,
+        // Resolve the actual Faculty ID for this mapping
+        let resolvedFacultyId: string | null = null;
+        const mappingForThis = await prisma.facultySubjectMapping.findFirst({
+            where: {
+                academicYearId: academicYearId || undefined,
                 subjectId,
-                periodId,
-                status: "Completed",
-                type: "ACADEMIC",
-                fileName: "Manual Entry",
-                downloadedBy: session.user.id,
-                details: "[]",
-                topicsTaught
+                sectionId
             }
         });
+        if (mappingForThis) {
+            resolvedFacultyId = mappingForThis.facultyId;
+        } else if (session.user.role === "FACULTY" || session.user.role === "SMS_USER") {
+            const userObj = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: { facultyId: true }
+            });
+            resolvedFacultyId = userObj?.facultyId || null;
+        }
+
+        // Find all other sections mapped to this subject for this faculty
+        const otherSectionIds = resolvedFacultyId
+            ? Array.from(new Set(
+                (await prisma.facultySubjectMapping.findMany({
+                    where: {
+                        academicYearId: academicYearId || undefined,
+                        subjectId,
+                        facultyId: resolvedFacultyId
+                    },
+                    select: { sectionId: true }
+                })).map(m => m.sectionId)
+              )).filter(sid => sid !== sectionId)
+            : [];
+
+        // Sync/replicate the entry to other sections for the same date and period
+        for (const sid of otherSectionIds) {
+            const existingOther = await prisma.attendanceHistory.findFirst({
+                where: {
+                    date: new Date(date),
+                    sectionId: sid,
+                    periodId,
+                    year: subject.year,
+                    departmentId: subject.departmentId
+                }
+            });
+
+            if (existingOther) {
+                await prisma.attendanceHistory.update({
+                    where: { id: existingOther.id },
+                    data: {
+                        topicsTaught,
+                        subjectId,
+                        downloadedBy: session.user.id
+                    }
+                });
+            } else {
+                await prisma.attendanceHistory.create({
+                    data: {
+                        date: new Date(date),
+                        year: subject.year,
+                        semester: subject.semester,
+                        sectionId: sid,
+                        departmentId: subject.departmentId,
+                        academicYearId: academicYearId || null,
+                        subjectId,
+                        periodId,
+                        status: "Completed",
+                        type: "ACADEMIC",
+                        fileName: "Manual Entry (Sync)",
+                        downloadedBy: session.user.id,
+                        details: "[]",
+                        topicsTaught
+                    }
+                });
+            }
+        }
 
         return NextResponse.json(record);
     } catch (error: any) {
@@ -252,10 +410,65 @@ export async function PUT(request: Request) {
         if (sectionId) data.sectionId = sectionId;
         if (subjectId) data.subjectId = subjectId;
 
+        const targetRecord = await prisma.attendanceHistory.findUnique({
+            where: { id }
+        });
+        if (!targetRecord) {
+            return NextResponse.json({ error: "Record not found" }, { status: 404 });
+        }
+
         const updated = await prisma.attendanceHistory.update({
             where: { id },
             data
         });
+
+        // Resolve the actual Faculty ID for this mapping
+        let resolvedFacultyId: string | null = null;
+        const mappingForThis = await prisma.facultySubjectMapping.findFirst({
+            where: {
+                academicYearId: targetRecord.academicYearId || undefined,
+                subjectId: targetRecord.subjectId || undefined,
+                sectionId: targetRecord.sectionId
+            }
+        });
+        if (mappingForThis) {
+            resolvedFacultyId = mappingForThis.facultyId;
+        } else if (session.user.role === "FACULTY" || session.user.role === "SMS_USER") {
+            const userObj = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: { facultyId: true }
+            });
+            resolvedFacultyId = userObj?.facultyId || null;
+        }
+
+        // Find other sections mapped to this subject for this faculty
+        const otherSectionIds = resolvedFacultyId
+            ? Array.from(new Set(
+                (await prisma.facultySubjectMapping.findMany({
+                    where: {
+                        academicYearId: targetRecord.academicYearId || undefined,
+                        subjectId: targetRecord.subjectId || undefined,
+                        facultyId: resolvedFacultyId
+                    },
+                    select: { sectionId: true }
+                })).map(m => m.sectionId)
+              )).filter(sid => sid !== targetRecord.sectionId)
+            : [];
+
+        // Synchronize update to other sections' entries for the exact same date and period
+        if (otherSectionIds.length > 0 && targetRecord.date && targetRecord.periodId) {
+            await prisma.attendanceHistory.updateMany({
+                where: {
+                    subjectId: targetRecord.subjectId || undefined,
+                    date: targetRecord.date,
+                    periodId: targetRecord.periodId,
+                    sectionId: { in: otherSectionIds }
+                },
+                data: {
+                    topicsTaught
+                }
+            });
+        }
 
         return NextResponse.json(updated);
     } catch (error: any) {
@@ -286,17 +499,96 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Record not found" }, { status: 404 });
         }
 
+        // Resolve the actual Faculty ID for this mapping
+        let resolvedFacultyId: string | null = null;
+        const mappingForThis = await prisma.facultySubjectMapping.findFirst({
+            where: {
+                academicYearId: record.academicYearId || undefined,
+                subjectId: record.subjectId || undefined,
+                sectionId: record.sectionId
+            }
+        });
+        if (mappingForThis) {
+            resolvedFacultyId = mappingForThis.facultyId;
+        } else if (session.user.role === "FACULTY" || session.user.role === "SMS_USER") {
+            const userObj = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: { facultyId: true }
+            });
+            resolvedFacultyId = userObj?.facultyId || null;
+        }
+
+        // Find other sections mapped to this subject for this faculty
+        const otherSectionIds = resolvedFacultyId
+            ? Array.from(new Set(
+                (await prisma.facultySubjectMapping.findMany({
+                    where: {
+                        academicYearId: record.academicYearId || undefined,
+                        subjectId: record.subjectId || undefined,
+                        facultyId: resolvedFacultyId
+                    },
+                    select: { sectionId: true }
+                })).map(m => m.sectionId)
+              )).filter(sid => sid !== record.sectionId)
+            : [];
+
         if (record.details === "[]" || !record.details || record.details === "null") {
             // Delete the record completely
             await prisma.attendanceHistory.delete({
                 where: { id }
             });
+
+            // Delete other records that have no details as well
+            if (otherSectionIds.length > 0 && record.date && record.periodId) {
+                await prisma.attendanceHistory.deleteMany({
+                    where: {
+                        subjectId: record.subjectId || undefined,
+                        date: record.date,
+                        periodId: record.periodId,
+                        sectionId: { in: otherSectionIds },
+                        OR: [
+                            { details: "" },
+                            { details: "[]" },
+                            { details: "null" }
+                        ]
+                    }
+                });
+
+                // Clear topicsTaught for any that DO have details
+                await prisma.attendanceHistory.updateMany({
+                    where: {
+                        subjectId: record.subjectId || undefined,
+                        date: record.date,
+                        periodId: record.periodId,
+                        sectionId: { in: otherSectionIds },
+                        NOT: [
+                            { details: "" },
+                            { details: "[]" },
+                            { details: "null" }
+                        ]
+                    },
+                    data: { topicsTaught: null }
+                });
+            }
         } else {
             // Keep attendance record, but delete topicsTaught text
             await prisma.attendanceHistory.update({
                 where: { id },
                 data: { topicsTaught: null }
             });
+
+            // Clear topicsTaught for other sections
+            if (otherSectionIds.length > 0 && record.date && record.periodId) {
+                await prisma.attendanceHistory.updateMany({
+                    where: {
+                        subjectId: record.subjectId || undefined,
+                        date: record.date,
+                        periodId: record.periodId,
+                        sectionId: { in: otherSectionIds }
+                    },
+                    data: { topicsTaught: null }
+                });
+            }
         }
 
         return NextResponse.json({ success: true });

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -82,9 +83,12 @@ export async function POST(request: Request) {
         }
 
         // Fetch students to map roll numbers to student IDs
-        const students = await prisma.student.findMany({
-            where: { departmentId, year, semester, sectionId, isAlumni: false, isLeftCollege: false, isDetained: false },
-            select: { id: true, rollNumber: true }
+        const students = await getStudentsForClass({
+            academicYearId,
+            departmentId,
+            year,
+            semester,
+            sectionId
         });
 
         const studentMap = new Map(students.map(s => [s.rollNumber.toUpperCase(), s.id]));

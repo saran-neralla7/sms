@@ -72,6 +72,7 @@ export default function CourseFilePrintPage() {
   const sectionId = searchParams?.get("sectionId");
   const subjectId = searchParams?.get("subjectId");
   const thresholdParam = searchParams?.get("threshold");
+  const batch = searchParams?.get("batch");
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
@@ -87,7 +88,7 @@ export default function CourseFilePrintPage() {
 
     setLoading(true);
     fetch(
-      `/api/course-files?academicYearId=${academicYearId}&departmentId=${departmentId}&year=${year}&semester=${semester}&sectionId=${sectionId}&subjectId=${subjectId}`
+      `/api/course-files?academicYearId=${academicYearId}&departmentId=${departmentId}&year=${year}&semester=${semester}&sectionId=${sectionId}&subjectId=${subjectId}&batch=${batch || ""}`
     )
       .then((res) => res.json())
       .then((resData) => {
@@ -985,8 +986,21 @@ export default function CourseFilePrintPage() {
             <div>{courseFile?.academicYear?.name || "2025-2026"}</div>
             <div className="text-slate-500">Year & Semester:</div>
             <div>Year {year}, Semester {semester}</div>
-            <div className="text-slate-500">Section:</div>
-            <div>Section {courseFile?.section?.name || "A"}</div>
+            {batch ? (
+              <>
+                <div className="text-slate-500">Batch:</div>
+                <div>{batch}</div>
+              </>
+            ) : (
+              <>
+                <div className="text-slate-500">Section:</div>
+                <div>
+                  {data?.mappedSections && data.mappedSections.length > 1
+                    ? `Sections ${data.mappedSections.map((s: any) => s.name).join(", ")}`
+                    : `Section ${courseFile?.section?.name || "A"}`}
+                </div>
+              </>
+            )}
             <div className="text-slate-500">Subject Name:</div>
             <div>{subject?.name}</div>
             <div className="text-slate-500">Subject Code:</div>

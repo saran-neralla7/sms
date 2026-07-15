@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,9 +16,10 @@ import { formatISTDate } from "@/lib/dateUtils";
 interface Mapping {
   id: string;
   facultyId: string;
-  subject: { id: string; name: string; code: string; type: string; year: string; semester: string; departmentId: string };
+  subject: { id: string; name: string; code: string; type: string; year: string; semester: string; departmentId: string; isElective?: boolean };
   section: { id: string; name: string };
   academicYear: { id: string; name: string };
+  batch?: string | null;
 }
 
 interface RubricItem {
@@ -366,6 +367,36 @@ export default function FacultyCourseFilesPage() {
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [selectedMapping, setSelectedMapping] = useState<Mapping | null>(null);
 
+  // Group mappings by subject.id and batch
+  const displayMappings = useMemo(() => {
+    const groups: Record<string, { key: string; subject: any; academicYear: any; batch: string | null; sections: { id: string; name: string }[]; mappingIds: string[]; facultyId: string }> = {};
+
+    for (const m of mappings) {
+      const key = `${m.subject.id}_${m.batch || "no-batch"}`;
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          subject: m.subject,
+          academicYear: m.academicYear,
+          batch: m.batch || null,
+          sections: [],
+          mappingIds: [],
+          facultyId: m.facultyId
+        };
+      }
+      if (!groups[key].sections.some(s => s.id === m.section.id)) {
+        groups[key].sections.push(m.section);
+      }
+      groups[key].mappingIds.push(m.id);
+    }
+
+    const list = Object.values(groups);
+    for (const item of list) {
+      item.sections.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list;
+  }, [mappings]);
+
   // Course file specific state
   const [cfData, setCfData] = useState<any>(null);
   const [fetchingCf, setFetchingCf] = useState(false);
@@ -506,7 +537,7 @@ export default function FacultyCourseFilesPage() {
     
     try {
       const res = await fetch(
-        `/api/course-files?academicYearId=${sourceMapping.academicYear.id}&departmentId=${sourceMapping.subject.departmentId}&year=${sourceMapping.subject.year}&semester=${sourceMapping.subject.semester}&sectionId=${sourceMapping.section.id}&subjectId=${sourceMapping.subject.id}`
+        `/api/course-files?academicYearId=${sourceMapping.academicYear.id}&departmentId=${sourceMapping.subject.departmentId}&year=${sourceMapping.subject.year}&semester=${sourceMapping.subject.semester}&sectionId=${sourceMapping.section.id}&subjectId=${sourceMapping.subject.id}&batch=${sourceMapping.batch || ""}`
       );
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -559,7 +590,7 @@ export default function FacultyCourseFilesPage() {
     setFetchingCf(true);
     try {
       const res = await fetch(
-        `/api/course-files?academicYearId=${mapping.academicYear.id}&departmentId=${mapping.subject.departmentId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&subjectId=${mapping.subject.id}`
+        `/api/course-files?academicYearId=${mapping.academicYear.id}&departmentId=${mapping.subject.departmentId}&year=${mapping.subject.year}&semester=${mapping.subject.semester}&sectionId=${mapping.section.id}&subjectId=${mapping.subject.id}&batch=${mapping.batch || ""}`
       );
       const data = await res.json();
       if (data.error) {
@@ -900,7 +931,7 @@ export default function FacultyCourseFilesPage() {
     if (pending.length > 0) {
       setShowPendingModal(true);
     } else {
-      const printUrl = `/faculty/course-files/print?academicYearId=${selectedMapping.academicYear.id}&departmentId=${selectedMapping.subject.departmentId}&year=${selectedMapping.subject.year}&semester=${selectedMapping.subject.semester}&sectionId=${selectedMapping.section.id}&subjectId=${selectedMapping.subject.id}&threshold=${activeThreshold}`;
+      const printUrl = `/faculty/course-files/print?academicYearId=${selectedMapping.academicYear.id}&departmentId=${selectedMapping.subject.departmentId}&year=${selectedMapping.subject.year}&semester=${selectedMapping.subject.semester}&sectionId=${selectedMapping.section.id}&subjectId=${selectedMapping.subject.id}&threshold=${activeThreshold}&batch=${selectedMapping.batch || ""}`;
       window.open(printUrl, "_blank");
     }
   };
@@ -908,7 +939,7 @@ export default function FacultyCourseFilesPage() {
   const handleForcePrint = () => {
     if (!selectedMapping) return;
     setShowPendingModal(false);
-    const printUrl = `/faculty/course-files/print?academicYearId=${selectedMapping.academicYear.id}&departmentId=${selectedMapping.subject.departmentId}&year=${selectedMapping.subject.year}&semester=${selectedMapping.subject.semester}&sectionId=${selectedMapping.section.id}&subjectId=${selectedMapping.subject.id}&threshold=${activeThreshold}`;
+    const printUrl = `/faculty/course-files/print?academicYearId=${selectedMapping.academicYear.id}&departmentId=${selectedMapping.subject.departmentId}&year=${selectedMapping.subject.year}&semester=${selectedMapping.subject.semester}&sectionId=${selectedMapping.section.id}&subjectId=${selectedMapping.subject.id}&threshold=${activeThreshold}&batch=${selectedMapping.batch || ""}`;
     window.open(printUrl, "_blank");
   };
 
@@ -1029,41 +1060,57 @@ export default function FacultyCourseFilesPage() {
         {/* Subject selector Grid */}
         {!selectedMapping ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {mappings.length === 0 ? (
+            {displayMappings.length === 0 ? (
               <div className="col-span-full rounded-xl bg-white border border-slate-200 p-8 text-center text-slate-500 font-medium">
                 No subjects assigned to you for the selected Academic Year.
               </div>
             ) : (
-              mappings.map((m) => (
-                <div
-                  key={m.id}
-                  onClick={() => selectSubjectMapping(m)}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden hover:border-teal-400"
-                >
-                  <div className="absolute top-0 right-0 h-16 w-16 bg-teal-50/50 rounded-bl-full flex items-center justify-center group-hover:bg-teal-50 transition-colors">
-                    <FaBook className="h-5 w-5 text-teal-600" />
+              displayMappings.map((dm) => {
+                const primaryMapping = mappings.find(m => m.id === dm.mappingIds[0]) || mappings[0];
+                const sectionNames = dm.sections.map(s => s.name).join(", ");
+                return (
+                  <div
+                    key={dm.key}
+                    onClick={() => selectSubjectMapping(primaryMapping)}
+                    className="group relative flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden hover:border-teal-400"
+                  >
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-teal-50/50 rounded-bl-full flex items-center justify-center group-hover:bg-teal-50 transition-colors">
+                      <FaBook className="h-5 w-5 text-teal-600" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap gap-1.5 mb-4">
+                        <span className="inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                          {dm.subject.code}
+                        </span>
+                        {dm.batch && (
+                          <span className="inline-block rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                            Batch: {dm.batch}
+                          </span>
+                        )}
+                        {dm.sections.length > 1 && (
+                          <span className="inline-block rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            Shared Workspace
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-bold text-slate-800 text-lg group-hover:text-teal-700 transition-colors pr-8">
+                        {dm.subject.name}
+                      </h3>
+                      <p className="text-sm text-slate-500 mt-2 font-medium">
+                        Sections: {sectionNames} • Year {dm.subject.year}, Sem {dm.subject.semester}
+                      </p>
+                    </div>
+                    <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+                      <span className="text-xs font-medium text-slate-400">
+                        Click to manage Course File
+                      </span>
+                      <span className="flex items-center gap-1 text-xs font-semibold text-teal-600">
+                        Open Workspace →
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 mb-4">
-                      {m.subject.code}
-                    </span>
-                    <h3 className="font-bold text-slate-800 text-lg group-hover:text-teal-700 transition-colors pr-8">
-                      {m.subject.name}
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-2 font-medium">
-                      Section {m.section.name} • Year {m.subject.year}, Sem {m.subject.semester}
-                    </p>
-                  </div>
-                  <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-                    <span className="text-xs font-medium text-slate-400">
-                      Click to manage Course File
-                    </span>
-                    <span className="flex items-center gap-1 text-xs font-semibold text-teal-600">
-                      Open Workspace →
-                    </span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         ) : (
@@ -1077,8 +1124,25 @@ export default function FacultyCourseFilesPage() {
                   <div>
                     <h2 className="font-bold text-slate-800 text-lg">{selectedMapping.subject.name}</h2>
                     <p className="text-sm text-slate-500 mt-1">
-                      Section {selectedMapping.section.name} ({selectedMapping.subject.code})
+                      {selectedMapping.batch ? `Batch ${selectedMapping.batch}` : `Section ${selectedMapping.section.name}`} ({selectedMapping.subject.code})
                     </p>
+                    {selectedMapping.batch && (
+                      <div className="mt-1.5">
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200">
+                          Batch: {selectedMapping.batch}
+                        </span>
+                      </div>
+                    )}
+                    {cfData?.mappedSections && cfData.mappedSections.length > 1 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+                        <span className="inline-flex items-center gap-1 rounded bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-700 border border-teal-200">
+                          Shared Workspace
+                        </span>
+                        <span className="text-xs text-slate-500 font-medium">
+                          for Sections: {cfData.mappedSections.map((s: any) => s.name).join(", ")}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <span className="text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg px-2.5 py-1">
                     Faculty Workspace

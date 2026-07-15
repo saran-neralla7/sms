@@ -32,9 +32,10 @@ import {
 
 interface Mapping {
   id: string;
-  subject: { id: string; name: string; code: string; type: string; year: string; semester: string; departmentId: string };
+  subject: { id: string; name: string; code: string; type: string; year: string; semester: string; departmentId: string; isElective?: boolean; electiveSlotRelation?: { name: string } };
   section: { id: string; name: string };
   academicYear: { id: string; name: string };
+  batch?: string | null;
 }
 
 interface Paper {
@@ -2781,7 +2782,7 @@ export default function FacultyMidExamPage() {
                             <button
                               onClick={() => {
                                 const m = mapping;
-                                const url = `/faculty/mid-exam/attainments?academicYearId=${selectedAY}&departmentId=${m.subject.departmentId}&year=${m.subject.year}&semester=${m.subject.semester}&sectionId=${m.section.id}&subjectId=${m.subject.id}`;
+                                const url = `/faculty/mid-exam/attainments?academicYearId=${selectedAY}&departmentId=${m.subject.departmentId}&year=${m.subject.year}&semester=${m.subject.semester}&sectionId=${m.section.id}&subjectId=${m.subject.id}&batch=${m.batch || ""}`;
                                 router.push(url);
                               }}
                               className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-700 transition-colors"
@@ -2909,7 +2910,7 @@ export default function FacultyMidExamPage() {
                           <button
                             onClick={() => {
                               const m = mapping;
-                              const url = `/faculty/mid-exam/attainments?academicYearId=${selectedAY}&departmentId=${m.subject.departmentId}&year=${m.subject.year}&semester=${m.subject.semester}&sectionId=${m.section.id}&subjectId=${m.subject.id}`;
+                              const url = `/faculty/mid-exam/attainments?academicYearId=${selectedAY}&departmentId=${m.subject.departmentId}&year=${m.subject.year}&semester=${m.subject.semester}&sectionId=${m.section.id}&subjectId=${m.subject.id}&batch=${m.batch || ""}`;
                               router.push(url);
                             }}
                             className="flex items-center gap-2 text-sm text-teal-600 font-semibold hover:text-teal-800 transition-colors"

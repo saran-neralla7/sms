@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks, scaleMidMarks } from "@/lib/mid-exam-calc";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 /**
  * GET — generate Internal Marks Memo data for PDF rendering on client
@@ -54,24 +55,15 @@ export async function GET(req: NextRequest) {
 
     if (isOE) {
       const [studentsData, ayData] = await Promise.all([
-        prisma.student.findMany({
-          where: {
-            year: year || undefined,
-            semester: semester || undefined,
-            subjects: { some: { id: subjectId as string } },
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-          },
-          select: { 
-            id: true, 
-            rollNumber: true, 
-            name: true, 
-            sectionId: true,
+        getStudentsForClass({
+          academicYearId: academicYearId as string,
+          year: year || "",
+          semester: semester || "",
+          subjectId: subjectId as string,
+          include: {
             department: { select: { id: true, code: true, name: true } },
             section: { select: { id: true, name: true } }
-          },
-          orderBy: { rollNumber: "asc" }
+          }
         }),
         prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } })
       ]);
@@ -86,29 +78,20 @@ export async function GET(req: NextRequest) {
       }
 
       const [studentsData, ayData, deptData, secData, subjectsData] = await Promise.all([
-        prisma.student.findMany({
-          where: { 
-            departmentId, 
-            year, 
-            semester, 
-            sectionId: isAllSections ? undefined : sectionId, 
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-          },
-          select: { 
-            id: true, 
-            rollNumber: true, 
-            name: true, 
-            sectionId: true,
+        getStudentsForClass({
+          academicYearId: academicYearId as string,
+          departmentId: departmentId || undefined,
+          year: year || "",
+          semester: semester || "",
+          sectionId: isAllSections ? undefined : (sectionId || undefined),
+          include: {
             department: { select: { id: true, code: true, name: true } },
             section: { select: { id: true, name: true } }
-          },
-          orderBy: { rollNumber: "asc" }
+          }
         }),
         prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } }),
-        prisma.department.findUnique({ where: { id: departmentId }, select: { name: true, code: true } }),
-        isAllSections ? { name: "All Sections" } : prisma.section.findUnique({ where: { id: sectionId }, select: { name: true } }),
+        prisma.department.findUnique({ where: { id: departmentId as string }, select: { name: true, code: true } }),
+        isAllSections ? { name: "All Sections" } : prisma.section.findUnique({ where: { id: sectionId as string }, select: { name: true } }),
         prisma.subject.findMany({
           where: { departmentId, year, semester },
           select: { id: true, name: true, code: true, shortName: true, type: true },

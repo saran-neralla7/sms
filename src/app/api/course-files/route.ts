@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getElectiveBatches } from "@/lib/elective-batches";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 function normalizeSemester(sem: string | null): string {
   if (!sem) return "";
@@ -44,7 +46,33 @@ export async function GET(req: NextRequest) {
     year = normalizeYear(year);
     semester = normalizeSemester(semester);
 
-    // 1. Fetch CourseFile metadata
+    // Find all sections mapped to this subject in the current academic year
+    const mappings = await prisma.facultySubjectMapping.findMany({
+      where: {
+        academicYearId,
+        subjectId
+      },
+      select: {
+        sectionId: true,
+        section: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    const sectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
+    if (sectionId && !sectionIds.includes(sectionId)) {
+      sectionIds.push(sectionId);
+    }
+
+    const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+    sortedSections.sort((a, b) => a.name.localeCompare(b.name));
+    const canonicalSectionId = sortedSections[0]?.id || sectionId;
+
+    // 1. Fetch CourseFile metadata using the canonicalSectionId
     const courseFile = await prisma.courseFile.findUnique({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
@@ -52,7 +80,7 @@ export async function GET(req: NextRequest) {
           departmentId,
           year,
           semester,
-          sectionId,
+          sectionId: canonicalSectionId,
           subjectId
         }
       }
@@ -129,26 +157,47 @@ export async function GET(req: NextRequest) {
       orderBy: [{ co: "asc" }, { pso: "asc" }]
     });
 
-    // 4. Fetch registered students (Item 6)
-    const students = await prisma.student.findMany({
-      where: {
-        sectionId,
-        departmentId,
-        year,
-        semester
-      },
-      orderBy: { rollNumber: "asc" }
+    // 4. Fetch registered students from all mapped sections (Item 6)
+    let students = await getStudentsForClass({
+      academicYearId,
+      departmentId,
+      year,
+      semester,
+      sectionId: sectionIds,
+      subjectId,
+      include: {
+        section: true
+      }
     });
+
+    // Sort sections appropriately if we have multiple
+    (students as any[]).sort((a: any, b: any) => {
+      const secA = a.section?.name || "";
+      const secB = b.section?.name || "";
+      const secComp = secA.localeCompare(secB);
+      if (secComp !== 0) return secComp;
+      return a.rollNumber.localeCompare(b.rollNumber);
+    });
+
+    const batch = searchParams.get("batch");
+    if (subject?.isElective && batch) {
+      const electiveBatches = getElectiveBatches();
+      students = students.filter((s: any) => {
+        const batchKey = `${s.id}_${subjectId}`;
+        return electiveBatches[batchKey] === batch;
+      });
+    }
     const studentIds = students.map(s => s.id);
 
-    // 5. Fetch Faculty Timetable for this subject and section (Item 7)
+    // 5. Fetch Faculty Timetable for this subject and all mapped sections (Item 7)
     const timetable = await prisma.timetable.findMany({
       where: {
-        sectionId,
+        sectionId: { in: sectionIds },
         subjectId
       },
       include: {
-        period: true
+        period: true,
+        section: true
       },
       orderBy: [
         { dayOfWeek: "asc" },
@@ -156,9 +205,9 @@ export async function GET(req: NextRequest) {
       ]
     });
 
-    // 6. Fetch Mid exam papers (Items 10, 15) and marks (Items 12, 17)
-    const mid1PaperRaw = await prisma.midExamPaper.findFirst({
-      where: { academicYearId, departmentId, year, semester, sectionId, subjectId, examType: "MID_I" },
+    // 6. Fetch Mid exam papers (Items 10, 15) and marks (Items 12, 17) for all sections
+    const mid1Papers = await prisma.midExamPaper.findMany({
+      where: { academicYearId, departmentId, year, semester, sectionId: { in: sectionIds }, subjectId, examType: "MID_I" },
       include: {
         questions: {
           include: {
@@ -178,8 +227,8 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const mid2PaperRaw = await prisma.midExamPaper.findFirst({
-      where: { academicYearId, departmentId, year, semester, sectionId, subjectId, examType: "MID_II" },
+    const mid2Papers = await prisma.midExamPaper.findMany({
+      where: { academicYearId, departmentId, year, semester, sectionId: { in: sectionIds }, subjectId, examType: "MID_II" },
       include: {
         questions: {
           include: {
@@ -198,6 +247,9 @@ export async function GET(req: NextRequest) {
         publishRecord: true
       }
     });
+
+    let mid1PaperRaw = mid1Papers.find(p => p.isCommon || p.masterPaperId) || mid1Papers[0] || null;
+    let mid2PaperRaw = mid2Papers.find(p => p.isCommon || p.masterPaperId) || mid2Papers[0] || null;
 
     if (mid1PaperRaw) {
       if (mid1PaperRaw.masterPaperId && mid1PaperRaw.masterPaper) {
@@ -225,13 +277,16 @@ export async function GET(req: NextRequest) {
     const mid1Paper = mid1PaperRaw ? { ...mid1PaperRaw, choiceGroups: choiceGroups1 } : null;
     const mid2Paper = mid2PaperRaw ? { ...mid2PaperRaw, choiceGroups: choiceGroups2 } : null;
 
+    const mid1PaperIds = mid1Papers.map(p => p.id);
+    const mid2PaperIds = mid2Papers.map(p => p.id);
+
     // Marks entry records for MID_I and MID_II
-    const mid1Marks = mid1Paper ? await prisma.midExamMarksEntry.findMany({
-      where: { paperId: mid1Paper.id }
+    const mid1Marks = mid1PaperIds.length > 0 ? await prisma.midExamMarksEntry.findMany({
+      where: { paperId: { in: mid1PaperIds } }
     }) : [];
 
-    const mid2Marks = mid2Paper ? await prisma.midExamMarksEntry.findMany({
-      where: { paperId: mid2Paper.id }
+    const mid2Marks = mid2PaperIds.length > 0 ? await prisma.midExamMarksEntry.findMany({
+      where: { paperId: { in: mid2PaperIds } }
     }) : [];
 
     // 7. Fetch final sessional marks (Item 20)
@@ -243,9 +298,9 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // 8. Fetch assignment marks (if any)
+    // 8. Fetch assignment marks
     const assignmentMarks = await prisma.assignmentMark.findMany({
-      where: { academicYearId, departmentId, year, semester, sectionId, subjectId }
+      where: { academicYearId, departmentId, year, semester, sectionId: { in: sectionIds }, subjectId }
     });
 
     // 9. Fetch SemesterResult for students in this subject (Item 22)
@@ -278,6 +333,7 @@ export async function GET(req: NextRequest) {
       academicYear,
       department,
       section,
+      mappedSections: sortedSections,
       subject,
       coPoMappings,
       coPsoMappings,
@@ -351,6 +407,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Find all sections mapped to this subject in the current academic year
+    const mappings = await prisma.facultySubjectMapping.findMany({
+      where: {
+        academicYearId,
+        subjectId
+      },
+      select: {
+        sectionId: true,
+        section: { select: { id: true, name: true } }
+      }
+    });
+
+    const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+    sortedSections.sort((a, b) => a.name.localeCompare(b.name));
+    const canonicalSectionId = sortedSections[0]?.id || sectionId;
+
     const courseFile = await prisma.courseFile.upsert({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
@@ -358,7 +430,7 @@ export async function POST(req: NextRequest) {
           departmentId,
           year,
           semester,
-          sectionId,
+          sectionId: canonicalSectionId,
           subjectId
         }
       },
@@ -381,7 +453,7 @@ export async function POST(req: NextRequest) {
         departmentId,
         year,
         semester,
-        sectionId,
+        sectionId: canonicalSectionId,
         subjectId,
         facultyId: resolvedFacultyId,
         teachingSupportText,
@@ -442,15 +514,31 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // Find all sections mapped to this subject in the current academic year
+    const mappings = await prisma.facultySubjectMapping.findMany({
+      where: {
+        academicYearId,
+        subjectId
+      },
+      select: {
+        sectionId: true,
+        section: { select: { id: true, name: true } }
+      }
+    });
+
+    const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+    sortedSections.sort((a, b) => a.name.localeCompare(b.name));
+    const canonicalSectionId = sortedSections[0]?.id || sectionId;
+
     const courseFile = await prisma.courseFile.upsert({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
-          academicYearId, departmentId, year, semester, sectionId, subjectId
+          academicYearId, departmentId, year, semester, sectionId: canonicalSectionId, subjectId
         }
       },
       update: updateData,
       create: {
-        academicYearId, departmentId, year, semester, sectionId, subjectId,
+        academicYearId, departmentId, year, semester, sectionId: canonicalSectionId, subjectId,
         facultyId: resolvedFacultyId,
         ...updateData
       }

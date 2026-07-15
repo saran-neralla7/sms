@@ -153,8 +153,64 @@ export async function GET(request: Request) {
 
         console.log(`FOUND ${total} STUDENTS`);
 
+        // Map batch names to students if isElective is true
+        let responseStudents: any[] = students;
+        let facultyMappedBatch: string | null = null;
+        let facultyHasBatchConstraint = false;
+
+        if (isElective && subjectId) {
+            const { getElectiveBatches } = require("@/lib/elective-batches");
+            const electiveBatches = getElectiveBatches();
+            responseStudents = students.map((s: any) => {
+                const batchKey = `${s.id}_${subjectId}`;
+                return {
+                    ...s,
+                    electiveBatch: electiveBatches[batchKey] || null
+                };
+            });
+
+            // Check if current user is a FACULTY and has a mapped batch
+            if (session.user.role === "FACULTY") {
+                const { cookies } = require("next/headers");
+                const cookieStore = await cookies();
+                let academicYearId = cookieStore.get("academic-year-id")?.value;
+                if (!academicYearId) {
+                    const currentYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+                    if (currentYear) academicYearId = currentYear.id;
+                }
+
+                let facultyId = (session.user as any).facultyId;
+                if (!facultyId) {
+                    const faculty = await prisma.faculty.findFirst({
+                        where: { user: { username: (session.user as any).username } }
+                    });
+                    if (faculty) facultyId = faculty.id;
+                }
+
+                if (facultyId && academicYearId) {
+                    const mapping = await prisma.facultySubjectMapping.findFirst({
+                        where: {
+                            facultyId,
+                            subjectId,
+                            academicYearId
+                        }
+                    });
+                    if (mapping) {
+                        facultyMappedBatch = mapping.batch || null;
+                        facultyHasBatchConstraint = !!mapping.batch;
+                    }
+                }
+            }
+
+            if (facultyHasBatchConstraint && facultyMappedBatch) {
+                responseStudents = responseStudents.filter(s => s.electiveBatch === facultyMappedBatch);
+            }
+        }
+
         return NextResponse.json({
-            data: students,
+            data: responseStudents,
+            facultyMappedBatch,
+            facultyHasBatchConstraint,
             meta: {
                 total,
                 page,
