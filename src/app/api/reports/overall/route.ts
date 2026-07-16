@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -60,32 +61,37 @@ export async function GET(request: Request) {
             } catch (e) { }
         });
 
+        // Resolve target academic year
+        const academicYearId = history[0]?.academicYearId || (await prisma.academicYear.findFirst({
+            where: {
+                startDate: { lte: start },
+                endDate: { gte: start }
+            }
+        }))?.id || (await prisma.academicYear.findFirst({ where: { isCurrent: true } }))?.id;
+
+        if (!academicYearId) {
+            return NextResponse.json({ error: "Academic Year not found" }, { status: 400 });
+        }
+
         let students;
         if (activeRollNumbers.size > 0) {
             students = await prisma.student.findMany({
                 where: {
                     rollNumber: { in: Array.from(activeRollNumbers) },
-                    isAlumni: false,
-                    isLeftCollege: false,
-                    isDetained: false
+                    isLeftCollege: false
                 },
                 orderBy: { rollNumber: 'asc' },
                 select: { id: true, rollNumber: true, name: true }
             });
         } else {
-            students = await prisma.student.findMany({
-                where: {
-                    year,
-                    semester,
-                    sectionId,
-                    departmentId: departmentId || undefined,
-                    isAlumni: false,
-                    isLeftCollege: false,
-                    isDetained: false
-                },
-                orderBy: { rollNumber: 'asc' },
-                select: { id: true, rollNumber: true, name: true }
+            const classStudents = await getStudentsForClass({
+                academicYearId,
+                departmentId: departmentId || undefined,
+                year,
+                semester,
+                sectionId: sectionId || undefined,
             });
+            students = classStudents.map(s => ({ id: s.id, rollNumber: s.rollNumber, name: s.name }));
         }
 
         // Data Structure: 

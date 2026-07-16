@@ -113,28 +113,54 @@ export async function getStudentsForClass({
       : sectionId
     : undefined;
 
-  // Condition B: Active match based on current year/semester (if target is current)
-  if (yearDiff === 0) {
+  // Resolve the target cohort batch start year
+  let targetBatchStartYear: number | null = null;
+  if (targetAY) {
+    const match = targetAY.name.match(/^(\d{4})/);
+    if (match) {
+      const Y_academic = parseInt(match[1]);
+      const Y_class = parseInt(year);
+      if (!isNaN(Y_academic) && !isNaN(Y_class)) {
+        targetBatchStartYear = Y_academic - Y_class + 1;
+      }
+    }
+  }
+
+  if (targetBatchStartYear !== null) {
     orConditions.push({
       ...(departmentId ? { departmentId } : {}),
-      year,
-      semester,
+      batch: {
+        startYear: targetBatchStartYear
+      },
       ...(sectionFilter ? { sectionId: sectionFilter } : {}),
       ...(isElective && subjectId ? { subjects: { some: { id: subjectId } } } : {}),
-      isAlumni: false,
       isLeftCollege: false,
-      isDetained: false,
+      // If it's the current academic year, exclude alumni and detained. If past, they might be alumni now, so include them.
+      ...(yearDiff === 0 ? { isAlumni: false, isDetained: false } : {})
     });
   } else {
-    // Condition C: Active match based on expected year after promotion (if target is past)
-    const expectedCurrentYear = parseInt(year) + yearDiff;
-    orConditions.push({
-      ...(departmentId ? { departmentId } : {}),
-      year: String(expectedCurrentYear),
-      ...(sectionFilter ? { sectionId: sectionFilter } : {}),
-      ...(isElective && subjectId ? { subjects: { some: { id: subjectId } } } : {}),
-      isLeftCollege: false,
-    });
+    // Fallback to original logic if we couldn't parse the batch start year
+    if (yearDiff === 0) {
+      orConditions.push({
+        ...(departmentId ? { departmentId } : {}),
+        year,
+        semester,
+        ...(sectionFilter ? { sectionId: sectionFilter } : {}),
+        ...(isElective && subjectId ? { subjects: { some: { id: subjectId } } } : {}),
+        isAlumni: false,
+        isLeftCollege: false,
+        isDetained: false,
+      });
+    } else {
+      const expectedCurrentYear = parseInt(year) + yearDiff;
+      orConditions.push({
+        ...(departmentId ? { departmentId } : {}),
+        year: String(expectedCurrentYear),
+        ...(sectionFilter ? { sectionId: sectionFilter } : {}),
+        ...(isElective && subjectId ? { subjects: { some: { id: subjectId } } } : {}),
+        isLeftCollege: false,
+      });
+    }
   }
 
   // Fetch the students

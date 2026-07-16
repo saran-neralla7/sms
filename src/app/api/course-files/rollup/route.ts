@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeAttainments } from "@/lib/attainments";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 // ──────────────────────────────────────────────────────────────
 // Helpers shared with main course-files route
@@ -74,10 +75,12 @@ export async function GET(req: NextRequest) {
     });
 
     // 2. Students in batch
-    const students = await prisma.student.findMany({
-      where: { sectionId, departmentId, year, semester },
-      orderBy: { rollNumber: "asc" },
-      select: { id: true, rollNumber: true, name: true },
+    const students = await getStudentsForClass({
+      academicYearId,
+      departmentId,
+      year,
+      semester,
+      sectionId,
     });
     const studentIds = students.map((s) => s.id);
 

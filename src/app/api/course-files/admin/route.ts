@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 function normalizeSemester(sem: string | null): string {
   if (!sem) return "";
@@ -92,15 +93,16 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Students count (filter to department, year, semester, section)
-    const studentsCount = await prisma.student.count({
-      where: {
-        sectionId,
-        departmentId,
-        year,
-        semester
-      }
+    // Fetch students using getStudentsForClass
+    const students = await getStudentsForClass({
+      academicYearId,
+      departmentId,
+      year,
+      semester,
+      sectionId
     });
+    const studentsCount = students.length;
+    const studentIds = students.map(s => s.id);
 
     // Timetable count per subject
     const timetables = await prisma.timetable.findMany({
@@ -110,12 +112,7 @@ export async function GET(req: NextRequest) {
     // Semester results count for this batch
     const semesterResults = await prisma.semesterResult.findMany({
       where: {
-        student: {
-          sectionId,
-          departmentId,
-          year,
-          semester
-        },
+        studentId: { in: studentIds },
         year,
         semester
       }

@@ -142,16 +142,79 @@ export async function POST(request: Request) {
 
                     // 6. Connect student to subject, disconnecting from any other subject in this same elective slot
                     const existingInSlot = student.subjects.filter(s => s.electiveSlotId === electiveSlot!.id);
+                    const isAlreadyMappedToThisSubject = existingInSlot.some(s => s.id === subject!.id);
 
-                    await prisma.student.update({
-                        where: { id: student.id },
-                        data: {
-                            subjects: {
-                                disconnect: existingInSlot.map(s => ({ id: s.id })),
-                                connect: { id: subject.id }
+                    if (!isAlreadyMappedToThisSubject) {
+                        await prisma.student.update({
+                            where: { id: student.id },
+                            data: {
+                                subjects: {
+                                    disconnect: existingInSlot.map(s => ({ id: s.id })),
+                                    connect: { id: subject!.id }
+                                }
+                            }
+                        });
+                    }
+
+                    // 7. Migrate attendance logs for old subjects in the same slot to the new subject
+                    for (const oldSub of existingInSlot) {
+                        if (oldSub.id === subject!.id) continue;
+
+                        const historyRecords = await prisma.attendanceHistory.findMany({
+                            where: {
+                                year: student.year,
+                                semester: student.semester,
+                                details: {
+                                    contains: student.rollNumber
+                                }
+                            }
+                        });
+
+                        for (const record of historyRecords) {
+                            try {
+                                const details = JSON.parse(record.details);
+                                let detailsChanged = false;
+                                
+                                const studentEntry = details.find((entry: any) => 
+                                    String(entry["Roll Number"] || entry["rollNumber"] || "").trim().toLowerCase() === student.rollNumber.toLowerCase()
+                                );
+
+                                if (studentEntry && (studentEntry["Subject ID"] === oldSub.id || studentEntry["subjectId"] === oldSub.id)) {
+                                    studentEntry["Subject ID"] = subject!.id;
+                                    if (studentEntry["subjectId"]) {
+                                        studentEntry["subjectId"] = subject!.id;
+                                    }
+                                    detailsChanged = true;
+                                }
+
+                                if (detailsChanged) {
+                                    const updatedDetailsJson = JSON.stringify(details);
+
+                                    let updatePayload: any = {
+                                        details: updatedDetailsJson
+                                    };
+
+                                    if (record.subjectId === oldSub.id) {
+                                        const otherStudentsWithOldSubject = details.filter((entry: any) => 
+                                            String(entry["Roll Number"] || entry["rollNumber"] || "").trim().toLowerCase() !== student.rollNumber.toLowerCase() &&
+                                            (entry["Subject ID"] === oldSub.id || entry["subjectId"] === oldSub.id)
+                                        );
+
+                                        if (otherStudentsWithOldSubject.length === 0) {
+                                            updatePayload.subjectId = subject!.id;
+                                        }
+                                    }
+
+                                    await prisma.attendanceHistory.update({
+                                        where: { id: record.id },
+                                        data: updatePayload
+                                    });
+                                }
+                            } catch (parseErr) {
+                                // Ignore parse/save errors for individual records to keep robustness
                             }
                         }
-                    });
+                    }
 
                     report.successCount++;
                 } catch (err: any) {

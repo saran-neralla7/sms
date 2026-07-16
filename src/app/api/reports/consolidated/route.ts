@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -72,7 +73,8 @@ export async function GET(request: Request) {
                 id: true,
                 details: true,
                 date: true,
-                status: true
+                status: true,
+                academicYearId: true
             }
         });
 
@@ -88,27 +90,27 @@ export async function GET(request: Request) {
             absent: number
         }> = {};
 
-        // STRICT FETCH: Only get students mathematically enrolled in this specific class
-        const studentWhere: any = {
-            year,
-            semester,
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-        };
+        // Resolve target academic year
+        const academicYearId = history[0]?.academicYearId || (await prisma.academicYear.findFirst({
+            where: {
+                startDate: { lte: start },
+                endDate: { gte: start }
+            }
+        }))?.id || (await prisma.academicYear.findFirst({ where: { isCurrent: true } }))?.id;
 
-        if (isElective && subjectId) {
-            studentWhere.subjects = { some: { id: subjectId } };
-        } else {
-            studentWhere.sectionId = sectionId;
-            studentWhere.departmentId = departmentId || undefined;
+        if (!academicYearId) {
+            return NextResponse.json({ error: "Academic Year not found" }, { status: 400 });
         }
 
-        const students = await prisma.student.findMany({
-            where: studentWhere,
-            select: { id: true, rollNumber: true, name: true },
-            orderBy: { rollNumber: "asc" }
+        const classStudents = await getStudentsForClass({
+            academicYearId,
+            departmentId: departmentId || undefined,
+            year,
+            semester,
+            sectionId: (isElective ? undefined : sectionId) || undefined,
+            subjectId: subjectId || undefined
         });
+        const students = classStudents.map(s => ({ id: s.id, rollNumber: s.rollNumber, name: s.name }));
 
         // Initialize everyone with 0
         students.forEach(s => {
