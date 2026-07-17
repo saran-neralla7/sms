@@ -102,6 +102,7 @@ export default function AttendancePage() {
     const [holidays, setHolidays] = useState<any[]>([]);
     const [activeSyllabus, setActiveSyllabus] = useState<any>(null);
     const [selectedDiaryUnit, setSelectedDiaryUnit] = useState<string>("Unit I");
+    const [selectedYearObj, setSelectedYearObj] = useState<any>(null);
 
     // Initialize Selections
     useEffect(() => {
@@ -143,6 +144,22 @@ export default function AttendancePage() {
             }
         } catch (err) {
             console.error("Failed to load holidays:", err);
+        }
+
+        // Fetch Academic Years to detect if previous academic year is active
+        try {
+            const yearsRes = await fetch("/api/academic-years");
+            if (yearsRes.ok) {
+                const years = await yearsRes.json();
+                const activeYearId = document.cookie
+                    .split("; ")
+                    .find((row) => row.startsWith("academic-year-id="))
+                    ?.split("=")[1];
+                const activeYear = years.find((y: any) => y.id === activeYearId) || years.find((y: any) => y.isCurrent) || years[0];
+                setSelectedYearObj(activeYear);
+            }
+        } catch (err) {
+            console.error("Failed to load academic years:", err);
         }
     };
 
@@ -389,6 +406,16 @@ export default function AttendancePage() {
     const initiateSubmission = () => {
         if (students.length === 0) return;
 
+        if (selectedYearObj && !selectedYearObj.isCurrent) {
+            const confirmed = window.confirm(
+                `🚨 Warning: You are posting attendance for a PREVIOUS academic year (${selectedYearObj.name}).\n\n` +
+                `This will record attendance under the older academic calendar. Are you sure you want to proceed?`
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+
         if (viewMode !== "elective") {
             // Check if students from all selected sections are present
             const loadedSectionIds = new Set(students.map(s => s.sectionId));
@@ -566,6 +593,16 @@ export default function AttendancePage() {
             return;
         }
 
+        if (selectedYearObj && !selectedYearObj.isCurrent) {
+            const confirmed = window.confirm(
+                `🚨 Warning: You are performing bulk upload to a PREVIOUS academic year (${selectedYearObj.name}).\n\n` +
+                `This will write attendance records under the older academic calendar. Are you sure you want to proceed?`
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+
         setBulkUploading(true);
         const formData = new FormData();
         formData.append("file", bulkFile);
@@ -646,6 +683,22 @@ export default function AttendancePage() {
     return (
         <div className="mx-auto max-w-7xl px-4 py-8">
             <h1 className="mb-6 text-2xl font-bold text-slate-800">Attendance Portal</h1>
+
+            {/* Historical Academic Year Warning Banner */}
+            {selectedYearObj && !selectedYearObj.isCurrent && (
+                <div className="bg-amber-100 border border-amber-300 text-amber-900 px-4 py-3.5 rounded-xl mb-6 flex items-start gap-3 shadow-md animate-pulse">
+                    <span className="text-2xl mt-0.5">⚠️</span>
+                    <div>
+                        <p className="font-bold text-sm md:text-base">Historical Academic Year Warning!</p>
+                        <p className="text-xs md:text-sm opacity-90 mt-0.5">
+                            You are currently viewing and marking attendance for a <strong>PREVIOUS</strong> academic year (<strong>{selectedYearObj.name}</strong>).
+                        </p>
+                        <p className="text-xs md:text-sm opacity-90 mt-1">
+                            If this is a mistake, please switch the active academic year to the current one using the calendar dropdown in the top navigation bar.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Holiday Warning Banner */}
             {selectedDateHoliday && (

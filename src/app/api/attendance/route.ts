@@ -119,15 +119,35 @@ export async function POST(request: Request) {
             resolvedAcademicYearId = activeYear?.id || null;
         }
 
-        // Pre-fetch valid students for all target sections to prevent UI stale-state mixing
+        const acadYearObj = resolvedAcademicYearId
+            ? await prisma.academicYear.findUnique({ where: { id: resolvedAcademicYearId } })
+            : await prisma.academicYear.findFirst({ where: { isCurrent: true } });
 
-        const studentWhereClause: any = {
-            year: String(year),
-            semester: String(semester),
-            isAlumni: false,
-            isLeftCollege: false,
-            isDetained: false
-        };
+        const isCurrentYear = !acadYearObj || acadYearObj.isCurrent;
+
+        const studentWhereClause: any = {};
+        if (isCurrentYear) {
+            studentWhereClause.year = String(year);
+            studentWhereClause.semester = String(semester);
+            studentWhereClause.isAlumni = false;
+            studentWhereClause.isLeftCollege = false;
+            studentWhereClause.isDetained = false;
+        } else {
+            const match = acadYearObj.name.match(/^(\d{4})/);
+            if (match && year) {
+                const acadStartYear = parseInt(match[1]);
+                const targetBatchStartYear = acadStartYear - (parseInt(year) - 1);
+                studentWhereClause.batch = {
+                    startYear: targetBatchStartYear
+                };
+            } else {
+                studentWhereClause.year = String(year);
+                studentWhereClause.semester = String(semester);
+                studentWhereClause.isAlumni = false;
+                studentWhereClause.isLeftCollege = false;
+                studentWhereClause.isDetained = false;
+            }
+        }
 
         let tempTargetSectionIds: string[] = [];
         if (isElective) {
@@ -377,25 +397,6 @@ export async function POST(request: Request) {
                                                 topicsTaught,
                                                 subjectId: finalSubjectId,
                                                 downloadedBy: (session.user as any).id
-                                            }
-                                        });
-                                    } else {
-                                        await prisma.attendanceHistory.create({
-                                            data: {
-                                                date: new Date(date),
-                                                year: String(year),
-                                                semester: String(semester),
-                                                sectionId: sid,
-                                                departmentId: subject.departmentId,
-                                                academicYearId: resolvedAcademicYearId || null,
-                                                subjectId: finalSubjectId,
-                                                periodId: pid,
-                                                status: "Completed",
-                                                type: recordType,
-                                                fileName: "Manual Entry (Sync)",
-                                                downloadedBy: (session.user as any).id,
-                                                details: "[]",
-                                                topicsTaught
                                             }
                                         });
                                     }

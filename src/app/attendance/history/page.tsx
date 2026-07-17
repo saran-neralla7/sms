@@ -25,6 +25,9 @@ export default function HistoryPage() {
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [viewRecord, setViewRecord] = useState<AttendanceHistory | null>(null);
     const [viewStats, setViewStats] = useState({ present: 0, absent: 0, total: 0 });
+    const [viewAbsentees, setViewAbsentees] = useState<string[]>([]);
+    const [viewGroup, setViewGroup] = useState<any | null>(null);
+    const [viewAbsenteesPeriodMap, setViewAbsenteesPeriodMap] = useState<{ [roll: string]: string[] }>({});
 
     // Filters
     const [filterType, setFilterType] = useState<"all" | "today" | "yesterday" | "range">("all");
@@ -90,22 +93,56 @@ export default function HistoryPage() {
         }
     };
 
-    const handleView = (record: AttendanceHistory) => {
-        if (!record.details || record.details === "[]") {
-            setStatus({ type: "error", message: "No details available for this record." });
-            return;
-        }
+    const handleView = (group: any) => {
+        if (!group || !group.records || group.records.length === 0) return;
         try {
-            const data = JSON.parse(record.details);
-            // Calculate stats
-            let present = 0;
-            let absent = 0;
-            data.forEach((s: any) => {
-                if (s.Status === "Present") present++;
-                else absent++;
+            const absenteePeriodMap: { [roll: string]: string[] } = {};
+            const allStudentMap: { [roll: string]: { name: string, status: string, mobile: string } } = {};
+            
+            group.records.forEach((r: any) => {
+                const periodName = r.period?.name || "N/A";
+                try {
+                    const data = JSON.parse(r.details || "[]");
+                    data.forEach((s: any) => {
+                        const roll = s["Roll Number"] || s.rollNumber;
+                        const name = s["Name"] || s.name;
+                        const status = s["Status"] || s.status;
+                        const mobile = s["Mobile"] || s.mobile || "";
+                        
+                        if (roll) {
+                            if (!allStudentMap[roll]) {
+                                allStudentMap[roll] = { name, status: "Present", mobile };
+                            }
+                            if (status === "Absent") {
+                                allStudentMap[roll].status = "Absent";
+                                if (!absenteePeriodMap[roll]) {
+                                    absenteePeriodMap[roll] = [];
+                                }
+                                if (!absenteePeriodMap[roll].includes(periodName)) {
+                                    absenteePeriodMap[roll].push(periodName);
+                                }
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
             });
-            setViewStats({ present, absent, total: data.length });
-            setViewRecord(record);
+
+            const total = Object.keys(allStudentMap).length;
+            const absent = Object.keys(absenteePeriodMap).length;
+            const present = total - absent;
+            const absenteeRolls = Object.keys(absenteePeriodMap).sort();
+
+            setViewStats({ present, absent, total });
+            setViewAbsentees(absenteeRolls);
+            setViewAbsenteesPeriodMap(absenteePeriodMap);
+            setViewGroup(group);
+            
+            setViewRecord({
+                ...group.primaryRecord,
+                details: group.combinedDetails
+            });
             setIsViewModalOpen(true);
         } catch (e) {
             console.error(e);
@@ -142,7 +179,7 @@ export default function HistoryPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Attendance");
 
             // Fix filename
-            const deptStr = viewRecord.department?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Dept";
+            const deptStr = (viewRecord.department?.code || viewRecord.department?.name || "Dept").replace(/[^a-zA-Z0-9]/g, "_");
             const subjectStr = viewRecord.subject?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "SMS";
             const dateStr = formatISTDate(viewRecord.date);
             const filename = `Attendance_${deptStr}_Yr-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${subjectStr}_${dateStr}.xlsx`;
@@ -181,7 +218,7 @@ export default function HistoryPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Absentees");
 
             // Customize filename
-            const deptStr = viewRecord.department?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Dept";
+            const deptStr = (viewRecord.department?.code || viewRecord.department?.name || "Dept").replace(/[^a-zA-Z0-9]/g, "_");
             const subjectStr = viewRecord.subject?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "SMS";
             const dateStr = formatISTDate(viewRecord.date);
             const filename = `Absentees_${deptStr}_Yr-${viewRecord.year}_Sem-${viewRecord.semester}_Sec-${viewRecord.section?.name}_${subjectStr}_${dateStr}.xlsx`;
@@ -265,6 +302,106 @@ export default function HistoryPage() {
     };
 
     const filteredHistory = getFilteredHistory();
+
+    // Group records:
+    // - Electives: same date + subject (groups all periods & departments/sections)
+    // - Regulars: same date + subject + section + department (groups multiple periods/hours)
+    // - SMS/Bulk: same date + section + department
+    const displayRows = (() => {
+        const groups: Map<string, any[]> = new Map();
+        
+        for (const record of filteredHistory) {
+            let key = "";
+            const dateStr = new Date(record.date).toISOString().split('T')[0];
+            if (record.subject) {
+                if (record.subject.isElective) {
+                    key = `elective_${dateStr}_${record.subject.id}`;
+                } else {
+                    key = `regular_${dateStr}_${record.subject.id}_${record.sectionId}_${record.departmentId}`;
+                }
+            } else {
+                key = `sms_${dateStr}_${record.sectionId}_${record.departmentId}`;
+            }
+
+            if (!groups.has(key)) {
+                groups.set(key, []);
+            }
+            groups.get(key)!.push(record);
+        }
+
+        const result: any[] = [];
+        const seenKeys = new Set<string>();
+
+        // Maintain the original order of the history records
+        for (const record of filteredHistory) {
+            let key = "";
+            const dateStr = new Date(record.date).toISOString().split('T')[0];
+            if (record.subject) {
+                if (record.subject.isElective) {
+                    key = `elective_${dateStr}_${record.subject.id}`;
+                } else {
+                    key = `regular_${dateStr}_${record.subject.id}_${record.sectionId}_${record.departmentId}`;
+                }
+            } else {
+                key = `sms_${dateStr}_${record.sectionId}_${record.departmentId}`;
+            }
+
+            if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                const records = groups.get(key) || [];
+                
+                // Helper to get unique periods sorted
+                const periodsMap = new Map();
+                records.forEach(r => {
+                    if (r.period) {
+                        periodsMap.set(r.period.id, r.period);
+                    }
+                });
+                const periods = Array.from(periodsMap.values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+                // Unique departments
+                const departments = Array.from(
+                    new Set([
+                        ...records.flatMap((r: any) => r.resolvedDepts || []),
+                        ...records.map(r => r.department?.code || r.department?.name)
+                    ].filter(Boolean))
+                ).sort();
+                // Unique sections
+                const sections = Array.from(new Set(records.map(r => r.section?.name).filter(Boolean)));
+
+                // Merge student details across all records in the group
+                const allDetails = records.flatMap(r => {
+                    try { return JSON.parse(r.details || '[]'); } catch { return []; }
+                });
+                const seenRolls = new Set();
+                const uniqueDetails = [];
+                for (const student of allDetails) {
+                    const roll = student["Roll Number"] || student.rollNumber;
+                    if (roll && !seenRolls.has(roll)) {
+                        seenRolls.add(roll);
+                        uniqueDetails.push(student);
+                    }
+                }
+                const combinedDetails = JSON.stringify(uniqueDetails);
+
+                result.push({
+                    key,
+                    records,
+                    isElective: records[0].subject?.isElective || false,
+                    subject: records[0].subject,
+                    date: records[0].date,
+                    year: records[0].year,
+                    semester: records[0].semester,
+                    periods,
+                    departments,
+                    sections,
+                    primaryRecord: records[0],
+                    combinedDetails
+                });
+            }
+        }
+        return result;
+    })();
 
 
 
@@ -452,113 +589,149 @@ export default function HistoryPage() {
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
                                 <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">Loading records...</td></tr>
-                            ) : filteredHistory.length === 0 ? (
+                            ) : displayRows.length === 0 ? (
                                 <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">No records found matching filters</td></tr>
                             ) : (
-                                filteredHistory.map((record) => {
-                                    const recordDate = new Date(record.date);
-                                    const now = new Date();
-                                    const isToday = recordDate.getDate() === now.getDate() && 
-                                                    recordDate.getMonth() === now.getMonth() && 
-                                                    recordDate.getFullYear() === now.getFullYear();
-
+                                displayRows.map((group) => {
+                                    const recordDate = new Date(group.date);
+                                    const deptNames = group.departments.join(', ') || "Unknown Dept";
+                                    const secNames = group.sections.join(', ') || "N/A";
+                                    
                                     return (
-                                        <tr key={record.id} className="group hover:bg-slate-50/80 transition-colors">
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
-                                            {formatISTDate(record.date)}
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-medium text-slate-900 truncate max-w-[200px] sm:max-w-xs" title={record.department?.name || "Unknown Dept"}>
-                                                    {record.department?.name || "Unknown Dept"}
-                                                </span>
-                                                <span className="text-xs text-slate-500">
-                                                    Yr {record.year} - Sem {record.semester} - Sec {record.section?.name}
-                                                </span>
-                                                {/* Subject & Period (or SMS) */}
-                                                <div className="mt-1">
-                                                    {record.subject ? (
-                                                        <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                                                            {record.subject.name}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10 italic">
-                                                            SMS / Bulk Log
-                                                        </span>
-                                                    )}
-                                                    {record.period && (
-                                                        <span className="ml-1 inline-flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
-                                                            {record.period.name}
-                                                        </span>
-                                                    )}
+                                        <tr key={group.key} className={`group hover:bg-slate-50/80 transition-colors ${group.records.length > 1 ? "bg-indigo-50/10" : ""}`}>
+                                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
+                                                {formatISTDate(group.date)}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-medium text-slate-900 max-w-[280px]" title={deptNames}>
+                                                        {deptNames}
+                                                    </span>
+                                                    <span className="text-xs text-slate-500">
+                                                        Yr {group.year} - Sem {group.semester} - Sec {secNames}
+                                                    </span>
+                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                        {group.subject ? (
+                                                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                                                {group.subject.name}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10 italic">
+                                                                SMS / Bulk Log
+                                                            </span>
+                                                        )}
+                                                        {group.isElective && (
+                                                            <span className="inline-flex items-center rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-700/10">
+                                                                Open Elective
+                                                            </span>
+                                                        )}
+                                                        {group.periods.map((p: any) => (
+                                                            <span key={p.id} className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+                                                                {p.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${record.status === "Marked Absent"
-                                                ? "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10"
-                                                : "bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/10"
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-4">
+                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                    group.primaryRecord.status === "Marked Absent"
+                                                        ? "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10"
+                                                        : "bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/10"
                                                 }`}>
-                                                {record.status}
-                                            </span>
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <button
-                                                onClick={() => handleView(record)}
-                                                className="group/btn flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                                                title="View Details"
-                                            >
-                                                <FaEye className="text-blue-600" />
-                                                <span className="font-mono text-xs">View</span>
-                                            </button>
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="flex items-center gap-2 text-sm text-slate-600">
-                                                <FaUserCircle className="text-slate-400" />
-                                                <span>{record.user?.username || "Unknown"}</span>
-                                            </div>
-                                        </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {/* Direct SMS Button */}
-                                                {["SMS_USER", "ADMIN", "DIRECTOR", "PRINCIPAL"].includes(((session?.user as any)?.role || "").toUpperCase()) && (
-                                                    <button
-                                                        onClick={(e) => initSendSms(record, e)}
-                                                        disabled={!isToday}
-                                                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
-                                                            isToday 
-                                                                ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" 
-                                                                : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                                                        }`}
-                                                        title={isToday ? "Send SMS to Absentees" : "SMS can only be sent on the day of attendance"}
-                                                    >
-                                                        <FaSms size={14} /> Send SMS
-                                                    </button>
-                                                )}
+                                                    {group.primaryRecord.status}
+                                                </span>
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-4">
+                                                <button
+                                                    onClick={() => handleView(group)}
+                                                    className="group/btn flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                                                    title={group.records.length > 1 ? "View Combined Details" : "View Details"}
+                                                >
+                                                    <FaEye className="text-blue-600" />
+                                                    <span className="font-mono text-xs">{group.records.length > 1 ? "View All" : "View"}</span>
+                                                </button>
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-4">
+                                                <div className="flex items-center gap-2 text-sm text-slate-600">
+                                                    <FaUserCircle className="text-slate-400" />
+                                                    <span>{group.primaryRecord.user?.username || "Unknown"}</span>
+                                                </div>
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-4 text-right">
+                                                {(() => {
+                                                    const role = ((session?.user as any)?.role || "").toUpperCase();
+                                                    const canSms = ["SMS_USER", "ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+                                                    const canEdit = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(role);
+                                                    const canDelete = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+                                                    
+                                                    if (!canSms && !canEdit && !canDelete) {
+                                                        return <span className="text-slate-400">—</span>;
+                                                    }
 
-                                                {/* Edit Button */}
-                                                {["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes((session?.user.role || "").toUpperCase()) && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleEdit(record); }}
-                                                        className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                                                        title="Edit Attendance"
-                                                    >
-                                                        <FaHistory size={14} /> {/* Using History icon for Edit as placeholder or Pen if available */}
-                                                    </button>
-                                                )}
+                                                    return (
+                                                        <div className="flex flex-col gap-1.5 items-end">
+                                                            {group.records.map((r: any) => {
+                                                                const rDate = new Date(r.date);
+                                                                const now = new Date();
+                                                                const isToday = rDate.getDate() === now.getDate() && 
+                                                                                rDate.getMonth() === now.getMonth() && 
+                                                                                rDate.getFullYear() === now.getFullYear();
+                                                                
+                                                                return (
+                                                                    <div key={r.id} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-lg p-1.5 transition-colors">
+                                                                        {group.records.length > 1 && (
+                                                                            <span className="font-mono font-bold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded text-[10px] uppercase">
+                                                                                {r.period?.name || r.department?.code || r.department?.name || "Hour"}
+                                                                            </span>
+                                                                        )}
+                                                                        <div className="flex items-center gap-1">
+                                                                            {/* Send SMS */}
+                                                                            {canSms && (
+                                                                                <button
+                                                                                    onClick={(e) => initSendSms(r, e)}
+                                                                                    disabled={!isToday}
+                                                                                    className={`flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-semibold transition-colors ${
+                                                                                        isToday 
+                                                                                            ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" 
+                                                                                            : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                                                                    }`}
+                                                                                    title={isToday ? `Send SMS for ${r.period?.name || "this period"}` : "SMS can only be sent on the day of attendance"}
+                                                                                >
+                                                                                    <FaSms size={12} /> SMS
+                                                                                </button>
+                                                                            )}
 
-                                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); confirmDelete(record); }}
-                                                        className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                        title="Delete Record"
-                                                    >
-                                                        <FaTrash size={14} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
+                                                                            {/* Edit */}
+                                                                            {canEdit && (
+                                                                                <button
+                                                                                    onClick={(e) => { e.stopPropagation(); handleEdit(r); }}
+                                                                                    className="rounded p-1 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                                                                    title={`Edit attendance for ${r.period?.name || "this period"}`}
+                                                                                >
+                                                                                    <FaHistory size={12} />
+                                                                                </button>
+                                                                            )}
+
+                                                                            {/* Delete */}
+                                                                            {canDelete && (
+                                                                                <button
+                                                                                    onClick={(e) => { e.stopPropagation(); confirmDelete(r); }}
+                                                                                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                                                                    title={`Delete record for ${r.period?.name || "this period"}`}
+                                                                                >
+                                                                                    <FaTrash size={12} />
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </td>
+                                        </tr>
                                     );
                                 })
                             )}
@@ -657,18 +830,35 @@ export default function HistoryPage() {
                                     <div>
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Class</span>
                                         <span className="font-medium text-slate-900">
-                                            {viewRecord.department?.name || 'Unknown Dept'}
+                                            {viewGroup 
+                                                ? viewGroup.departments.join(', ') 
+                                                : ((viewRecord as any).resolvedDepts && (viewRecord as any).resolvedDepts.length > 0
+                                                    ? (viewRecord as any).resolvedDepts.sort().join(', ')
+                                                    : (viewRecord.department?.code || viewRecord.department?.name || 'Unknown Dept'))}
                                         </span>
                                         <div className="text-xs text-slate-500 mt-0.5">
-                                            Yr {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewRecord.section?.name || 'N/A'}
+                                            Yr {viewRecord.year} - Sem {viewRecord.semester} - Sec {viewGroup ? viewGroup.sections.join(', ') : (viewRecord.section?.name || 'N/A')}
                                         </div>
                                     </div>
-                                    <div className="col-span-2 my-2 border-t border-slate-200"></div>
+                                    <div className="col-span-2 my-1 border-t border-slate-200"></div>
+                                    <div>
+                                        <span className="block text-slate-500 text-xs uppercase font-bold">Subject / Periods</span>
+                                        <span className="font-medium text-slate-900 block truncate max-w-[200px]" title={viewRecord.subject?.name || 'No Subject'}>
+                                            {viewRecord.subject?.name || 'N/A'}
+                                        </span>
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                            {viewGroup?.periods.map((p: any) => (
+                                                <span key={p.id} className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+                                                    {p.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <div>
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Total Students</span>
                                         <span className="font-medium text-slate-900">{viewStats.total}</span>
                                     </div>
-                                    <div></div>
+                                    <div className="col-span-2 my-1 border-t border-slate-200"></div>
                                     <div>
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Present</span>
                                         <span className="font-bold text-green-600">{viewStats.present}</span>
@@ -677,13 +867,60 @@ export default function HistoryPage() {
                                         <span className="block text-slate-500 text-xs uppercase font-bold">Absent</span>
                                         <span className="font-bold text-red-600">{viewStats.absent}</span>
                                     </div>
-                                    {viewRecord.topicsTaught && (
+                                    {viewGroup && viewGroup.records && viewGroup.records.some((r: any) => r.topicsTaught) && (
                                         <div className="col-span-2 border-t border-slate-200 pt-3 mt-1">
-                                            <span className="block text-slate-500 text-xs uppercase font-bold mb-1">Topics Taught</span>
-                                            <div 
-                                                className="text-xs text-slate-700 bg-white border border-slate-100 rounded-lg p-2.5 max-h-[120px] overflow-y-auto prose prose-sm"
-                                                dangerouslySetInnerHTML={{ __html: viewRecord.topicsTaught }}
-                                            />
+                                            <span className="block text-slate-500 text-xs uppercase font-bold mb-1.5">Topics Taught</span>
+                                            <div className="space-y-2 max-h-[160px] overflow-y-auto">
+                                                {viewGroup.records.map((r: any, idx: number) => {
+                                                    if (!r.topicsTaught) return null;
+                                                    return (
+                                                        <div key={r.id || idx} className="bg-white border border-slate-100 rounded-lg p-2.5">
+                                                            {viewGroup.records.length > 1 && (
+                                                                <span className="inline-block font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-[10px] uppercase mb-1">
+                                                                    {r.period?.name || r.department?.code || r.department?.name || `Record ${idx + 1}`}
+                                                                </span>
+                                                            )}
+                                                            <div 
+                                                                className="text-xs text-slate-700 prose prose-sm max-h-[80px] overflow-y-auto"
+                                                                dangerouslySetInnerHTML={{ __html: r.topicsTaught }}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {viewAbsentees.length > 0 && (
+                                        <div className="col-span-2 border-t border-slate-200 pt-3 mt-1">
+                                            <span className="block text-slate-500 text-xs uppercase font-bold mb-2">
+                                                Absent Roll Numbers ({viewAbsentees.length})
+                                            </span>
+                                            <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto">
+                                                {viewAbsentees.map((roll, i) => {
+                                                    const periodsMissed = viewAbsenteesPeriodMap[roll] || [];
+                                                    return (
+                                                        <span 
+                                                            key={i} 
+                                                            className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-1 text-xs font-mono font-medium text-red-700 ring-1 ring-inset ring-red-600/20"
+                                                            title={periodsMissed.length > 0 ? `Absent for periods: ${periodsMissed.join(', ')}` : undefined}
+                                                        >
+                                                            {roll}
+                                                            {periodsMissed.length > 0 && (
+                                                                <span className="text-[9px] font-sans font-semibold px-1 py-0.2 bg-red-200/50 rounded-full text-red-800">
+                                                                    {periodsMissed.join(',')}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {viewAbsentees.length === 0 && viewStats.total > 0 && (
+                                        <div className="col-span-2 border-t border-slate-200 pt-3 mt-1">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 ring-1 ring-inset ring-green-600/20">
+                                                ✓ No absentees — Full attendance!
+                                            </span>
                                         </div>
                                     )}
                                 </div>

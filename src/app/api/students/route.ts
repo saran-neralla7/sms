@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isBSHHod } from "@/lib/permissions";
+import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -50,14 +51,53 @@ export async function GET(request: Request) {
         }
     }
 
-    const where: any = {
-        isAlumni: showAlumni,
-        isLeftCollege: showLeftCollege,
-        isDetained: showDetained
-    };
+    const cookieStore = await cookies();
+    let academicYearId = cookieStore.get("academic-year-id")?.value;
+    let academicYear = null;
+    if (academicYearId) {
+        academicYear = await prisma.academicYear.findUnique({
+            where: { id: academicYearId }
+        });
+    } else {
+        academicYear = await prisma.academicYear.findFirst({
+            where: { isCurrent: true }
+        });
+    }
 
-    if (year) where.year = year;
-    if (semester) where.semester = semester;
+    const isCurrentYear = !academicYear || academicYear.isCurrent;
+
+    const where: any = {};
+
+    if (isCurrentYear) {
+        where.isAlumni = showAlumni;
+        where.isLeftCollege = showLeftCollege;
+        where.isDetained = showDetained;
+        if (year) where.year = year;
+        if (semester) where.semester = semester;
+    } else if (academicYear) {
+        // Historical Academic Year query
+        // Extract start year from academicYear.name (e.g. "2025-2026" -> 2025)
+        const match = academicYear.name.match(/^(\d{4})/);
+        if (match && year) {
+            const acadStartYear = parseInt(match[1]);
+            const targetBatchStartYear = acadStartYear - (parseInt(year) - 1);
+            where.batch = {
+                startYear: targetBatchStartYear
+            };
+        } else {
+            where.isAlumni = showAlumni;
+            where.isLeftCollege = showLeftCollege;
+            where.isDetained = showDetained;
+            if (year) where.year = year;
+            if (semester) where.semester = semester;
+        }
+    } else {
+        where.isAlumni = showAlumni;
+        where.isLeftCollege = showLeftCollege;
+        where.isDetained = showDetained;
+        if (year) where.year = year;
+        if (semester) where.semester = semester;
+    }
 
     if (!isElective) {
         if (sectionIds) {

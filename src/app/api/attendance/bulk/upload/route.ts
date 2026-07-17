@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { formatISTDate } from "@/lib/dateUtils";
+import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -214,17 +215,58 @@ export async function POST(request: Request) {
 
         // --- PHASE 2: TRANSACTIONAL INSERT ---
 
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+        let academicYear = null;
+        if (academicYearId) {
+            academicYear = await prisma.academicYear.findUnique({
+                where: { id: academicYearId }
+            });
+        } else {
+            academicYear = await prisma.academicYear.findFirst({
+                where: { isCurrent: true }
+            });
+        }
+
+        const isCurrentYear = !academicYear || academicYear.isCurrent;
+
+        const studentWhere: any = {
+            departmentId,
+            sectionId
+        };
+
+        if (isCurrentYear) {
+            studentWhere.year = year;
+            studentWhere.semester = semester;
+            studentWhere.isAlumni = false;
+            studentWhere.isLeftCollege = false;
+            studentWhere.isDetained = false;
+        } else if (academicYear) {
+            const match = academicYear.name.match(/^(\d{4})/);
+            if (match && year) {
+                const acadStartYear = parseInt(match[1]);
+                const targetBatchStartYear = acadStartYear - (parseInt(year) - 1);
+                studentWhere.batch = {
+                    startYear: targetBatchStartYear
+                };
+            } else {
+                studentWhere.year = year;
+                studentWhere.semester = semester;
+                studentWhere.isAlumni = false;
+                studentWhere.isLeftCollege = false;
+                studentWhere.isDetained = false;
+            }
+        } else {
+            studentWhere.year = year;
+            studentWhere.semester = semester;
+            studentWhere.isAlumni = false;
+            studentWhere.isLeftCollege = false;
+            studentWhere.isDetained = false;
+        }
+
         // Fetch valid students for this exact class
         const validStudents = await prisma.student.findMany({
-            where: {
-                departmentId,
-                year,
-                semester,
-                sectionId,
-                isAlumni: false,
-                isLeftCollege: false,
-                isDetained: false
-            },
+            where: studentWhere,
             select: { rollNumber: true, name: true }
         });
 
@@ -276,6 +318,7 @@ export async function POST(request: Request) {
                             semester,
                             sectionId,
                             departmentId,
+                            academicYearId: academicYear?.id || null,
                             subjectId: col.subjectId,
                             periodId: col.periodId,
                             status: "Bulk Upload",

@@ -1,6 +1,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
     try {
@@ -10,11 +11,32 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
         }
 
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+        let academicYear = null;
+        if (academicYearId) {
+            academicYear = await prisma.academicYear.findUnique({
+                where: { id: academicYearId }
+            });
+        } else {
+            academicYear = await prisma.academicYear.findFirst({
+                where: { isCurrent: true }
+            });
+        }
+
+        const isCurrentYear = !academicYear || academicYear.isCurrent;
+
         // Fetch lab batch students if a labBatchId was provided
         let labBatchStudentRolls: string[] = [];
         if (labBatchId) {
+            const studentWhere: any = { labBatchId };
+            if (isCurrentYear) {
+                studentWhere.isAlumni = false;
+                studentWhere.isLeftCollege = false;
+                studentWhere.isDetained = false;
+            }
             const batchStudents = await prisma.student.findMany({
-                where: { labBatchId, isAlumni: false, isLeftCollege: false, isDetained: false },
+                where: studentWhere,
                 select: { rollNumber: true }
             });
             labBatchStudentRolls = batchStudents.map(s => s.rollNumber);

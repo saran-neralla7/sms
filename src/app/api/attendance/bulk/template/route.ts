@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { formatISTDate } from "@/lib/dateUtils";
+import { cookies } from "next/headers";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -33,16 +34,57 @@ export async function GET(request: Request) {
     }
 
     try {
+        const cookieStore = await cookies();
+        let academicYearId = cookieStore.get("academic-year-id")?.value;
+        let academicYear = null;
+        if (academicYearId) {
+            academicYear = await prisma.academicYear.findUnique({
+                where: { id: academicYearId }
+            });
+        } else {
+            academicYear = await prisma.academicYear.findFirst({
+                where: { isCurrent: true }
+            });
+        }
+
+        const isCurrentYear = !academicYear || academicYear.isCurrent;
+
+        const studentWhere: any = {
+            sectionId,
+            departmentId
+        };
+
+        if (isCurrentYear) {
+            studentWhere.year = year;
+            studentWhere.semester = semester;
+            studentWhere.isAlumni = false;
+            studentWhere.isLeftCollege = false;
+            studentWhere.isDetained = false;
+        } else if (academicYear) {
+            const match = academicYear.name.match(/^(\d{4})/);
+            if (match && year) {
+                const acadStartYear = parseInt(match[1]);
+                const targetBatchStartYear = acadStartYear - (parseInt(year) - 1);
+                studentWhere.batch = {
+                    startYear: targetBatchStartYear
+                };
+            } else {
+                studentWhere.year = year;
+                studentWhere.semester = semester;
+                studentWhere.isAlumni = false;
+                studentWhere.isLeftCollege = false;
+                studentWhere.isDetained = false;
+            }
+        } else {
+            studentWhere.year = year;
+            studentWhere.semester = semester;
+            studentWhere.isAlumni = false;
+            studentWhere.isLeftCollege = false;
+            studentWhere.isDetained = false;
+        }
+
         const students = await prisma.student.findMany({
-            where: {
-                sectionId,
-                departmentId,
-                year,
-                semester,
-                isAlumni: false,
-                isLeftCollege: false,
-                isDetained: false
-            },
+            where: studentWhere,
             orderBy: { rollNumber: "asc" },
             select: { rollNumber: true, name: true }
         });

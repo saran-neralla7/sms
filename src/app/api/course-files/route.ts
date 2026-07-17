@@ -46,6 +46,14 @@ export async function GET(req: NextRequest) {
     year = normalizeYear(year);
     semester = normalizeSemester(semester);
 
+    // Fetch subject first to check if it's elective
+    const subject = await prisma.subject.findUnique({
+      where: { id: subjectId },
+      include: { department: true }
+    });
+
+    const isElective = subject?.isElective ?? false;
+
     // Find all sections mapped to this subject in the current academic year
     const mappings = await prisma.facultySubjectMapping.findMany({
       where: {
@@ -63,14 +71,20 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const sectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
-    if (sectionId && !sectionIds.includes(sectionId)) {
-      sectionIds.push(sectionId);
-    }
-
     const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     sortedSections.sort((a, b) => a.name.localeCompare(b.name));
     const canonicalSectionId = sortedSections[0]?.id || sectionId;
+
+    // Determine the sectionIds to query based on elective status
+    let sectionIds: string[] = [];
+    if (isElective) {
+      sectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
+      if (sectionId && !sectionIds.includes(sectionId)) {
+        sectionIds.push(sectionId);
+      }
+    } else {
+      sectionIds = [sectionId];
+    }
 
     // 1. Fetch CourseFile metadata using the canonicalSectionId
     const courseFile = await prisma.courseFile.findUnique({
@@ -129,11 +143,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Fetch subject and its syllabus (Item 1 & 2)
-    const subject = await prisma.subject.findUnique({
-      where: { id: subjectId },
-      include: { department: true }
-    });
+    // 2. Fetch syllabus and timeline (Subject was fetched earlier in GET)
 
     const academicYear = await prisma.academicYear.findUnique({
       where: { id: academicYearId }

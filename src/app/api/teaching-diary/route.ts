@@ -191,36 +191,53 @@ export async function GET(request: Request) {
             orderBy: { date: "desc" }
         });
 
-        // Group/De-duplicate diaries that belong to the same date, period, subject, downloadedBy, and topicsTaught
-        const seen = new Set<string>();
+        // Group/De-duplicate diaries that belong to the same date, period, subject, and creator (downloadedBy)
         const uniqueDiaries: typeof diaries = [];
+        const seenKeys = new Set<string>();
+        const groups = new Map<string, typeof diaries>();
+
         for (const d of diaries) {
             const dateKey = d.date instanceof Date ? d.date.toISOString().split("T")[0] : String(d.date).split("T")[0];
-            const key = `${dateKey}_${d.periodId || "no-period"}_${d.subjectId || "no-subject"}_${d.downloadedBy || "no-user"}_${(d.topicsTaught || "").trim()}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                uniqueDiaries.push(d);
-            } else {
-                const existingIdx = uniqueDiaries.findIndex(u => {
-                    const uDateKey = u.date instanceof Date ? u.date.toISOString().split("T")[0] : String(u.date).split("T")[0];
-                    return uDateKey === dateKey && 
-                           u.periodId === d.periodId && 
-                           u.subjectId === d.subjectId && 
-                           u.downloadedBy === d.downloadedBy && 
-                           (u.topicsTaught || "").trim() === (d.topicsTaught || "").trim();
-                });
-                if (existingIdx !== -1 && d.section?.name && uniqueDiaries[existingIdx].section?.name) {
-                    const currentSectionName = uniqueDiaries[existingIdx].section.name;
-                    if (!currentSectionName.includes(d.section.name)) {
-                        uniqueDiaries[existingIdx] = {
-                            ...uniqueDiaries[existingIdx],
-                            section: {
-                                ...uniqueDiaries[existingIdx].section,
-                                name: `${currentSectionName}, ${d.section.name}`
-                            }
-                        };
-                    }
+            const key = `${dateKey}_${d.periodId || "no-period"}_${d.subjectId || "no-subject"}_${d.downloadedBy || "no-user"}`;
+            
+            if (!groups.has(key)) {
+                groups.set(key, []);
+            }
+            groups.get(key)!.push(d);
+        }
+
+        for (const d of diaries) {
+            const dateKey = d.date instanceof Date ? d.date.toISOString().split("T")[0] : String(d.date).split("T")[0];
+            const key = `${dateKey}_${d.periodId || "no-period"}_${d.subjectId || "no-subject"}_${d.downloadedBy || "no-user"}`;
+            
+            if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                const group = groups.get(key)!;
+                
+                // Find a record with non-empty topicsTaught
+                let representative = group.find(r => (r.topicsTaught || "").trim() !== "");
+                if (!representative) {
+                    representative = group[0];
                 }
+
+                // Extract all section names
+                const sectionNames = Array.from(
+                    new Set(
+                        group
+                            .map(r => r.section?.name)
+                            .filter((name): name is string => typeof name === "string" && name.trim() !== "")
+                    )
+                ).sort();
+
+                const mergedSectionName = sectionNames.join(", ");
+
+                uniqueDiaries.push({
+                    ...representative,
+                    section: representative.section ? {
+                        ...representative.section,
+                        name: mergedSectionName || representative.section.name
+                    } : representative.section
+                });
             }
         }
 
@@ -353,34 +370,15 @@ export async function POST(request: Request) {
             });
 
             if (existingOther) {
-                await prisma.attendanceHistory.update({
-                    where: { id: existingOther.id },
-                    data: {
-                        topicsTaught,
-                        subjectId,
-                        downloadedBy: session.user.id
-                    }
-                });
-            } else {
-                await prisma.attendanceHistory.create({
-                    data: {
-                        date: new Date(date),
-                        year: subject.year,
-                        semester: subject.semester,
-                        sectionId: sid,
-                        departmentId: subject.departmentId,
-                        academicYearId: academicYearId || null,
-                        subjectId,
-                        periodId,
-                        status: "Completed",
-                        type: "ACADEMIC",
-                        fileName: "Manual Entry (Sync)",
-                        downloadedBy: session.user.id,
-                        details: "[]",
-                        topicsTaught
-                    }
-                });
-            }
+                 await prisma.attendanceHistory.update({
+                     where: { id: existingOther.id },
+                     data: {
+                         topicsTaught,
+                         subjectId,
+                         downloadedBy: session.user.id
+                     }
+                 });
+             }
         }
 
         return NextResponse.json(record);

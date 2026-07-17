@@ -56,6 +56,12 @@ export async function getStudentsForClass({
         : sectionId
       : undefined;
 
+    const studentFilter = {
+      isLeftCollege: false,
+      ...(departmentId && !isElective ? { departmentId } : {}),
+      ...(sectionCondition ? { sectionId: sectionCondition } : {}),
+    };
+
     const marksConditions: any = {
       academicYearId,
     };
@@ -73,18 +79,23 @@ export async function getStudentsForClass({
             academicYearId,
             ...(sectionCondition ? { sectionId: sectionCondition } : {}),
             subjectId: subjectId || undefined,
-          }
+          },
+          student: studentFilter
         },
         select: { studentId: true }
       }),
       prisma.assignmentMark.findMany({
-        where: marksConditions,
+        where: {
+          ...marksConditions,
+          student: studentFilter
+        },
         select: { studentId: true }
       }),
       prisma.internalMark.findMany({
         where: {
           academicYearId,
           ...(subjectId ? { subjectId } : {}),
+          student: studentFilter
         },
         select: { studentId: true }
       })
@@ -99,19 +110,28 @@ export async function getStudentsForClass({
     console.error("Error fetching historical student IDs:", err);
   }
 
-  // 3. Build the OR query conditions
-  const orConditions: any[] = [];
-
-  // Condition A: Historical match
-  if (historicalStudentIds.length > 0) {
-    orConditions.push({ id: { in: historicalStudentIds } });
-  }
-
   const sectionFilter = sectionId
     ? Array.isArray(sectionId)
       ? { in: sectionId }
       : sectionId
     : undefined;
+
+  // 3. Build the OR query conditions
+  const orConditions: any[] = [];
+
+  // Condition A: Historical match
+  if (historicalStudentIds.length > 0) {
+    const expectedCurrentYear = parseInt(year) + yearDiff;
+    const currentYearVal = String(Math.min(4, expectedCurrentYear));
+
+    orConditions.push({
+      id: { in: historicalStudentIds },
+      ...(departmentId ? { departmentId } : {}),
+      ...(sectionFilter ? { sectionId: sectionFilter } : {}),
+      year: currentYearVal,
+      isLeftCollege: false,
+    });
+  }
 
   // Resolve the target cohort batch start year
   let targetBatchStartYear: number | null = null;

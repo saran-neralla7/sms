@@ -73,12 +73,75 @@ export async function GET(request: Request) {
             include: {
                 section: true,
                 subject: true,
-                department: { select: { name: true } },
-                user: { select: { username: true, role: true } } // Include role to verify
+                period: true,
+                department: { select: { name: true, code: true } },
+                user: { select: { username: true, role: true } }
             },
             orderBy: { date: 'desc' }
         });
-        return NextResponse.json(history);
+
+        // Resolve student departments if details exist
+        const rollNumbers = new Set<string>();
+        for (const record of history) {
+            try {
+                const students = JSON.parse(record.details || "[]");
+                for (const student of students) {
+                    const roll = student["Roll Number"] || student.rollNumber;
+                    if (roll) {
+                        rollNumbers.add(roll);
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        const studentsDb = await prisma.student.findMany({
+            where: {
+                rollNumber: { in: Array.from(rollNumbers) }
+            },
+            select: {
+                rollNumber: true,
+                department: {
+                    select: {
+                        code: true,
+                        name: true
+                    }
+                }
+            }
+        });
+
+        const studentDeptMap = new Map<string, string>();
+        for (const s of studentsDb) {
+            if (s.department) {
+                studentDeptMap.set(s.rollNumber, s.department.code || s.department.name);
+            }
+        }
+
+        const historyWithResolvedDepts = history.map(record => {
+            const resolvedDeptsSet = new Set<string>();
+            try {
+                const students = JSON.parse(record.details || "[]");
+                for (const student of students) {
+                    const roll = student["Roll Number"] || student.rollNumber;
+                    if (roll) {
+                        const dept = studentDeptMap.get(roll);
+                        if (dept) {
+                            resolvedDeptsSet.add(dept);
+                        }
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            return {
+                ...record,
+                resolvedDepts: Array.from(resolvedDeptsSet)
+            };
+        });
+
+        return NextResponse.json(historyWithResolvedDepts);
     } catch (error) {
         return NextResponse.json({ error: "Failed to fetch history" }, { status: 500 });
     }
