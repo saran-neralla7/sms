@@ -110,7 +110,7 @@ export default function LoginPage() {
                 <div className="bg-blue-600 p-8 text-center">
                     <div className="mb-4 flex justify-center">
                         <img
-                            src="https://gvpcdpgc.edu.in/gvplogo.jpg"
+                            src="/gvplogo.jpg"
                             alt="GVP Logo"
                             className="h-20 w-20 rounded-full border-4 border-white object-cover bg-white"
                         />

@@ -20,7 +20,7 @@ export default function LogoSpinner({ fullScreen = true }: LogoSpinnerProps) {
 
                 {/* Static Logo in Center */}
                 <img
-                    src="https://www.gvpcdpgc.edu.in/gvplogo.jpg"
+                    src="/gvplogo.jpg"
                     alt="GVP Logo"
                     className="h-24 w-24 rounded-full object-cover"
                 />

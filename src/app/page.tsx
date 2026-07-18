@@ -36,7 +36,7 @@ export default function LandingPage() {
                     {/* Logo */}
                     <div className="flex-shrink-0">
                         <img
-                            src="https://www.gvpcdpgc.edu.in/gvplogo.jpg"
+                            src="/gvplogo.jpg"
                             alt="GVPCDPGC Logo"
                             className="h-24 w-24 rounded-full object-cover shadow-md md:h-28 md:w-28"
                         />

@@ -45,7 +45,7 @@ export default function StudentSidebar() {
             {/* Mobile Header - Compact */}
             <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-50 px-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <img src="https://www.gvpcdpgc.edu.in/gvplogo.jpg" alt="Logo" className="h-8 w-8 rounded-full" />
+                    <img src="/gvplogo.jpg" alt="Logo" className="h-8 w-8 rounded-full" />
                     <span className="font-bold text-slate-800 text-sm">Portal</span>
                 </div>
                 <button

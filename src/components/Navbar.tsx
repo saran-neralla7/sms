@@ -39,7 +39,7 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                             className="flex items-center gap-2"
                         >
                             <img
-                                src="https://www.gvpcdpgc.edu.in/gvplogo.jpg"
+                                src="/gvplogo.jpg"
                                 alt="Logo"
                                 className="h-8 w-8 rounded-full"
                             />

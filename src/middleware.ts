@@ -78,6 +78,6 @@ export default withAuth(
 
 export const config = {
     matcher: [
-        "/((?!login|api/auth|api/upload-photos|api/student-photos|api/faculty-photos|uploads|_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
+        "/((?!login|api/auth|api/upload-photos|api/student-photos|api/faculty-photos|uploads|_next/static|_next/image|favicon.ico|gvplogo.jpg|logo.png|gvp-logo.jpg|default-avatar.png|app-icon.jpg|favicon.png|file.svg|globe.svg|next.svg|vercel.svg|window.svg|icon-192.png|icon-512.png|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
     ],
 };

@@ -104,7 +104,7 @@ function StudentLoginContent() {
                     <div className="relative mb-6 flex justify-center">
                         <div className="h-24 w-24 rounded-full border-4 border-white/30 p-1 shadow-2xl backdrop-blur-sm">
                             <img
-                                src="https://gvpcdpgc.edu.in/gvplogo.jpg"
+                                src="/gvplogo.jpg"
                                 alt="GVP Logo"
                                 className="h-full w-full rounded-full object-cover bg-white"
                             />
