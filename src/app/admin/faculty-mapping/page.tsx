@@ -51,7 +51,7 @@ export default function FacultyMappingPage() {
     useEffect(() => {
         Promise.all([
             fetch("/api/academic-years").then(res => res.json()),
-            fetch("/api/departments").then(res => res.json()),
+            fetch("/api/departments?all=true").then(res => res.json()),
             fetch("/api/faculty").then(res => res.json())
         ]).then(([ayData, deptData, facultyData]) => {
             setAcademicYears(ayData);
@@ -414,7 +414,7 @@ export default function FacultyMappingPage() {
                         <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">Department</label>
                         <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="block w-full rounded-md border border-slate-300 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="">Select Dept</option>
-                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            {departments.filter(d => d.isAcademic !== false).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                     </div>
                 )}

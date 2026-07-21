@@ -9,10 +9,25 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Role check: Only ADMIN, DIRECTOR, PRINCIPAL, HOD, and OFFICE allowed
-    const role = (session.user as any).role;
-    const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD", "OFFICE"];
-    if (!allowedRoles.includes(role)) {
+    // Fetch user details from DB to enforce permissions
+    const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { department: true }
+    });
+
+    if (!user) {
+        return NextResponse.json({ error: "User profile not found." }, { status: 403 });
+    }
+
+    const userRole = (user.role || "").toUpperCase();
+    const userDeptCode = user.department?.code || "";
+    const userDeptId = user.departmentId;
+
+    const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole) || userDeptCode === "BSH";
+
+    // Enforce role check: Only ADMIN, DIRECTOR, PRINCIPAL, HOD, and OFFICE allowed
+    // Note: BSH roles (even if FACULTY) are allowed bypass
+    if (!isGlobal && !["HOD", "OFFICE"].includes(userRole)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -22,6 +37,12 @@ export async function GET(request: Request) {
     const year = searchParams.get("year");
     const semester = searchParams.get("semester");
     const slotType = searchParams.get("slotType") || "OE"; // Default to OE
+
+    let finalDepartmentId: string | null | undefined = departmentId;
+    if (!isGlobal) {
+        // Enforce HOD/OFFICE's department
+        finalDepartmentId = userDeptId || undefined;
+    }
 
     try {
         // Build student query filter
@@ -34,8 +55,8 @@ export async function GET(request: Request) {
         if (batchId) {
             studentWhere.batchId = batchId;
         }
-        if (departmentId) {
-            studentWhere.departmentId = departmentId;
+        if (finalDepartmentId) {
+            studentWhere.departmentId = finalDepartmentId;
         }
         if (year) {
             studentWhere.year = year;

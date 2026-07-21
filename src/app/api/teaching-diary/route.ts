@@ -403,10 +403,6 @@ export async function PUT(request: Request) {
         }
 
         const data: any = { topicsTaught };
-        if (date) data.date = new Date(date);
-        if (periodId) data.periodId = periodId;
-        if (sectionId) data.sectionId = sectionId;
-        if (subjectId) data.subjectId = subjectId;
 
         const targetRecord = await prisma.attendanceHistory.findUnique({
             where: { id }

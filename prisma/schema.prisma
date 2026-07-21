@@ -229,6 +229,7 @@ model Period {
 model AttendanceHistory {
   id             String        @id @default(uuid())
   date           DateTime      @default(now())
+  createdAt      DateTime?     @default(now())
   year           String
   semester       String
   sectionId      String

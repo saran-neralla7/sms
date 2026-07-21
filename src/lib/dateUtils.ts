@@ -32,3 +32,17 @@ export function formatISTDateTime(date: string | Date | null | undefined): strin
     // Custom formatting to resemble something like: 01 Oct 2024, 10:30 am
     return formattedDate;
 }
+
+export function formatISTTime(date: string | Date | null | undefined): string {
+    if (!date) return "-";
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "-";
+
+    return d.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+    }).toLowerCase();
+}
+

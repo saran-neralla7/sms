@@ -406,6 +406,20 @@ export default function AttendancePage() {
     const initiateSubmission = () => {
         if (students.length === 0) return;
 
+        const role = (session?.user?.role || "").toUpperCase();
+        const isAcademic = !["USER", "SMS_USER"].includes(role);
+
+        if (isAcademic) {
+            if (!selectedSubject) {
+                alert("Please select a subject before submitting.");
+                return;
+            }
+            if (selectedPeriods.length === 0) {
+                alert("Please select at least one period before submitting.");
+                return;
+            }
+        }
+
         if (selectedYearObj && !selectedYearObj.isCurrent) {
             const confirmed = window.confirm(
                 `🚨 Warning: You are posting attendance for a PREVIOUS academic year (${selectedYearObj.name}).\n\n` +
@@ -516,6 +530,7 @@ export default function AttendancePage() {
             setShowSummary(false);
         } finally {
             setSubmitting(false);
+            isSubmittingRef.current = false;
         }
     };
 

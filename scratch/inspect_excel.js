@@ -1,26 +1,23 @@
 const XLSX = require('xlsx');
+const fs = require('fs');
 
-function main() {
-    const filename = 'department_wise_selection.xlsx';
-    console.log(`Reading workbook ${filename}...`);
-    const wb = XLSX.readFile(filename);
-    console.log("Sheet names in workbook:", wb.SheetNames);
+const files = ['department_wise_selection.xlsx', 'dept-wis-list.xlsx'];
 
-    wb.SheetNames.forEach(sheetName => {
-        console.log(`\nSheet: ${sheetName}`);
-        const ws = wb.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(ws);
-        console.log(`Total data rows in sheet ${sheetName}: ${data.length}`);
-
-        const categories = {};
-        data.forEach(row => {
-            const cat = row["Elective Category"] || row["Category"] || "UNKNOWN";
-            categories[cat] = (categories[cat] || 0) + 1;
+files.forEach(file => {
+    if (fs.existsSync(file)) {
+        console.log(`\n=== Inspecting File: ${file} ===`);
+        const wb = XLSX.readFile(file);
+        console.log("Sheet names:", wb.SheetNames);
+        wb.SheetNames.forEach(sheetName => {
+            const ws = wb.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(ws);
+            console.log(`Sheet '${sheetName}' has ${rows.length} rows.`);
+            if (rows.length > 0) {
+                console.log("Sample row keys:", Object.keys(rows[0]));
+                console.log("Sample row:", rows[0]);
+            }
         });
-
-        console.log("Grouped by category:");
-        console.dir(categories);
-    });
-}
-
-main();
+    } else {
+        console.log(`File not found: ${file}`);
+    }
+});

@@ -5,6 +5,10 @@ import { authOptions } from "@/lib/auth";
 
 export async function GET(request: Request) {
     try {
+        const session = await getServerSession(authOptions);
+        const userDeptId = session?.user?.departmentId;
+        const userRole = session?.user?.role;
+
         const { searchParams } = new URL(request.url);
         const showAll = searchParams.get("all") === "true";
 
@@ -18,7 +22,17 @@ export async function GET(request: Request) {
             include: { sections: true },
             orderBy: { name: 'asc' }
         });
-        return NextResponse.json(departments);
+
+        // Filter out MBA department
+        const filtered = departments.filter(dept => {
+            if (dept.code === "MBA") {
+                if (showAll && userRole === "ADMIN") return true;
+                return userDeptId === dept.id;
+            }
+            return true;
+        });
+
+        return NextResponse.json(filtered);
     } catch (error) {
         return NextResponse.json({ error: "Failed to fetch departments" }, { status: 500 });
     }

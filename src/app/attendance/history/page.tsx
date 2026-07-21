@@ -10,7 +10,7 @@ import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
 import LogoSpinner from "@/components/LogoSpinner";
-import { formatISTDate } from "@/lib/dateUtils";
+import { formatISTDate, formatISTTime } from "@/lib/dateUtils";
 
 export default function HistoryPage() {
     const [history, setHistory] = useState<AttendanceHistory[]>([]);
@@ -34,6 +34,13 @@ export default function HistoryPage() {
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
 
+    // New Filters
+    const [departmentsList, setDepartmentsList] = useState<{ id: string, name: string, code: string }[]>([]);
+    const [selectedDeptId, setSelectedDeptId] = useState<string>("");
+    const [selectedYear, setSelectedYear] = useState<string>("");
+    const [selectedSem, setSelectedSem] = useState<string>("");
+    const [facultyUsernameFilter, setFacultyUsernameFilter] = useState<string>("");
+
     const [status, setStatus] = useState<{ type: "success" | "error" | null, message: string }>({ type: null, message: "" });
 
     const [viewMode, setViewMode] = useState<"academic" | "sms">("academic");
@@ -50,6 +57,22 @@ export default function HistoryPage() {
     useEffect(() => {
         fetchHistory();
     }, [viewMode]); // Refetch when mode changes
+
+    useEffect(() => {
+        fetchDepartments();
+    }, []);
+
+    const fetchDepartments = async () => {
+        try {
+            const res = await fetch("/api/departments");
+            if (res.ok) {
+                const data = await res.json();
+                setDepartmentsList(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch departments", error);
+        }
+    };
 
     const fetchHistory = async () => {
         setLoading(true);
@@ -271,34 +294,61 @@ export default function HistoryPage() {
     };
 
     const getFilteredHistory = () => {
-        if (filterType === "all") return history;
+        let filtered = history;
 
-        const now = new Date();
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (filterType !== "all") {
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        return history.filter(record => {
-            const recordDate = new Date(record.date);
+            filtered = filtered.filter(record => {
+                const recordDate = new Date(record.date);
 
-            if (filterType === "today") {
-                return recordDate >= startOfDay;
-            }
+                if (filterType === "today") {
+                    return recordDate >= startOfDay;
+                }
 
-            if (filterType === "yesterday") {
-                const startOfYesterday = new Date(startOfDay);
-                startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-                return recordDate >= startOfYesterday && recordDate < startOfDay;
-            }
+                if (filterType === "yesterday") {
+                    const startOfYesterday = new Date(startOfDay);
+                    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+                    return recordDate >= startOfYesterday && recordDate < startOfDay;
+                }
 
-            if (filterType === "range") {
-                if (!startDate) return true;
-                const start = new Date(startDate);
-                const end = endDate ? new Date(endDate) : new Date();
-                end.setHours(23, 59, 59); // End of day
-                return recordDate >= start && recordDate <= end;
-            }
+                if (filterType === "range") {
+                    if (!startDate) return true;
+                    const start = new Date(startDate);
+                    const end = endDate ? new Date(endDate) : new Date();
+                    end.setHours(23, 59, 59); // End of day
+                    return recordDate >= start && recordDate <= end;
+                }
 
-            return true;
-        });
+                return true;
+            });
+        }
+
+        // Apply new department filter
+        if (selectedDeptId) {
+            filtered = filtered.filter(record => record.departmentId === selectedDeptId);
+        }
+
+        // Apply new year filter
+        if (selectedYear) {
+            filtered = filtered.filter(record => record.year === selectedYear);
+        }
+
+        // Apply new semester filter
+        if (selectedSem) {
+            filtered = filtered.filter(record => record.semester === selectedSem);
+        }
+
+        // Apply new faculty username filter
+        if (facultyUsernameFilter) {
+            const search = facultyUsernameFilter.toLowerCase().trim();
+            filtered = filtered.filter(record => 
+                record.user?.username?.toLowerCase().includes(search)
+            );
+        }
+
+        return filtered;
     };
 
     const filteredHistory = getFilteredHistory();
@@ -502,50 +552,144 @@ export default function HistoryPage() {
             </div>
 
             {/* Filters */}
-            <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-slate-500">
-                    <FaFilter />
-                    <span className="text-sm font-semibold">Filter:</span>
-                </div>
+            <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 text-slate-500">
+                        <FaFilter />
+                        <span className="text-sm font-semibold">Date Filter:</span>
+                    </div>
 
-                <div className="flex flex-wrap gap-2">
-                    {["all", "today", "yesterday", "range"].map((type) => (
-                        <button
-                            key={type}
-                            onClick={() => setFilterType(type as any)}
-                            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${filterType === type
-                                ? "bg-slate-900 text-white"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                }`}
-                        >
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </button>
-                    ))}
-                </div>
+                    <div className="flex flex-wrap gap-2">
+                        {["all", "today", "yesterday", "range"].map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type as any)}
+                                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${filterType === type
+                                    ? "bg-slate-900 text-white"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                    }`}
+                            >
+                                {type.charAt(0).toUpperCase() + type.slice(1)}
+                            </button>
+                        ))}
+                    </div>
 
-                {filterType === "range" && (
-                    <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
-                        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-                            <FaCalendarAlt className="text-slate-400" />
-                            <input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="bg-transparent text-sm outline-none"
-                            />
+                    {filterType === "range" && (
+                        <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+                            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                                <FaCalendarAlt className="text-slate-400" />
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="bg-transparent text-sm outline-none"
+                                />
+                            </div>
+                            <span className="text-slate-400">-</span>
+                            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                                <FaCalendarAlt className="text-slate-400" />
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="bg-transparent text-sm outline-none"
+                                />
+                            </div>
                         </div>
-                        <span className="text-slate-400">-</span>
-                        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-                            <FaCalendarAlt className="text-slate-400" />
+                    )}
+                </div>
+
+                <div className="border-t border-slate-100 pt-4 flex flex-wrap items-center gap-4">
+                    {/* Department Dropdown */}
+                    <div className="flex flex-col gap-1 min-w-[160px]">
+                        <label className="text-xs font-semibold text-slate-500">Department</label>
+                        <select
+                            value={selectedDeptId}
+                            onChange={(e) => setSelectedDeptId(e.target.value)}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:bg-white"
+                        >
+                            <option value="">All Departments</option>
+                            {departmentsList.map((dept) => (
+                                <option key={dept.id} value={dept.id}>
+                                    {dept.code || dept.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Year Dropdown */}
+                    <div className="flex flex-col gap-1 min-w-[120px]">
+                        <label className="text-xs font-semibold text-slate-500">Year</label>
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(e.target.value)}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:bg-white"
+                        >
+                            <option value="">All Years</option>
+                            {["1", "2", "3", "4"].map((y) => (
+                                <option key={y} value={y}>
+                                    Year {y}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Semester Dropdown */}
+                    <div className="flex flex-col gap-1 min-w-[120px]">
+                        <label className="text-xs font-semibold text-slate-500">Semester</label>
+                        <select
+                            value={selectedSem}
+                            onChange={(e) => setSelectedSem(e.target.value)}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:bg-white"
+                        >
+                            <option value="">All Semesters</option>
+                            {["1", "2"].map((s) => (
+                                <option key={s} value={s}>
+                                    Semester {s}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Faculty Username Filter */}
+                    <div className="flex flex-col gap-1 min-w-[200px] flex-1">
+                        <label className="text-xs font-semibold text-slate-500">Faculty Username</label>
+                        <div className="relative">
                             <input
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="bg-transparent text-sm outline-none"
+                                type="text"
+                                value={facultyUsernameFilter}
+                                onChange={(e) => setFacultyUsernameFilter(e.target.value)}
+                                placeholder="Search by faculty username..."
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:bg-white"
                             />
+                            {facultyUsernameFilter && (
+                                <button
+                                    onClick={() => setFacultyUsernameFilter("")}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <FaTimes size={12} />
+                                </button>
+                            )}
                         </div>
                     </div>
-                )}
+
+                    {/* Clear Filters Button */}
+                    {(selectedDeptId || selectedYear || selectedSem || facultyUsernameFilter) && (
+                        <div className="flex items-end self-end h-[38px]">
+                            <button
+                                onClick={() => {
+                                    setSelectedDeptId("");
+                                    setSelectedYear("");
+                                    setSelectedSem("");
+                                    setFacultyUsernameFilter("");
+                                }}
+                                className="text-xs font-semibold text-red-600 hover:text-red-800 transition-colors"
+                            >
+                                Clear filters
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
@@ -600,7 +744,14 @@ export default function HistoryPage() {
                                     return (
                                         <tr key={group.key} className={`group hover:bg-slate-50/80 transition-colors ${group.records.length > 1 ? "bg-indigo-50/10" : ""}`}>
                                             <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
-                                                {formatISTDate(group.date)}
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-slate-900">{formatISTDate(group.date)}</span>
+                                                    {group.primaryRecord.createdAt && (
+                                                        <span className="text-[11px] text-slate-400 mt-0.5 animate-pulse-subtle">
+                                                             {formatISTTime(group.primaryRecord.createdAt)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col">

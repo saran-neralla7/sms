@@ -20,6 +20,68 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Missing filters" }, { status: 400 });
     }
 
+    // Fetch user details from DB to enforce permissions
+    const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { department: true }
+    });
+
+    if (!user) {
+        return NextResponse.json({ error: "User profile not found." }, { status: 403 });
+    }
+
+    const userRole = (user.role || "").toUpperCase();
+    const userDeptCode = user.department?.code || "";
+    const userDeptId = user.departmentId;
+    const userFacultyId = user.facultyId;
+
+    const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole) || userDeptCode === "BSH";
+    let finalDepartmentId: string | null | undefined = departmentId;
+
+    const mbaDept = await prisma.department.findFirst({
+        where: { code: "MBA" }
+    });
+
+    if (mbaDept && (departmentId === mbaDept.id || finalDepartmentId === mbaDept.id)) {
+        if (userRole !== "ADMIN" && userDeptId !== mbaDept.id) {
+            return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for the MBA department." }, { status: 403 });
+        }
+    }
+
+    if (!isGlobal) {
+        if (userRole === "HOD") {
+            // Enforce HOD's department
+            finalDepartmentId = userDeptId || undefined;
+        } else if (userRole === "FACULTY") {
+            let isAllowed = false;
+            // 1. Check if they belong to the requested department
+            if (userDeptId && departmentId && userDeptId === departmentId) {
+                isAllowed = true;
+            } else {
+                // 2. Check if they are mapped to teach in the requested section
+                if (userFacultyId) {
+                    const mappingCount = await prisma.facultySubjectMapping.count({
+                        where: {
+                            facultyId: userFacultyId,
+                            sectionId: sectionId
+                        }
+                    });
+                    if (mappingCount > 0) {
+                        isAllowed = true;
+                    }
+                }
+            }
+
+            if (!isAllowed) {
+                return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for this department/section." }, { status: 403 });
+            }
+            finalDepartmentId = departmentId || userDeptId || undefined;
+        } else {
+            // Default lock down for other roles
+            finalDepartmentId = userDeptId || undefined;
+        }
+    }
+
     try {
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -31,7 +93,7 @@ export async function GET(request: Request) {
                 year,
                 semester,
                 OR: [
-                    { departmentId: departmentId || undefined },
+                    ...(finalDepartmentId ? [{ departmentId: finalDepartmentId }] : []),
                     { isElective: true }
                 ]
             },
@@ -86,7 +148,7 @@ export async function GET(request: Request) {
         } else {
             const classStudents = await getStudentsForClass({
                 academicYearId,
-                departmentId: departmentId || undefined,
+                departmentId: finalDepartmentId || undefined,
                 year,
                 semester,
                 sectionId: sectionId || undefined,

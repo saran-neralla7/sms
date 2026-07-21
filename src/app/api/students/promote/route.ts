@@ -11,7 +11,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { studentIds, targetYear, targetSemester, targetBatchId, isAlumni, academicYearId, graduationDate } = body;
+        const { studentIds, targetYear, targetSemester, targetBatchId, targetSectionId, targetDepartmentId, isAlumni, academicYearId, graduationDate } = body;
 
         if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
             return NextResponse.json({ error: "No students selected" }, { status: 400 });
@@ -100,6 +100,12 @@ export async function POST(request: Request) {
 
             if (targetBatchId) {
                 updateData.batchId = targetBatchId;
+            }
+            if (targetSectionId) {
+                updateData.sectionId = targetSectionId;
+            }
+            if (targetDepartmentId) {
+                updateData.departmentId = targetDepartmentId;
             }
 
             await prisma.student.updateMany({

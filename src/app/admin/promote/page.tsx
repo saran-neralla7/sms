@@ -138,6 +138,8 @@ export default function PromotePageRedesign() {
                 targetYear: destFilters.year,
                 targetSemester: destFilters.semester,
                 targetBatchId: destFilters.batchId,
+                targetSectionId: destFilters.sectionId || undefined,
+                targetDepartmentId: destFilters.departmentId || undefined,
                 isAlumni: false
             };
 

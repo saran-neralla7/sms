@@ -266,6 +266,7 @@ export default function FacultyTeachingDiary() {
 
     const handleAddEntry = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (formSubmitting) return;
         if (!formDate || !formPeriodId || !formTopic.trim()) {
             setFormError("All fields are required.");
             return;
@@ -311,6 +312,7 @@ export default function FacultyTeachingDiary() {
 
     const handleEditEntry = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (formSubmitting) return;
         if (!formDate || !formPeriodId || !formTopic.trim()) {
             setFormError("All fields are required.");
             return;

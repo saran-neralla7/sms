@@ -17,8 +17,71 @@ export async function GET(request: Request) {
     const sectionId = searchParams.get("sectionId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-
     const subjectId = searchParams.get("subjectId");
+
+    // Fetch user details from DB to enforce permissions
+    const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { department: true }
+    });
+
+    if (!user) {
+        return NextResponse.json({ error: "User profile not found." }, { status: 403 });
+    }
+
+    const userRole = (user.role || "").toUpperCase();
+    const userDeptCode = user.department?.code || "";
+    const userDeptId = user.departmentId;
+    const userFacultyId = user.facultyId;
+
+    const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole) || userDeptCode === "BSH";
+    let finalDepartmentId: string | null | undefined = departmentId;
+
+    const mbaDept = await prisma.department.findFirst({
+        where: { code: "MBA" }
+    });
+
+    if (mbaDept && (departmentId === mbaDept.id || finalDepartmentId === mbaDept.id)) {
+        if (userRole !== "ADMIN" && userDeptId !== mbaDept.id) {
+            return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for the MBA department." }, { status: 403 });
+        }
+    }
+
+    if (!isGlobal) {
+        if (userRole === "HOD") {
+            // Enforce HOD's department
+            finalDepartmentId = userDeptId || undefined;
+        } else if (userRole === "FACULTY") {
+            let isAllowed = false;
+            // 1. Check if they belong to the requested department
+            if (userDeptId && departmentId && userDeptId === departmentId) {
+                isAllowed = true;
+            } else {
+                // 2. Check if they are mapped to teach in the requested section/subject
+                if (userFacultyId) {
+                    const mappingWhere: any = { facultyId: userFacultyId };
+                    if (sectionId) mappingWhere.sectionId = sectionId;
+                    if (subjectId) mappingWhere.subjectId = subjectId;
+
+                    const mappingCount = await prisma.facultySubjectMapping.count({
+                        where: mappingWhere
+                    });
+                    if (mappingCount > 0) {
+                        isAllowed = true;
+                    }
+                }
+            }
+
+            if (!isAllowed) {
+                return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for this department/section." }, { status: 403 });
+            }
+            finalDepartmentId = departmentId || userDeptId || undefined;
+        } else {
+            // Default lock down for other roles
+            finalDepartmentId = userDeptId || undefined;
+        }
+    }
+
     let isElective = false;
 
     try {
@@ -46,7 +109,7 @@ export async function GET(request: Request) {
         end.setHours(23, 59, 59); // Include the entire end date
 
         // 1. Fetch History Records for the range
-        console.log(`[DEBUG REPORT] Fetching consolidated. Dept: ${departmentId}, Sec: ${sectionId}, Sem: ${semester}, Start: ${start.toISOString()}, End: ${end.toISOString()}`);
+        console.log(`[DEBUG REPORT] Fetching consolidated. Dept: ${finalDepartmentId}, Sec: ${sectionId}, Sem: ${semester}, Start: ${start.toISOString()}, End: ${end.toISOString()}`);
 
         const historyWhere: any = {
             semester,
@@ -61,7 +124,7 @@ export async function GET(request: Request) {
             historyWhere.subjectId = subjectId;
         } else {
             historyWhere.sectionId = sectionId;
-            historyWhere.departmentId = departmentId || undefined;
+            historyWhere.departmentId = finalDepartmentId || undefined;
             if (subjectId) {
                 historyWhere.subjectId = subjectId;
             }
@@ -104,7 +167,7 @@ export async function GET(request: Request) {
 
         const classStudents = await getStudentsForClass({
             academicYearId,
-            departmentId: departmentId || undefined,
+            departmentId: finalDepartmentId || undefined,
             year,
             semester,
             sectionId: (isElective ? undefined : sectionId) || undefined,

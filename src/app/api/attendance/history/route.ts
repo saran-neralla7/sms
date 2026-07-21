@@ -19,6 +19,7 @@ export async function GET(request: Request) {
         const semester = searchParams.get("semester");
         const sectionId = searchParams.get("sectionId");
         const departmentId = searchParams.get("departmentId");
+        const facultyUsername = searchParams.get("facultyUsername");
 
         const userRole = session.user.role;
         const userId = session.user.id;
@@ -41,6 +42,37 @@ export async function GET(request: Request) {
             sectionId: sectionId || undefined,
             departmentId: departmentId || undefined,
         };
+
+        if (facultyUsername) {
+            whereClause.user = {
+                username: {
+                    contains: facultyUsername,
+                    mode: "insensitive"
+                }
+            };
+        }
+
+        // Exclude MBA records for non-MBA, non-admin users
+        const userProfileForMbaCheck = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { departmentId: true, role: true }
+        });
+        const mbaDept = await prisma.department.findFirst({
+            where: { code: "MBA" }
+        });
+        if (mbaDept) {
+            const isMbaUser = userProfileForMbaCheck?.departmentId === mbaDept.id;
+            const isAdminUser = userProfileForMbaCheck?.role === "ADMIN";
+            if (!isMbaUser && !isAdminUser) {
+                if (whereClause.departmentId === mbaDept.id) {
+                    whereClause.departmentId = "NONE";
+                } else if (!whereClause.departmentId) {
+                    whereClause.departmentId = {
+                        not: mbaDept.id
+                    };
+                }
+            }
+        }
 
         if (userRole === "SMS_USER" || userRole === "FACULTY") {
             // SMS_USER & FACULTY: Strictly sees ONLY what they uploaded

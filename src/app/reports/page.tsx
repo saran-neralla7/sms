@@ -74,9 +74,19 @@ export default function ReportsPage() {
         setWeekDate("");
     };
 
+    const isBSHUser = useMemo(() => {
+        if (!session?.user?.departmentId || departments.length === 0) return false;
+        const bshDept = departments.find(d => d.code === "BSH");
+        return bshDept ? bshDept.id === session.user.departmentId : false;
+    }, [session, departments]);
+
+    const isGlobal = useMemo(() => {
+        const role = (session?.user?.role || "").toUpperCase();
+        return ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role) || isBSHUser;
+    }, [session, isBSHUser]);
+
     useEffect(() => {
-        const role = (session?.user.role || "").toUpperCase();
-        if (["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role)) fetchDepartments();
+        fetchDepartments();
         // Initial fetch based on tab
         if (activeTab === "daily") {
             fetchHistory();
@@ -96,12 +106,10 @@ export default function ReportsPage() {
             fetchElectives();
             return;
         }
-        const role = (session?.user.role || "").toUpperCase();
-        const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
         const effectiveDeptId = isGlobal ? departmentId : (session?.user as any)?.departmentId;
         if (effectiveDeptId) fetchSections(effectiveDeptId);
         if (effectiveDeptId && year && semester) fetchSubjects(effectiveDeptId);
-    }, [departmentId, session, year, semester, activeTab]);
+    }, [departmentId, session, year, semester, activeTab, isGlobal]);
 
     // Refetch when filters change (Daily Only)
     useEffect(() => {
@@ -721,7 +729,7 @@ export default function ReportsPage() {
 
                     {/* Filters */}
                     <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
-                        {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                        {isGlobal && (
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-slate-700">Department</label>
                                 <select
@@ -834,7 +842,7 @@ export default function ReportsPage() {
                     {/* Filters & Actions */}
                     <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:flex-row xl:items-end">
                         <div className="grid grid-cols-1 gap-4 flex-grow sm:grid-cols-2 lg:grid-cols-4">
-                            {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                            {isGlobal && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500">Department</label>
                                     <select
@@ -919,7 +927,7 @@ export default function ReportsPage() {
                         {/* Filters & Actions */}
                         <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                                {isGlobal && (
                                     <div className="space-y-1">
                                         <label className="text-xs font-semibold text-slate-500">Department</label>
                                         <select
@@ -1018,7 +1026,7 @@ export default function ReportsPage() {
                         {/* Filters */}
                         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                             <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user.role || "").toUpperCase()) && (
+                                {isGlobal && (
                                     <div className="space-y-1">
                                         <label className="text-xs font-semibold text-slate-500">Department</label>
                                         <select

@@ -209,119 +209,116 @@ export async function POST(request: Request) {
             ? Array.from(studentsBySection.keys())
             : tempTargetSectionIds;
 
-        const transactions: any[] = [];
+        const recordType = userRole === "SMS_USER" ? "SMS" : "ACADEMIC";
 
-        // For each section, for each period, create a record
-        for (const sid of targetSectionIds) {
-            const sectionStudentsRaw = studentsBySection.get(sid) || [];
-            const sectionStudents = [];
+        const records = await prisma.$transaction(async (tx) => {
+            const results = [];
 
-            // Strict Validation: Only accept students natively enrolled in this section (unless elective)
-            for (const s of sectionStudentsRaw) {
-                const roll = String(s.rollNumber).toLowerCase();
-                const dbStudent = validStudentMap.get(roll);
+            // For each section, for each period, create a record
+            for (const sid of targetSectionIds) {
+                const sectionStudentsRaw = studentsBySection.get(sid) || [];
+                const sectionStudents = [];
 
-                // If student exists and their DB sectionId matches the target sid (or is elective), accept them
-                if (dbStudent && (isElective || dbStudent.sectionId === sid)) {
-                    sectionStudents.push({
-                        "Roll Number": dbStudent.rollNumber,
-                        "Name": dbStudent.name,
-                        "Status": s.status || "Absent",
-                        "Mobile": dbStudent.mobile || dbStudent.studentContactNumber || s.mobile,
-                        "Subject ID": finalSubjectId || null,
-                        "Lab Batch ID": labBatchId || null
-                    });
-                }
-            }
+                // Strict Validation: Only accept students natively enrolled in this section (unless elective)
+                for (const s of sectionStudentsRaw) {
+                    const roll = String(s.rollNumber).toLowerCase();
+                    const dbStudent = validStudentMap.get(roll);
 
-            // If the filtered list is empty, skip this section to prevent blank records
-            if (sectionStudents.length === 0) continue;
-
-            // Resolve departmentId for this section's students if elective
-            let sectionDeptId = departmentId;
-            if (isElective && sectionStudents.length > 0) {
-                const firstRoll = String(sectionStudents[0]["Roll Number"]).toLowerCase();
-                const dbStudent = validStudentMap.get(firstRoll);
-                if (dbStudent?.departmentId) {
-                    sectionDeptId = dbStudent.departmentId;
-                }
-            }
-
-            // Serialize details for this section only
-            const details = JSON.stringify(sectionStudents);
-
-            // Create record for each period
-            const userRole = (session.user as any).role;
-            const recordType = userRole === "SMS_USER" ? "SMS" : "ACADEMIC";
-
-            for (const pid of finalPeriodIds) {
-                // Check if duplicate already exists based strictly on the DB unique constraint
-                const existing = await prisma.attendanceHistory.findFirst({
-                    where: {
-                        date: new Date(date),
-                        sectionId: sid,
-                        periodId: pid,
-                        year: String(year),
-                        departmentId: sectionDeptId
-                    }
-                });
-
-                if (existing) {
-                    // Pull existing details to support merging (e.g., merging Batch 1 and Batch 2 in the same class hour)
-                    let currentDetails: any[] = [];
-                    try {
-                        if (existing.details) {
-                            currentDetails = JSON.parse(existing.details);
-                        }
-                    } catch (e) {
-                        // Fallback to empty if parse fails
-                    }
-
-                    // Create a map by Roll Number to merge the new payload seamlessly
-                    const mergedMap = new Map();
-                    currentDetails.forEach(student => {
-                        mergedMap.set(student["Roll Number"], student);
-                    });
-
-                    // Overwrite/Append with the newly submitted students (this covers Batch 2 adding to Batch 1)
-                    sectionStudents.forEach((s: any) => {
-                        mergedMap.set(s["Roll Number"], {
-                            "Roll Number": s["Roll Number"],
-                            "Name": s["Name"],
-                            "Status": s["Status"],
-                            "Mobile": s["Mobile"],
-                            "Subject ID": s["Subject ID"],
-                            "Lab Batch ID": s["Lab Batch ID"]
+                    // If student exists and their DB sectionId matches the target sid (or is elective), accept them
+                    if (dbStudent && (isElective || dbStudent.sectionId === sid)) {
+                        sectionStudents.push({
+                            "Roll Number": dbStudent.rollNumber,
+                            "Name": dbStudent.name,
+                            "Status": s.status || "Absent",
+                            "Mobile": dbStudent.mobile || dbStudent.studentContactNumber || s.mobile,
+                            "Subject ID": finalSubjectId || null,
+                            "Lab Batch ID": labBatchId || null
                         });
+                    }
+                }
+
+                // If the filtered list is empty, skip this section to prevent blank records
+                if (sectionStudents.length === 0) continue;
+
+                // Resolve departmentId for this section's students if elective
+                let sectionDeptId = departmentId;
+                if (isElective && sectionStudents.length > 0) {
+                    const firstRoll = String(sectionStudents[0]["Roll Number"]).toLowerCase();
+                    const dbStudent = validStudentMap.get(firstRoll);
+                    if (dbStudent?.departmentId) {
+                        sectionDeptId = dbStudent.departmentId;
+                    }
+                }
+
+                // Serialize details for this section only
+                const details = JSON.stringify(sectionStudents);
+
+                for (const pid of finalPeriodIds) {
+                    // Check if duplicate already exists based strictly on the DB unique constraint
+                    const existing = await tx.attendanceHistory.findFirst({
+                        where: {
+                            date: new Date(date),
+                            sectionId: sid,
+                            periodId: pid,
+                            year: String(year),
+                            departmentId: sectionDeptId
+                        }
                     });
 
-                    const mergedDetailsJson = JSON.stringify(Array.from(mergedMap.values()));
+                    if (existing) {
+                        // Pull existing details to support merging (e.g., merging Batch 1 and Batch 2 in the same class hour)
+                        let currentDetails: any[] = [];
+                        try {
+                            if (existing.details) {
+                                currentDetails = JSON.parse(existing.details);
+                            }
+                        } catch (e) {
+                            // Fallback to empty if parse fails
+                        }
 
-                    // Update data object
-                    const updateData: any = {
-                        status: "Completed",
-                        type: recordType,
-                        fileName: "Manual Entry Update",
-                        downloadedBy: (session.user as any).id,
-                        details: mergedDetailsJson
-                    };
+                        // Create a map by Roll Number to merge the new payload seamlessly
+                        const mergedMap = new Map();
+                        currentDetails.forEach(student => {
+                            mergedMap.set(student["Roll Number"], student);
+                        });
 
-                    if (topicsTaught !== undefined) {
-                        updateData.topicsTaught = topicsTaught;
-                    }
+                        // Overwrite/Append with the newly submitted students (this covers Batch 2 adding to Batch 1)
+                        sectionStudents.forEach((s: any) => {
+                            mergedMap.set(s["Roll Number"], {
+                                "Roll Number": s["Roll Number"],
+                                "Name": s["Name"],
+                                "Status": s["Status"],
+                                "Mobile": s["Mobile"],
+                                "Subject ID": s["Subject ID"],
+                                "Lab Batch ID": s["Lab Batch ID"]
+                            });
+                        });
 
-                    // Update the existing record instead of skipping or crashing
-                    transactions.push(
-                        prisma.attendanceHistory.update({
+                        const mergedDetailsJson = JSON.stringify(Array.from(mergedMap.values()));
+
+                        // Update data object
+                        const updateData: any = {
+                            status: "Completed",
+                            type: recordType,
+                            fileName: "Manual Entry Update",
+                            downloadedBy: (session.user as any).id,
+                            details: mergedDetailsJson
+                        };
+
+                        if (topicsTaught !== undefined) {
+                            updateData.topicsTaught = topicsTaught;
+                        }
+
+                        // Update the existing record instead of skipping or crashing
+                        const updated = await tx.attendanceHistory.update({
                             where: { id: existing.id },
                             data: updateData
-                        })
-                    );
-                    continue;
-                }
+                        });
+                        results.push(updated);
+                        continue;
+                    }
 
-                transactions.push(
-                    prisma.attendanceHistory.create({
+                    const created = await tx.attendanceHistory.create({
                         data: {
                             date: new Date(date),
                             year,
@@ -338,12 +335,12 @@ export async function POST(request: Request) {
                             details,
                             topicsTaught: topicsTaught || null
                         }
-                    })
-                );
+                    });
+                    results.push(created);
+                }
             }
-        }
-
-        const records = await prisma.$transaction(transactions);
+            return results;
+        });
 
         // Sync topicsTaught to other sections mapped to the same faculty for the same subject, date, and periods
         if (topicsTaught && finalSubjectId) {
@@ -413,7 +410,7 @@ export async function POST(request: Request) {
         // Audit Log for Attendance Submission
         await logActivity(
             (session.user as any).id,
-            transactions.some(t => t.update) ? "UPDATE" : "CREATE",
+            records.some(r => r.fileName === "Manual Entry Update") ? "UPDATE" : "CREATE",
             "Attendance",
             targetSectionIds.join(", "),
             {
