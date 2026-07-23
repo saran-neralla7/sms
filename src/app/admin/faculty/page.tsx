@@ -208,10 +208,17 @@ export default function FacultyPage() {
                             continue;
                         }
 
+                        const shortName = String(row['Short Name'] || row['ShortName'] || "").trim();
+                        if (!shortName) {
+                            failCount++;
+                            if (importErrors.length < 20) importErrors.push(`Emp ${empCode}: Short Name is required`);
+                            continue;
+                        }
+
                         const payload = {
                             empCode,
                             empName: String(row['Emp Name'] || row['EmpName'] || ""),
-                            shortName: String(row['Short Name'] || row['ShortName'] || ""),
+                            shortName,
                             gender: String(row['Gender'] || "Other"),
                             dob: parseDate(row['DOB']),
                             joinDate: parseDate(row['Join Date'] || row['JoinDate']),
@@ -588,7 +595,7 @@ export default function FacultyPage() {
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <Input label="Employee Code *" value={formData.empCode} onChange={v => setFormData({ ...formData, empCode: v })} required disabled={!!editingFaculty} />
                             <Input label="Employee Name *" value={formData.empName} onChange={v => setFormData({ ...formData, empName: v })} required />
-                            <Input label="Short Name" value={formData.shortName} onChange={v => setFormData({ ...formData, shortName: v })} />
+                            <Input label="Short Name *" value={formData.shortName} onChange={v => setFormData({ ...formData, shortName: v })} required />
 
                             <Input label="Designation *" value={formData.designation} onChange={v => setFormData({ ...formData, designation: v })} required />
 

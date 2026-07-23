@@ -64,31 +64,53 @@ export async function PUT(
         const body = await req.json();
         const { id } = params;
 
-        const existing = await prisma.faculty.findUnique({ where: { id } });
+        const shortName = typeof body.shortName === "string" ? body.shortName.trim() : "";
+        if (!shortName) {
+            return NextResponse.json({ error: "Faculty Short Name is required" }, { status: 400 });
+        }
+
+        const existing = await prisma.faculty.findUnique({
+            where: { id },
+            include: { user: true }
+        });
         if (!existing) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
 
-        const faculty = await prisma.faculty.update({
-            where: { id },
-            data: {
-                empName: body.empName,
-                shortName: body.shortName,
-                dob: body.dob ? new Date(body.dob) : undefined,
-                gender: body.gender,
-                joinDate: body.joinDate ? new Date(body.joinDate) : undefined,
-                resignDate: body.resignDate ? new Date(body.resignDate) : null,
-                designation: body.designation,
-                departmentId: body.departmentId,
-                mobile: body.mobile,
-                email: body.email,
-                bloodGroup: body.bloodGroup,
-                basicSalary: body.basicSalary ? parseFloat(body.basicSalary) : null,
-                fatherName: body.fatherName,
-                motherName: body.motherName,
-                address: body.address,
-                qualification: body.qualification,
-                aadharNo: body.aadharNo,
-                panNo: body.panNo,
+        const faculty = await prisma.$transaction(async (tx) => {
+            const updated = await tx.faculty.update({
+                where: { id },
+                data: {
+                    empName: body.empName,
+                    shortName: shortName,
+                    dob: body.dob ? new Date(body.dob) : undefined,
+                    gender: body.gender,
+                    joinDate: body.joinDate ? new Date(body.joinDate) : undefined,
+                    resignDate: body.resignDate ? new Date(body.resignDate) : null,
+                    designation: body.designation,
+                    departmentId: body.departmentId,
+                    mobile: body.mobile,
+                    email: body.email,
+                    bloodGroup: body.bloodGroup,
+                    basicSalary: body.basicSalary ? parseFloat(body.basicSalary) : null,
+                    fatherName: body.fatherName,
+                    motherName: body.motherName,
+                    address: body.address,
+                    qualification: body.qualification,
+                    aadharNo: body.aadharNo,
+                    panNo: body.panNo,
+                }
+            });
+
+            if (existing.user) {
+                await tx.user.update({
+                    where: { id: existing.user.id },
+                    data: {
+                        username: shortName,
+                        departmentId: body.departmentId
+                    }
+                });
             }
+
+            return updated;
         });
 
         return NextResponse.json(faculty);

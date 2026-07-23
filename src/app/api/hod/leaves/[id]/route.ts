@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/logging";
 
 export async function PATCH(
   req: NextRequest,
@@ -50,6 +51,14 @@ export async function PATCH(
         hodApprovedAt: new Date(),
       },
     });
+
+    await logActivity(
+      session.user.id,
+      action === "approve" ? "APPROVE" : "REJECT",
+      "LeaveRequest",
+      `${leaveRequest.faculty.empName} | ${leaveRequest.leaveType} | ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()}`,
+      { leaveRequestId: id, action, remarks, newStatus: updatedRequest.status }
+    );
 
     return NextResponse.json({ success: true, leaveRequest: updatedRequest });
   } catch (error: any) {

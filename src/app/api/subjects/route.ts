@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isBSHHod } from "@/lib/permissions";
 import { cookies } from "next/headers";
+import { logActivity } from "@/lib/logging";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -51,36 +52,44 @@ export async function GET(request: Request) {
             where.year = "1";
         }
 
-        // FACULTY SUBJECT MAPPING FALLBACK LOGIC
+        // FACULTY SUBJECT MAPPING LOGIC
         const user = session?.user as any;
         const isFaculty = user?.role === "FACULTY";
-        if (isFaculty && user?.facultyId) {
-            const cookieStore = await cookies();
-            let academicYearId = cookieStore.get("academic-year-id")?.value;
-            if (!academicYearId) {
-                const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
-                if (activeYear) academicYearId = activeYear.id;
+        if (isFaculty) {
+            let facultyId = user?.facultyId;
+            if (!facultyId && user?.username) {
+                const fac = await prisma.faculty.findFirst({
+                    where: { user: { username: user.username } },
+                    select: { id: true }
+                });
+                if (fac) facultyId = fac.id;
             }
 
-            if (academicYearId) {
-                const mappings = await prisma.facultySubjectMapping.findMany({
-                    where: {
-                        facultyId: user.facultyId,
-                        academicYearId: academicYearId,
-                        subject: {
-                            year: year || undefined,
-                            semester: semester || undefined,
-                            ...(onlyElectives ? { isElective: true } : (includeElectives ? {} : { departmentId: departmentId || undefined }))
-                        }
-                    },
-                    select: { subjectId: true }
-                });
-                const mappedIds = mappings.map(m => m.subjectId);
-                
-                // If faculty has mappings for this criteria, restrict subjects. 
-                // If empty, they fall back to seeing all subjects.
-                if (mappedIds.length > 0) {
-                    where.id = { in: mappedIds };
+            if (facultyId) {
+                const cookieStore = await cookies();
+                let academicYearId = cookieStore.get("academic-year-id")?.value;
+                if (!academicYearId) {
+                    const activeYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+                    if (activeYear) academicYearId = activeYear.id;
+                }
+
+                if (academicYearId) {
+                    const mappings = await prisma.facultySubjectMapping.findMany({
+                        where: {
+                            facultyId: facultyId,
+                            academicYearId: academicYearId,
+                            subject: {
+                                year: year || undefined,
+                                semester: semester || undefined
+                            }
+                        },
+                        select: { subjectId: true }
+                    });
+                    const mappedIds = Array.from(new Set(mappings.map(m => m.subjectId)));
+                    
+                    if (mappedIds.length > 0) {
+                        where.id = { in: mappedIds };
+                    }
                 }
             }
         }
@@ -153,6 +162,13 @@ export async function POST(request: Request) {
                 departmentId
             }
         });
+        await logActivity(
+            session.user.id,
+            "CREATE",
+            "Subject",
+            `${name} (${code}) | Year ${year} Sem ${semester}`,
+            { subjectId: subject.id, name, code, year, semester, type, departmentId }
+        );
         return NextResponse.json(subject);
     } catch (error) {
         console.error("Error creating subject:", error);

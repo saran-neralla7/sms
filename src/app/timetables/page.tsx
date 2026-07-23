@@ -42,6 +42,13 @@ export default function TimetablesPage() {
     const [gridData, setGridData] = useState<Record<string, Array<{ subjectId: string | null, labBatchId: string | null, electiveSlotId: string | null, isLunch: boolean, isLab: boolean }>>>({});
     const [labBatches, setLabBatches] = useState<any[]>([]);
 
+    const [activeTab, setActiveTab] = useState<"section" | "common-oe">("section");
+    const [commonYear, setCommonYear] = useState("4");
+    const [commonSemester, setCommonSemester] = useState("1");
+    const [commonGrid, setCommonGrid] = useState<Record<string, string>>({}); // `${dayOfWeek}-${periodId}` -> slotId
+    const [commonLoading, setCommonLoading] = useState(false);
+    const [commonSaving, setCommonSaving] = useState(false);
+
     useEffect(() => {
         fetchDepartments();
     }, []);
@@ -287,16 +294,124 @@ export default function TimetablesPage() {
         }
     };
 
+    useEffect(() => {
+        if (activeTab === "common-oe") {
+            loadCommonOeSchedule();
+        }
+    }, [activeTab, commonYear, commonSemester]);
+
+    const loadCommonOeSchedule = async () => {
+        setCommonLoading(true);
+        setStatus({ type: null, message: "" });
+        try {
+            const [periodsRes, commonRes] = await Promise.all([
+                fetch("/api/periods"),
+                fetch(`/api/timetables/common-oe?year=${commonYear}&semester=${commonSemester}`)
+            ]);
+
+            if (periodsRes.ok) {
+                const fetchedPeriods = await periodsRes.json();
+                fetchedPeriods.sort((a: any, b: any) => a.order - b.order);
+                setPeriods(fetchedPeriods);
+            }
+
+            if (commonRes.ok) {
+                const data = await commonRes.json();
+                if (data.electiveSlots) setElectiveSlots(data.electiveSlots);
+
+                const gridMap: Record<string, string> = {};
+                (data.entries || []).forEach((e: any) => {
+                    const key = `${e.dayOfWeek}_${e.periodId}`;
+                    const slotName = e.electiveSlot?.name || "";
+                    if (e.electiveSlotId && (slotName.toUpperCase().startsWith("OE") || slotName.toUpperCase().includes("OPEN ELECTIVE"))) {
+                        gridMap[key] = e.electiveSlotId;
+                    }
+                });
+                setCommonGrid(gridMap);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setCommonLoading(false);
+        }
+    };
+
+    const handleSaveCommonOeSchedule = async () => {
+        setCommonSaving(true);
+        setStatus({ type: null, message: "" });
+        try {
+            const entriesToSave: any[] = [];
+            Object.entries(commonGrid).forEach(([key, slotId]) => {
+                if (!slotId) return;
+                const [dayStr, periodId] = key.split("_");
+                entriesToSave.push({
+                    dayOfWeek: parseInt(dayStr, 10),
+                    periodId,
+                    electiveSlotId: slotId
+                });
+            });
+
+            const res = await fetch("/api/timetables/common-oe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    year: commonYear,
+                    semester: commonSemester,
+                    entries: entriesToSave,
+                    activationDate
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: "success", message: data.message || "Common Open Elective schedule published successfully across all sections!" });
+            } else {
+                setStatus({ type: "error", message: data.error || "Failed to publish common OE schedule." });
+            }
+        } catch (err: any) {
+            console.error(err);
+            setStatus({ type: "error", message: "Failed to publish common OE schedule." });
+        } finally {
+            setCommonSaving(false);
+        }
+    };
+
     return (
         <div className="mx-auto max-w-full overflow-x-hidden pb-10">
             {/* Header */}
-            <div className="mb-8 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
-                    <FaCalendarAlt size={24} />
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+                        <FaCalendarAlt size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-900">Timetable Configuration</h1>
+                        <p className="text-sm text-slate-500">Map section subjects and global Open Elective schedules.</p>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Timetable Configuration</h1>
-                    <p className="text-sm text-slate-500">Map subjects and lunch periods for specific sections.</p>
+
+                {/* Tab Switcher */}
+                <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+                    <button
+                        onClick={() => setActiveTab("section")}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-all ${
+                            activeTab === "section"
+                                ? "bg-white text-slate-900 shadow-sm"
+                                : "text-slate-600 hover:text-slate-900"
+                        }`}
+                    >
+                        Section Timetable Builder
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("common-oe")}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-all flex items-center gap-1.5 ${
+                            activeTab === "common-oe"
+                                ? "bg-emerald-600 text-white shadow-sm"
+                                : "text-slate-600 hover:text-slate-900"
+                        }`}
+                    >
+                        🌿 Common Open Elective Schedule
+                    </button>
                 </div>
             </div>
 
@@ -308,8 +423,10 @@ export default function TimetablesPage() {
                 </div>
             )}
 
-            {/* Filters Row */}
-            <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm relative z-20">
+            {activeTab === "section" && (
+                <>
+                    {/* Filters Row */}
+                    <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm relative z-20">
                 <div className="mb-4 flex items-center gap-2 text-slate-500">
                     <FaFilter />
                     <span className="text-sm font-semibold">Select Target Section</span>
@@ -573,6 +690,144 @@ export default function TimetablesPage() {
                             </table>
                         )}
                     </div>
+                </div>
+            )}
+            </>
+            )}
+
+            {/* Common Open Elective Tab */}
+            {activeTab === "common-oe" && (
+                <div className="space-y-6">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-emerald-950 flex items-center gap-2">
+                                    <span>🌿</span> Global Open Elective Timetable
+                                </h3>
+                                <p className="text-xs text-emerald-800 mt-1">
+                                    Define Open Elective time slots (e.g., OE-3, OE-4) for a given Academic Year & Semester. Publishing will broadcast these slots to <strong>ALL department sections</strong> automatically.
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Year</label>
+                                    <select
+                                        value={commonYear}
+                                        onChange={(e) => setCommonYear(e.target.value)}
+                                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-800"
+                                    >
+                                        <option value="1">1st Year</option>
+                                        <option value="2">2nd Year</option>
+                                        <option value="3">3rd Year</option>
+                                        <option value="4">4th Year</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Semester</label>
+                                    <select
+                                        value={commonSemester}
+                                        onChange={(e) => setCommonSemester(e.target.value)}
+                                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-800"
+                                    >
+                                        <option value="1">1st Sem</option>
+                                        <option value="2">2nd Sem</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-slate-600">Effective Date</label>
+                                    <input
+                                        type="date"
+                                        value={activationDate}
+                                        onChange={(e) => setActivationDate(e.target.value)}
+                                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800"
+                                    />
+                                </div>
+
+                                <div className="flex items-end">
+                                    <button
+                                        onClick={handleSaveCommonOeSchedule}
+                                        disabled={commonSaving || commonLoading}
+                                        className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-extrabold text-white shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                    >
+                                        {commonSaving ? <LogoSpinner /> : <FaSave />}
+                                        {commonSaving ? "Publishing..." : "Publish Global OE Schedule"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {commonLoading ? (
+                        <div className="flex min-h-[40vh] items-center justify-center">
+                            <LogoSpinner />
+                            <span className="ml-3 text-sm text-slate-500 font-medium">Loading Common OE Schedule...</span>
+                        </div>
+                    ) : (
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200">
+                                            <th className="p-3 border-r border-slate-200 text-left w-32 font-bold text-slate-700 text-xs uppercase">
+                                                Day / Period
+                                            </th>
+                                            {periods.map((p) => (
+                                                <th key={p.id} className="p-3 border-r border-slate-200 text-center font-bold text-slate-700 text-xs last:border-r-0 min-w-[160px]">
+                                                    <span className="text-emerald-700 font-black">{p.name}</span>
+                                                    <div className="text-[10px] text-slate-400 font-normal">{p.startTime} - {p.endTime}</div>
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {DAYS.map((day) => (
+                                            <tr key={day.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                <td className="p-3 border-r border-slate-200 font-black text-slate-800 text-xs bg-slate-50 uppercase">
+                                                    {day.name}
+                                                </td>
+                                                {periods.map((period) => {
+                                                    const cellKey = `${day.id}_${period.id}`;
+                                                    const selectedSlotId = commonGrid[cellKey] || "";
+
+                                                    return (
+                                                        <td key={period.id} className="p-2 border-r border-slate-100 last:border-r-0 align-middle">
+                                                            <select
+                                                                value={selectedSlotId}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setCommonGrid((prev) => ({
+                                                                        ...prev,
+                                                                        [cellKey]: val
+                                                                    }));
+                                                                }}
+                                                                className={`w-full rounded-lg border text-xs font-bold p-2 outline-none transition-colors ${
+                                                                    selectedSlotId
+                                                                        ? "bg-emerald-50 border-emerald-300 text-emerald-900 shadow-sm"
+                                                                        : "bg-white border-slate-200 text-slate-400"
+                                                                }`}
+                                                            >
+                                                                <option value="">-- No OE Slot --</option>
+                                                                {electiveSlots
+                                                                    .filter((slot) => slot.name.toUpperCase().startsWith("OE") || slot.name.toUpperCase().includes("OPEN ELECTIVE"))
+                                                                    .map((slot) => (
+                                                                        <option key={slot.id} value={slot.id}>
+                                                                            🌿 {slot.name}
+                                                                        </option>
+                                                                    ))}
+                                                            </select>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

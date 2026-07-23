@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getElectiveBatches } from "@/lib/elective-batches";
 import { getStudentsForClass } from "@/lib/student-utils";
+import { logActivity } from "@/lib/logging";
 
 function normalizeSemester(sem: string | null): string {
   if (!sem) return "";
@@ -480,6 +481,17 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    // Audit log
+    try {
+      const subject = await prisma.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
+      const section = await prisma.section.findUnique({ where: { id: canonicalSectionId }, select: { name: true } });
+      const label = `${subject?.name || subjectId} | Year ${year} Sem ${semester}${section ? ` | ${section.name}` : ''}`;
+      const session = await getServerSession(authOptions);
+      if (session) {
+        await logActivity(session.user.id, courseFile.createdAt === courseFile.updatedAt ? "CREATE" : "UPDATE", "CourseFile", label, { subjectId, year, semester, sectionId: canonicalSectionId });
+      }
+    } catch (_) {}
+
     return NextResponse.json({ success: true, courseFile });
   } catch (error: any) {
     console.error("Error in POST /api/course-files:", error);
@@ -553,6 +565,16 @@ export async function PATCH(req: NextRequest) {
         ...updateData
       }
     });
+
+    // Audit log
+    try {
+      const subject = await prisma.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
+      const section = await prisma.section.findUnique({ where: { id: canonicalSectionId }, select: { name: true } });
+      const label = `${subject?.name || subjectId} | Year ${year} Sem ${semester}${section ? ` | ${section.name}` : ''}`;
+      if (session) {
+        await logActivity(session.user.id, "UPDATE", "CourseFile", label, { subjectId, year, semester, sectionId: canonicalSectionId, ...updateData });
+      }
+    } catch (_) {}
 
     return NextResponse.json({ success: true, courseFile });
   } catch (error: any) {

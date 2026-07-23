@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateFacultyLeaveQuota } from "@/lib/leaves";
+import { logActivity } from "@/lib/logging";
 
 export async function GET(req: NextRequest) {
   try {
@@ -126,6 +127,14 @@ export async function POST(req: NextRequest) {
         status: "PENDING_HOD",
       },
     });
+
+    await logActivity(
+      session.user.id,
+      "CREATE",
+      "LeaveRequest",
+      `${faculty.empName} | ${leaveType} | ${startDateStr} to ${endDateStr} (${numberOfDays} day(s))`,
+      { leaveRequestId: leaveRequest.id, leaveType, startDate: startDateStr, endDate: endDateStr, numberOfDays, reason }
+    );
 
     return NextResponse.json({ success: true, leaveRequest });
   } catch (error: any) {

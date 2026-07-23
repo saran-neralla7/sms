@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { logActivity } from "@/lib/logging";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -381,6 +382,18 @@ export async function POST(request: Request) {
              }
         }
 
+        // Fetch section name for human-readable logging
+        const sectionInfo = await prisma.section.findUnique({ where: { id: sectionId }, select: { name: true } });
+        const label = `${subject.name} | Year ${subject.year} Sem ${subject.semester}${sectionInfo ? ` | ${sectionInfo.name}` : ''} | ${date}`;
+
+        await logActivity(
+            session.user.id,
+            existing ? "UPDATE" : "CREATE",
+            "TeachingDiary",
+            label,
+            { subjectId, sectionId, date, periodId, topicsTaught }
+        );
+
         return NextResponse.json(record);
     } catch (error: any) {
         console.error("Failed to create teaching diary entry:", error);
@@ -463,6 +476,15 @@ export async function PUT(request: Request) {
                 }
             });
         }
+
+        // Audit log for update
+        await logActivity(
+            session.user.id,
+            "UPDATE",
+            "TeachingDiary",
+            id,
+            { id, topicsTaught }
+        );
 
         return NextResponse.json(updated);
     } catch (error: any) {
@@ -584,6 +606,14 @@ export async function DELETE(request: Request) {
                 });
             }
         }
+
+        await logActivity(
+            session.user.id,
+            "DELETE",
+            "TeachingDiary",
+            id,
+            { id }
+        );
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

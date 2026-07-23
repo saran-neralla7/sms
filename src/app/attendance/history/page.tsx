@@ -162,9 +162,16 @@ export default function HistoryPage() {
             setViewAbsenteesPeriodMap(absenteePeriodMap);
             setViewGroup(group);
             
+            const uniqueCombinedDetails = Object.keys(allStudentMap).sort().map(roll => ({
+                "Roll Number": roll,
+                "Name": allStudentMap[roll].name,
+                "Status": allStudentMap[roll].status,
+                "Mobile": allStudentMap[roll].mobile
+            }));
+
             setViewRecord({
                 ...group.primaryRecord,
-                details: group.combinedDetails
+                details: JSON.stringify(uniqueCombinedDetails)
             });
             setIsViewModalOpen(true);
         } catch (e) {

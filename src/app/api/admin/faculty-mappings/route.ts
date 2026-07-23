@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { logActivity } from "@/lib/logging";
 
 export async function GET(req: Request) {
     try {
@@ -108,6 +109,17 @@ export async function POST(req: Request) {
                 }
             }
         });
+
+        // Audit log with human-readable context
+        const sectionInfo = await prisma.section.findUnique({ where: { id: sectionId }, select: { name: true } });
+        const year = await prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { name: true } });
+        await logActivity(
+            session.user.id,
+            "UPDATE",
+            "FacultyMapping",
+            `Section: ${sectionInfo?.name || sectionId} | AY: ${year?.name || academicYearId}`,
+            { sectionId, academicYearId, departmentId, mappingCount: mappings?.length || 0 }
+        );
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

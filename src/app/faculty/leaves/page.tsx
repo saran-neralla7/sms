@@ -26,9 +26,22 @@ export default function FacultyLeavesPage() {
 
   // State variables
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"my-leaves" | "hod-approvals">("my-leaves");
+  const [activeTab, setActiveTab] = useState<"my-leaves" | "hod-approvals" | "hod-upcoming" | "hod-all">("my-leaves");
   const [facultyData, setFacultyData] = useState<any>(null);
   const [hodPendingLeaves, setHodPendingLeaves] = useState<any[]>([]);
+  const [hodAllLeaves, setHodAllLeaves] = useState<any[]>([]);
+  const [hodUpcomingLeaves, setHodUpcomingLeaves] = useState<any[]>([]);
+
+  // HOD Filters
+  const [hodStatusFilter, setHodStatusFilter] = useState("");
+  const [hodLeaveTypeFilter, setHodLeaveTypeFilter] = useState("");
+  const [hodYearFilter, setHodYearFilter] = useState(new Date().getFullYear().toString());
+
+  // HOD Date Filters
+  const [hodDateMode, setHodDateMode] = useState<"ALL" | "TODAY" | "SPECIFIC" | "RANGE">("ALL");
+  const [hodSpecificDate, setHodSpecificDate] = useState("");
+  const [hodStartDateFilter, setHodStartDateFilter] = useState("");
+  const [hodEndDateFilter, setHodEndDateFilter] = useState("");
 
   // Apply Leave Modal State
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
@@ -58,9 +71,53 @@ export default function FacultyLeavesPage() {
       fetchLeavesData();
       if (isHOD) {
         fetchHodPendingLeaves();
+        fetchHodLeavesData();
       }
     }
   }, [status, isHOD]);
+
+  useEffect(() => {
+    if (status === "authenticated" && isHOD) {
+      fetchHodLeavesData();
+    }
+  }, [activeTab, hodStatusFilter, hodLeaveTypeFilter, hodYearFilter, hodDateMode, hodSpecificDate, hodStartDateFilter, hodEndDateFilter]);
+
+  const fetchHodLeavesData = async () => {
+    try {
+      let url = `/api/hod/leaves/all?1=1`;
+
+      if (activeTab === "hod-upcoming") {
+        url += `&upcoming=true`;
+      } else {
+        if (hodYearFilter && hodYearFilter !== "ALL") url += `&year=${hodYearFilter}`;
+      }
+
+      if (hodStatusFilter) url += `&status=${hodStatusFilter}`;
+      if (hodLeaveTypeFilter) url += `&leaveType=${hodLeaveTypeFilter}`;
+
+      if (hodDateMode === "TODAY") {
+        const todayStr = new Date().toISOString().split("T")[0];
+        url += `&startDate=${todayStr}&endDate=${todayStr}`;
+      } else if (hodDateMode === "SPECIFIC" && hodSpecificDate) {
+        url += `&startDate=${hodSpecificDate}&endDate=${hodSpecificDate}`;
+      } else if (hodDateMode === "RANGE") {
+        if (hodStartDateFilter) url += `&startDate=${hodStartDateFilter}`;
+        if (hodEndDateFilter) url += `&endDate=${hodEndDateFilter}`;
+      }
+
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (activeTab === "hod-upcoming") {
+          setHodUpcomingLeaves(data.leaves || []);
+        } else {
+          setHodAllLeaves(data.leaves || []);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Auto-calculate numberOfDays when dates change
   useEffect(() => {
@@ -268,6 +325,120 @@ export default function FacultyLeavesPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("hod-upcoming")}
+              className={`px-4 py-2 font-semibold text-sm transition-colors border-b-2 flex items-center gap-1.5 ${
+                activeTab === "hod-upcoming"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <FaCalendarAlt className="text-emerald-600" /> Upcoming Department Leaves
+            </button>
+            <button
+              onClick={() => setActiveTab("hod-all")}
+              className={`px-4 py-2 font-semibold text-sm transition-colors border-b-2 ${
+                activeTab === "hod-all"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              All Department Leaves
+            </button>
+          </div>
+        )}
+
+        {/* Filter Controls Bar for HOD Department Views (hod-upcoming & hod-all) */}
+        {(activeTab === "hod-upcoming" || activeTab === "hod-all") && isHOD && (
+          <div className="mb-6 flex flex-wrap gap-3 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            {/* Leave Type Filter */}
+            <select
+              value={hodLeaveTypeFilter}
+              onChange={(e) => setHodLeaveTypeFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">All Leave Types</option>
+              <option value="CL">CL (Casual Leave)</option>
+              <option value="OD">OD (On Duty)</option>
+              <option value="AL">AL (Academic Leave)</option>
+              <option value="ML">ML (Medical Leave)</option>
+            </select>
+
+            {/* Status Filter */}
+            <select
+              value={hodStatusFilter}
+              onChange={(e) => setHodStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">All Statuses</option>
+              <option value="PENDING_HOD">Pending HOD</option>
+              <option value="PENDING_DIRECTOR">Pending Director</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+
+            {/* Date Preset Filter */}
+            <select
+              value={hodDateMode}
+              onChange={(e) => setHodDateMode(e.target.value as any)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500 font-medium text-slate-700"
+            >
+              <option value="ALL">📅 All Dates</option>
+              <option value="TODAY">📍 Today</option>
+              <option value="SPECIFIC">🎯 Specific Date</option>
+              <option value="RANGE">📆 Date Range</option>
+            </select>
+
+            {/* Specific Date Input */}
+            {hodDateMode === "SPECIFIC" && (
+              <input
+                type="date"
+                value={hodSpecificDate}
+                onChange={(e) => setHodSpecificDate(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-500"
+              />
+            )}
+
+            {/* Date Range Inputs */}
+            {hodDateMode === "RANGE" && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={hodStartDateFilter}
+                  onChange={(e) => setHodStartDateFilter(e.target.value)}
+                  placeholder="From"
+                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                />
+                <span className="text-xs text-slate-400">to</span>
+                <input
+                  type="date"
+                  value={hodEndDateFilter}
+                  onChange={(e) => setHodEndDateFilter(e.target.value)}
+                  placeholder="To"
+                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Year Filter (only when Date Preset is ALL) */}
+            {hodDateMode === "ALL" && activeTab === "hod-all" && (
+              <select
+                value={hodYearFilter}
+                onChange={(e) => setHodYearFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="ALL">All Years</option>
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <span className="ml-auto text-xs text-slate-500 font-medium">
+              {(activeTab === "hod-upcoming" ? hodUpcomingLeaves : hodAllLeaves).length} record(s)
+            </span>
           </div>
         )}
 
@@ -463,6 +634,75 @@ export default function FacultyLeavesPage() {
               ) : (
                 <div className="py-12 text-center text-slate-400">
                   <p>No pending department leaves to approve.</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+        {/* Tab Content 3: HOD Upcoming Department Leaves & Tab 4: All Department Leaves */}
+        {(activeTab === "hod-upcoming" || activeTab === "hod-all") && isHOD && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-slate-200">
+              <div className="border-b border-slate-200 px-6 py-4 flex justify-between items-center bg-slate-50">
+                <h3 className="text-lg font-bold text-slate-900">
+                  {activeTab === "hod-upcoming"
+                    ? "Upcoming Scheduled Department Leaves & ODs"
+                    : "All Department Faculty Leaves"}
+                </h3>
+                <span className="bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                  {(activeTab === "hod-upcoming" ? hodUpcomingLeaves : hodAllLeaves).length} total
+                </span>
+              </div>
+              {(activeTab === "hod-upcoming" ? hodUpcomingLeaves : hodAllLeaves).length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600 border-collapse">
+                    <thead className="bg-slate-50 text-slate-700 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-3 font-semibold">Faculty Member</th>
+                        <th className="px-6 py-3 font-semibold">Leave Type</th>
+                        <th className="px-6 py-3 font-semibold">Duration</th>
+                        <th className="px-6 py-3 font-semibold">Days</th>
+                        <th className="px-6 py-3 font-semibold">Substitute</th>
+                        <th className="px-6 py-3 font-semibold">Status</th>
+                        <th className="px-6 py-3 font-semibold">Reason</th>
+                        <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {(activeTab === "hod-upcoming" ? hodUpcomingLeaves : hodAllLeaves).map((req: any) => (
+                        <tr key={req.id} className="hover:bg-slate-50/50">
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-slate-800">{req.faculty?.empName}</p>
+                            <p className="text-xs text-slate-400">{req.faculty?.empCode}</p>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-800">{req.leaveType}</td>
+                          <td className="px-6 py-4">
+                            {formatISTDate(req.startDate)} <FaArrowRight className="inline mx-1 text-slate-400 text-xs" /> {formatISTDate(req.endDate)}
+                          </td>
+                          <td className="px-6 py-4 font-semibold">{req.numberOfDays}</td>
+                          <td className="px-6 py-4 text-slate-500">
+                            {req.substitute ? req.substitute.empName : "-"}
+                          </td>
+                          <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
+                          <td className="px-6 py-4 truncate max-w-[200px]" title={req.reason}>
+                            {req.reason}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => window.open(`/faculty/leaves/print/${req.id}`, "_blank")}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                            >
+                              <FaPrint /> Print
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-slate-400">
+                  <p>No department leave records found matching your filters.</p>
                 </div>
               )}
             </div>

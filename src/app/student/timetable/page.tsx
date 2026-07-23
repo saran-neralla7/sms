@@ -178,6 +178,30 @@ export default function StudentTimetablePage() {
                                                 (e) => e.dayOfWeek === day.id && e.periodId === period.id
                                             );
 
+                                            // Helper function to resolve elective subject for student
+                                            const findStudentElective = (entry: any) => {
+                                                if (entry.electiveSlotId) {
+                                                    const sub = subjectsWithFaculty.find((s) => s.electiveSlotId === entry.electiveSlotId);
+                                                    if (sub) return sub;
+                                                }
+                                                // Fallback matching by subject name (e.g. "Elective - III", "Elective - IV")
+                                                if (entry.subject?.name) {
+                                                    const nameUpper = entry.subject.name.toUpperCase();
+                                                    let slotKeys: string[] = [];
+                                                    if (nameUpper.includes("III") || nameUpper.includes("-3") || nameUpper.includes(" 3")) slotKeys = ["OE-3", "PE-3"];
+                                                    else if (nameUpper.includes("IV") || nameUpper.includes("-4") || nameUpper.includes(" 4")) slotKeys = ["OE-4", "PE-4"];
+                                                    else if (nameUpper.includes("V") || nameUpper.includes("-5") || nameUpper.includes(" 5")) slotKeys = ["PE-5", "OE-5"];
+
+                                                    if (slotKeys.length > 0) {
+                                                        const matched = subjectsWithFaculty.find((s) =>
+                                                            slotKeys.includes(s.electiveSlotRelation?.name) || slotKeys.includes(s.electiveSlotId)
+                                                        );
+                                                        if (matched) return matched;
+                                                    }
+                                                }
+                                                return null;
+                                            };
+
                                             // Determine which entry block to display for this student
                                             const activeEntry = entries.find((entry) => {
                                                 // 1. If lunch break, show it
@@ -185,22 +209,19 @@ export default function StudentTimetablePage() {
 
                                                 // 2. If it is lab class, filter by lab batch assignment
                                                 if (entry.isLab || entry.labBatchId) {
-                                                    // If entry specifies a batch, the student must be in that batch
                                                     if (entry.labBatchId) {
                                                         return studentData.labBatchId === entry.labBatchId;
                                                     }
                                                     return true;
                                                 }
 
-                                                // 3. If it is an elective slot, verify if student is registered for a subject in this slot
-                                                if (entry.electiveSlotId) {
-                                                    const subject = subjectsWithFaculty.find(
-                                                        (s) => s.electiveSlotId === entry.electiveSlotId
-                                                    );
-                                                    return !!subject;
+                                                // 3. If it is an elective slot or elective placeholder
+                                                if (entry.electiveSlotId || (entry.subject?.name && entry.subject.name.toUpperCase().includes("ELECTIVE"))) {
+                                                    const subject = findStudentElective(entry);
+                                                    return !!subject || true;
                                                 }
 
-                                                // 4. Default: core subject mapped to student's department/semester
+                                                // 4. Default: core subject
                                                 return true;
                                             });
 
@@ -212,24 +233,21 @@ export default function StudentTimetablePage() {
                                                 );
                                             }
 
-                                            // Resolve subject data if applicable
-                                            let subjectInfo = null;
+                                            // Resolve subject data
+                                            let subjectInfo: any = null;
                                             if (activeEntry.subjectId) {
-                                                subjectInfo = subjectsWithFaculty.find(
-                                                    (s) => s.id === activeEntry.subjectId
-                                                );
-                                            } else if (activeEntry.electiveSlotId) {
-                                                subjectInfo = subjectsWithFaculty.find(
-                                                    (s) => s.electiveSlotId === activeEntry.electiveSlotId
-                                                );
+                                                subjectInfo = subjectsWithFaculty.find((s) => s.id === activeEntry.subjectId);
+                                            }
+                                            if (!subjectInfo && (activeEntry.electiveSlotId || activeEntry.subject?.name?.toUpperCase().includes("ELECTIVE"))) {
+                                                subjectInfo = findStudentElective(activeEntry);
                                             }
 
                                             const isLunch = activeEntry.isLunch;
-                                            const isOE = subjectInfo?.isElective;
+                                            const isOE = subjectInfo?.isElective || activeEntry.electiveSlotId !== null || activeEntry.subject?.name?.toUpperCase().includes("ELECTIVE");
                                             const isLab = activeEntry.isLab || subjectInfo?.type === "LAB";
 
                                             return (
-                                                <td key={period.id} className={`p-2 border-r border-slate-100 last:border-r-0 text-center align-middle h-28`}>
+                                                <td key={period.id} className="p-2 border-r border-slate-100 last:border-r-0 text-center align-middle h-28">
                                                     {isLunch ? (
                                                         <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-orange-50/70 border border-orange-200 shadow-sm h-full">
                                                             <span className="text-sm font-extrabold text-orange-600 tracking-wider uppercase">🍕 Lunch Break</span>
@@ -237,43 +255,53 @@ export default function StudentTimetablePage() {
                                                     ) : (
                                                         <div className={`flex flex-col items-center justify-center p-3 rounded-xl shadow-sm h-full transition-all border ${
                                                             isOE 
-                                                                ? 'bg-emerald-50/60 border-emerald-200 hover:bg-emerald-50' 
+                                                                ? 'bg-emerald-50/90 border-emerald-300 ring-1 ring-emerald-400/30 hover:bg-emerald-100/80' 
                                                                 : isLab 
                                                                     ? 'bg-purple-50/60 border-purple-200 hover:bg-purple-50'
                                                                     : 'bg-indigo-50/60 border-indigo-100 hover:bg-indigo-50'
                                                         }`}>
                                                             {subjectInfo ? (
                                                                 <>
+                                                                    {isOE && (
+                                                                        <span className="mb-1 text-[9px] font-extrabold text-emerald-800 uppercase bg-emerald-200/80 px-2 py-0.5 rounded-full border border-emerald-300 tracking-wider">
+                                                                            🌿 OPEN ELECTIVE
+                                                                        </span>
+                                                                    )}
                                                                     <span className={`font-black text-sm text-center leading-tight tracking-tight ${
-                                                                        isOE ? 'text-emerald-800' : isLab ? 'text-purple-800' : 'text-indigo-800'
+                                                                        isOE ? 'text-emerald-950' : isLab ? 'text-purple-800' : 'text-indigo-800'
                                                                     }`}>
                                                                         {subjectInfo.shortName || subjectInfo.name}
                                                                     </span>
-                                                                    <span className="text-[10px] font-semibold text-slate-400 mt-1 uppercase tracking-wider">
+                                                                    <span className="text-[10px] font-semibold text-slate-500 mt-0.5 uppercase tracking-wider">
                                                                         {subjectInfo.code}
                                                                     </span>
-                                                                    {isOE && (
-                                                                        <span className="mt-1 text-[9px] font-bold text-emerald-600 uppercase bg-emerald-100/60 px-1.5 py-0.5 rounded-md">
-                                                                            Elective
-                                                                        </span>
-                                                                    )}
                                                                     {isLab && (
                                                                         <span className="mt-1 text-[9px] font-bold text-purple-600 uppercase bg-purple-100/60 px-1.5 py-0.5 rounded-md">
                                                                             Lab Session
                                                                         </span>
                                                                     )}
                                                                     {subjectInfo.faculty ? (
-                                                                        <span className="text-[10px] font-medium text-slate-500 mt-2 flex items-center gap-1 bg-white/80 px-2 py-0.5 rounded-full border border-slate-100 shadow-inner">
-                                                                            <FaChalkboardTeacher size={10} className="text-slate-400" />
+                                                                        <span className="text-[10px] font-medium text-slate-700 mt-1.5 flex items-center gap-1 bg-white/90 px-2 py-0.5 rounded-full border border-slate-200 shadow-sm">
+                                                                            <FaChalkboardTeacher size={10} className="text-emerald-600" />
                                                                             {subjectInfo.faculty.empName}
                                                                         </span>
                                                                     ) : (
-                                                                        <span className="text-[9px] text-slate-400 mt-2 italic">Faculty Unassigned</span>
+                                                                        <span className="text-[9px] text-slate-400 mt-1 italic">Faculty Unassigned</span>
                                                                     )}
                                                                 </>
-                                                             ) : (
+                                                            ) : isOE ? (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span className="text-[9px] font-extrabold text-emerald-700 uppercase bg-emerald-100 px-2 py-0.5 rounded-full">
+                                                                        🌿 OPEN ELECTIVE
+                                                                    </span>
+                                                                    <span className="text-slate-600 text-xs font-bold">
+                                                                        {activeEntry.subject?.name || "Elective Slot"}
+                                                                    </span>
+                                                                    <span className="text-[9px] text-slate-400 italic">Not Enrolled</span>
+                                                                </div>
+                                                            ) : (
                                                                 <span className="text-slate-400 text-xs font-semibold italic">Unconfigured</span>
-                                                             )}
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>

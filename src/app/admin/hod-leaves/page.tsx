@@ -5,8 +5,8 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaCalendarAlt, FaCheck, FaTimes, FaPrint, FaArrowRight,
-  FaHome, FaInfoCircle, FaFilter, FaHistory, FaClock, FaBuilding
+  FaCalendarAlt, FaCheck, FaTimes, FaPrint,
+  FaArrowRight, FaHome, FaInfoCircle, FaFilter, FaHistory, FaClock
 } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import { formatISTDate } from "@/lib/dateUtils";
@@ -25,30 +25,18 @@ const STATUS_LABEL: Record<string, string> = {
   REJECTED:         "Rejected",
 };
 
-export default function DirectorLeavesPage() {
+export default function HodLeavesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"pending" | "upcoming" | "all">("pending");
+  const [tab, setTab] = useState<"pending" | "all">("pending");
   const [pendingLeaves, setPendingLeaves] = useState<any[]>([]);
   const [allLeaves, setAllLeaves] = useState<any[]>([]);
-  const [upcomingLeaves, setUpcomingLeaves] = useState<any[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
-
-  // Filters
-  const [deptFilter, setDeptFilter] = useState("");
+  const [department, setDepartment] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState("");
-  const [leaveTypeFilter, setLeaveTypeFilter] = useState("");
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
-  
-  // Date Filters
-  const [dateMode, setDateMode] = useState<"ALL" | "TODAY" | "SPECIFIC" | "RANGE">("ALL");
-  const [specificDate, setSpecificDate] = useState("");
-  const [startDateFilter, setStartDateFilter] = useState("");
-  const [endDateFilter, setEndDateFilter] = useState("");
 
-  // Modal
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [actionType, setActionType] = useState<"approve" | "reject">("approve");
   const [remarks, setRemarks] = useState("");
@@ -59,24 +47,23 @@ export default function DirectorLeavesPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
-    } else if (status === "authenticated" && role !== "DIRECTOR") {
-      if (role === "ADMIN") router.push("/admin/leaves");
-      else router.push("/dashboard");
+    } else if (status === "authenticated" && role !== "HOD") {
+      router.push("/dashboard");
     } else if (status === "authenticated") {
       fetchPendingLeaves();
-      fetchLeavesData();
+      fetchAllLeaves();
     }
   }, [status, role]);
 
   useEffect(() => {
-    if (status === "authenticated" && role === "DIRECTOR") {
-      fetchLeavesData();
+    if (status === "authenticated" && role === "HOD") {
+      fetchAllLeaves();
     }
-  }, [deptFilter, statusFilter, leaveTypeFilter, yearFilter, dateMode, specificDate, startDateFilter, endDateFilter, tab]);
+  }, [statusFilter, yearFilter]);
 
   const fetchPendingLeaves = async () => {
     try {
-      const res = await fetch("/api/director/leaves/pending");
+      const res = await fetch("/api/hod/leaves/pending");
       if (res.ok) {
         const data = await res.json();
         setPendingLeaves(data.pendingLeaves || []);
@@ -86,41 +73,17 @@ export default function DirectorLeavesPage() {
     }
   };
 
-  const fetchLeavesData = async () => {
+  const fetchAllLeaves = async () => {
     setLoading(true);
     try {
-      let url = `/api/director/leaves/all?1=1`;
-      
-      if (tab === "upcoming") {
-        url += `&upcoming=true`;
-      } else {
-        if (yearFilter && yearFilter !== "ALL") url += `&year=${yearFilter}`;
-      }
-
-      if (deptFilter) url += `&departmentId=${deptFilter}`;
+      let url = `/api/hod/leaves/all?year=${yearFilter}`;
       if (statusFilter) url += `&status=${statusFilter}`;
-      if (leaveTypeFilter) url += `&leaveType=${leaveTypeFilter}`;
-
-      // Date filtering logic
-      if (dateMode === "TODAY") {
-        const todayStr = new Date().toISOString().split("T")[0];
-        url += `&startDate=${todayStr}&endDate=${todayStr}`;
-      } else if (dateMode === "SPECIFIC" && specificDate) {
-        url += `&startDate=${specificDate}&endDate=${specificDate}`;
-      } else if (dateMode === "RANGE") {
-        if (startDateFilter) url += `&startDate=${startDateFilter}`;
-        if (endDateFilter) url += `&endDate=${endDateFilter}`;
-      }
 
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        if (tab === "upcoming") {
-          setUpcomingLeaves(data.leaves || []);
-        } else {
-          setAllLeaves(data.leaves || []);
-        }
-        if (data.departments) setDepartments(data.departments);
+        setAllLeaves(data.leaves || []);
+        if (data.department) setDepartment(data.department);
       }
     } catch (err) {
       console.error(err);
@@ -139,14 +102,14 @@ export default function DirectorLeavesPage() {
     if (!selectedRequest) return;
     setActioning(true);
     try {
-      const res = await fetch(`/api/director/leaves/${selectedRequest.id}`, {
+      const res = await fetch(`/api/hod/leaves/${selectedRequest.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: actionType, remarks }),
       });
       if (res.ok) {
         await fetchPendingLeaves();
-        await fetchLeavesData();
+        await fetchAllLeaves();
         setSelectedRequest(null);
       } else {
         const data = await res.json();
@@ -168,19 +131,25 @@ export default function DirectorLeavesPage() {
     );
   }
 
-  const displayLeaves = tab === "pending" ? pendingLeaves : tab === "upcoming" ? upcomingLeaves : allLeaves;
+  const displayLeaves = tab === "pending" ? pendingLeaves : allLeaves;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-6xl">
 
         {/* Header */}
         <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
-              <FaCalendarAlt className="text-indigo-600" /> Director — Leave Management
+              <FaCalendarAlt className="text-indigo-600" /> HOD — Leave Management
             </h1>
-            <p className="text-slate-500 mt-1">View and sanction faculty leave requests college-wide.</p>
+            <p className="text-slate-500 mt-1">
+              {department ? (
+                <><span className="font-semibold text-slate-700">{department.name}</span> — Review and forward leave requests to Director.</>
+              ) : (
+                "Review and forward leave requests to the Director."
+              )}
+            </p>
           </div>
           <button
             onClick={() => router.push("/dashboard")}
@@ -193,8 +162,8 @@ export default function DirectorLeavesPage() {
         {/* Summary Cards */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
-            { label: "Pending HOD", value: allLeaves.filter(l => l.status === "PENDING_HOD").length, color: "bg-amber-50 text-amber-700 border-amber-200" },
-            { label: "Pending Director", value: pendingLeaves.length, color: "bg-blue-50 text-blue-700 border-blue-200" },
+            { label: "Pending Approval", value: pendingLeaves.length, color: "bg-amber-50 text-amber-700 border-amber-200" },
+            { label: "Sent to Director", value: allLeaves.filter(l => l.status === "PENDING_DIRECTOR").length, color: "bg-blue-50 text-blue-700 border-blue-200" },
             { label: "Approved", value: allLeaves.filter(l => l.status === "APPROVED").length, color: "bg-green-50 text-green-700 border-green-200" },
             { label: "Rejected", value: allLeaves.filter(l => l.status === "REJECTED").length, color: "bg-red-50 text-red-700 border-red-200" },
           ].map(card => (
@@ -211,56 +180,23 @@ export default function DirectorLeavesPage() {
             onClick={() => setTab("pending")}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition ${tab === "pending" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
           >
-            <FaClock /> Awaiting My Sanction
+            <FaClock /> Awaiting My Approval
             {pendingLeaves.length > 0 && (
               <span className="ml-1 rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5">{pendingLeaves.length}</span>
             )}
           </button>
           <button
-            onClick={() => setTab("upcoming")}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition ${tab === "upcoming" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-          >
-            <FaCalendarAlt className="text-emerald-600" /> Upcoming Leaves
-          </button>
-          <button
             onClick={() => setTab("all")}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition ${tab === "all" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
           >
-            <FaHistory /> All Leaves (College-wide)
+            <FaHistory /> All Department Leaves
           </button>
         </div>
 
-        {/* Filters (Upcoming & All tabs) */}
-        {tab !== "pending" && (
+        {/* Filters (All tab only) */}
+        {tab === "all" && (
           <div className="mb-4 flex flex-wrap gap-3 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <FaFilter className="text-slate-400" />
-            
-            {/* Department Filter */}
-            <select
-              value={deptFilter}
-              onChange={e => setDeptFilter(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Departments</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-
-            {/* Leave Type Filter */}
-            <select
-              value={leaveTypeFilter}
-              onChange={e => setLeaveTypeFilter(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Leave Types</option>
-              <option value="CL">CL (Casual Leave)</option>
-              <option value="OD">OD (On Duty)</option>
-              <option value="AL">AL (Academic Leave)</option>
-              <option value="ML">ML (Medical Leave)</option>
-            </select>
-
-            {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
@@ -272,67 +208,16 @@ export default function DirectorLeavesPage() {
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
             </select>
-
-            {/* Date Preset Filter */}
             <select
-              value={dateMode}
-              onChange={e => setDateMode(e.target.value as any)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500 font-medium text-slate-700"
+              value={yearFilter}
+              onChange={e => setYearFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500"
             >
-              <option value="ALL">📅 All Dates</option>
-              <option value="TODAY">📍 Today</option>
-              <option value="SPECIFIC">🎯 Specific Date</option>
-              <option value="RANGE">📆 Date Range</option>
+              {[2024, 2025, 2026, 2027].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
             </select>
-
-            {/* Specific Date Input */}
-            {dateMode === "SPECIFIC" && (
-              <input
-                type="date"
-                value={specificDate}
-                onChange={e => setSpecificDate(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-indigo-500"
-              />
-            )}
-
-            {/* Date Range Inputs */}
-            {dateMode === "RANGE" && (
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="date"
-                  value={startDateFilter}
-                  onChange={e => setStartDateFilter(e.target.value)}
-                  placeholder="From"
-                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-indigo-500"
-                />
-                <span className="text-xs text-slate-400">to</span>
-                <input
-                  type="date"
-                  value={endDateFilter}
-                  onChange={e => setEndDateFilter(e.target.value)}
-                  placeholder="To"
-                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            )}
-
-            {/* Year Filter (only when Date Preset is ALL) */}
-            {dateMode === "ALL" && tab === "all" && (
-              <select
-                value={yearFilter}
-                onChange={e => setYearFilter(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500"
-              >
-                <option value="ALL">All Years</option>
-                {[2024, 2025, 2026, 2027].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            )}
-
-            <span className="ml-auto text-xs text-slate-500 font-medium">
-              {tab === "upcoming" ? upcomingLeaves.length : allLeaves.length} record(s)
-            </span>
+            <span className="ml-auto text-xs text-slate-500 font-medium">{allLeaves.length} record(s)</span>
           </div>
         )}
 
@@ -340,29 +225,19 @@ export default function DirectorLeavesPage() {
         <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-slate-200">
           <div className="border-b border-slate-200 px-6 py-4 flex justify-between items-center bg-slate-50">
             <h3 className="text-base font-bold text-slate-900">
-              {tab === "pending"
-                ? "Leaves Awaiting Director Sanction"
-                : tab === "upcoming"
-                ? "Upcoming Scheduled Leaves & ODs"
-                : "All Faculty Leave Records"}
+              {tab === "pending" ? "Leaves Awaiting Your Approval" : `All Leave Records — ${department?.name || ""}`}
             </h3>
             <span className="bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
-              {tab === "pending"
-                ? pendingLeaves.length
-                : tab === "upcoming"
-                ? upcomingLeaves.length
-                : allLeaves.length}{" "}
-              {tab === "pending" ? "pending" : "records"}
+              {displayLeaves.length} {tab === "pending" ? "pending" : "total"}
             </span>
           </div>
 
           {displayLeaves.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600 border-collapse">
+              <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 text-slate-700 border-b border-slate-200 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-5 py-3">Faculty</th>
-                    {tab === "all" && <th className="px-5 py-3">Department</th>}
                     <th className="px-5 py-3">Type</th>
                     <th className="px-5 py-3">Duration</th>
                     <th className="px-5 py-3">Days</th>
@@ -377,16 +252,8 @@ export default function DirectorLeavesPage() {
                     <tr key={req.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="px-5 py-4">
                         <p className="font-bold text-slate-800">{req.faculty?.empName}</p>
-                        <p className="text-xs text-slate-400">{req.faculty?.empCode}</p>
+                        <p className="text-xs text-slate-400">{req.faculty?.empCode} · {req.faculty?.designation}</p>
                       </td>
-                      {tab === "all" && (
-                        <td className="px-5 py-4 text-xs font-medium text-slate-600">
-                          <span className="flex items-center gap-1">
-                            <FaBuilding className="text-slate-300" />
-                            {req.faculty?.department?.name || "-"}
-                          </span>
-                        </td>
-                      )}
                       <td className="px-5 py-4">
                         <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-xs">{req.leaveType}</span>
                       </td>
@@ -397,7 +264,7 @@ export default function DirectorLeavesPage() {
                       <td className="px-5 py-4 text-slate-500 text-xs">{req.substitute ? req.substitute.empName : "—"}</td>
                       <td className="px-5 py-4 max-w-[180px] truncate text-xs" title={req.reason}>{req.reason}</td>
                       <td className="px-5 py-4">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[req.status] || "bg-slate-100 text-slate-700"}`}>
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[req.status] || "bg-slate-100 text-slate-700"}`}>
                           {STATUS_LABEL[req.status] || req.status}
                         </span>
                       </td>
@@ -414,7 +281,7 @@ export default function DirectorLeavesPage() {
                             onClick={() => openActionModal(req, "approve")}
                             className="inline-flex items-center gap-1 rounded bg-green-50 px-2.5 py-1.5 text-xs font-bold text-green-700 border border-green-200 hover:bg-green-100"
                           >
-                            <FaCheck /> Sanction
+                            <FaCheck /> Forward
                           </button>
                           <button
                             onClick={() => openActionModal(req, "reject")}
@@ -454,17 +321,18 @@ export default function DirectorLeavesPage() {
               </div>
               <div className="p-6 space-y-4">
                 <p className="text-sm text-slate-600">
-                  Are you sure you want to <span className="font-semibold">{actionType}</span> the leave request of{" "}
-                  <span className="font-bold text-slate-800">{selectedRequest.faculty?.empName}</span> for{" "}
-                  <span className="font-bold text-slate-800">{selectedRequest.numberOfDays} day(s)</span>?
+                  {actionType === "approve"
+                    ? <>Forward the leave of <span className="font-bold">{selectedRequest.faculty?.empName}</span> ({selectedRequest.numberOfDays} day(s)) to the Director for final sanction?</>
+                    : <>Reject the leave request of <span className="font-bold">{selectedRequest.faculty?.empName}</span> ({selectedRequest.numberOfDays} day(s))?</>
+                  }
                 </p>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Director Remarks (Optional)</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">HOD Remarks (Optional)</label>
                   <textarea
                     rows={3}
                     value={remarks}
                     onChange={e => setRemarks(e.target.value)}
-                    placeholder="Enter approval/rejection remarks..."
+                    placeholder="Enter remarks..."
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -480,11 +348,11 @@ export default function DirectorLeavesPage() {
                     disabled={actioning}
                     className={`rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition ${
                       actionType === "approve"
-                        ? "bg-green-600 hover:bg-green-700 disabled:bg-green-400"
+                        ? "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400"
                         : "bg-red-600 hover:bg-red-700 disabled:bg-red-400"
                     }`}
                   >
-                    {actioning ? "Processing..." : actionType === "approve" ? "Sanction Leave" : "Reject Leave"}
+                    {actioning ? "Processing..." : actionType === "approve" ? "Forward to Director" : "Reject Leave"}
                   </button>
                 </div>
               </div>

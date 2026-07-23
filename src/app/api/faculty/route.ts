@@ -57,6 +57,11 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
 
+        const shortName = typeof body.shortName === "string" ? body.shortName.trim() : "";
+        if (!shortName) {
+            return NextResponse.json({ error: "Faculty Short Name is required" }, { status: 400 });
+        }
+
         // Check if empCode exists
         const existing = await prisma.faculty.findUnique({
             where: { empCode: body.empCode }
@@ -73,7 +78,7 @@ export async function POST(req: NextRequest) {
                 data: {
                     empCode: body.empCode,
                     empName: body.empName,
-                    shortName: body.shortName,
+                    shortName: shortName,
                     dob: new Date(body.dob),
                     gender: body.gender,
                     joinDate: new Date(body.joinDate),
@@ -94,11 +99,11 @@ export async function POST(req: NextRequest) {
 
             // 2. Create User Login
             // Password = 'gvp@2026' (Default)
-            // Username = ShortName (if available) else EmpCode
+            // Username = ShortName
             const passwordPlain = "gvp@2026";
             const hashedPassword = await bcrypt.hash(passwordPlain, 10);
 
-            const username = body.shortName || body.empCode;
+            const username = shortName;
 
             // Check if username exists
             const existingUser = await tx.user.findUnique({ where: { username } });

@@ -2,7 +2,38 @@
 
 import { useState, useEffect } from "react";
 import LogoSpinner from "@/components/LogoSpinner";
-import { FaHistory, FaUser, FaInfoCircle, FaSignInAlt, FaSignOutAlt, FaShieldAlt, FaDatabase } from "react-icons/fa";
+import { FaHistory, FaUser, FaInfoCircle, FaSignInAlt, FaShieldAlt, FaDatabase, FaBook, FaFileAlt, FaUserTie, FaCheck } from "react-icons/fa";
+
+const ACTION_COLORS: Record<string, string> = {
+    CREATE:        "bg-green-100 text-green-800",
+    UPDATE:        "bg-blue-100 text-blue-800",
+    DELETE:        "bg-red-100 text-red-800",
+    LOGIN_SUCCESS: "bg-emerald-100 text-emerald-800",
+    LOGIN_FAILURE: "bg-red-100 text-red-800 border border-red-200 animate-pulse",
+    LOGOUT:        "bg-amber-100 text-amber-800",
+    APPROVE:       "bg-teal-100 text-teal-800",
+    REJECT:        "bg-orange-100 text-orange-800",
+    UPLOAD_INTERNAL_MARKS: "bg-indigo-100 text-indigo-800",
+    BULK_DELETE_INTERNAL_MARKS: "bg-red-100 text-red-800",
+};
+
+const ENTITY_ICON_MAP: Record<string, string> = {
+    TeachingDiary:     "📖",
+    CourseFile:        "📄",
+    LeaveRequest:      "🗓️",
+    FacultyMapping:    "🔗",
+    Subject:           "📚",
+    Auth:              "🔒",
+    Attendance:        "✅",
+    AttendanceHistory: "📋",
+    Student:           "🎓",
+    Faculty:           "👤",
+    MidExamPaper:      "📝",
+    InternalMark:      "🔢",
+    Timetable:         "🗒️",
+    User:              "👥",
+    SystemConfig:      "⚙️",
+};
 
 export default function AuditLogsPage() {
     const [logs, setLogs] = useState<any[]>([]);
@@ -51,6 +82,16 @@ export default function AuditLogsPage() {
         fetchLogs();
     };
 
+    const getActionBadgeClass = (action: string) =>
+        ACTION_COLORS[action] || "bg-slate-100 text-slate-700";
+
+    const getEntityEmoji = (entity: string) =>
+        ENTITY_ICON_MAP[entity] || "📦";
+
+    const parseDetails = (raw: string) => {
+        try { return JSON.parse(raw); } catch { return raw; }
+    };
+
     return (
         <div className="mx-auto max-w-7xl pb-10">
             {/* Header */}
@@ -60,7 +101,7 @@ export default function AuditLogsPage() {
                 </div>
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">System Audit Logs</h1>
-                    <p className="text-sm text-slate-500">Track all critical actions performed by users.</p>
+                    <p className="text-sm text-slate-500">Track all actions — logins, teaching diary, course files, leaves, faculty assignments, and more.</p>
                 </div>
             </div>
 
@@ -112,7 +153,7 @@ export default function AuditLogsPage() {
                 <form onSubmit={handleSearchSubmit} className="flex flex-1 gap-2">
                     <input
                         type="text"
-                        placeholder="Search logs (username, entity, details)..."
+                        placeholder="Search by username, entity, subject, section, details..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
@@ -135,12 +176,20 @@ export default function AuditLogsPage() {
                         className="rounded-lg border border-slate-300 px-4 py-2 text-sm bg-white focus:border-indigo-500 focus:outline-none"
                     >
                         <option value="">All Actions</option>
-                        <option value="CREATE">CREATE</option>
-                        <option value="UPDATE">UPDATE</option>
-                        <option value="DELETE">DELETE</option>
-                        <option value="LOGIN_SUCCESS">LOGIN_SUCCESS</option>
-                        <option value="LOGIN_FAILURE">LOGIN_FAILURE</option>
-                        <option value="LOGOUT">LOGOUT</option>
+                        <optgroup label="Data Changes">
+                            <option value="CREATE">CREATE</option>
+                            <option value="UPDATE">UPDATE</option>
+                            <option value="DELETE">DELETE</option>
+                        </optgroup>
+                        <optgroup label="Auth">
+                            <option value="LOGIN_SUCCESS">LOGIN_SUCCESS</option>
+                            <option value="LOGIN_FAILURE">LOGIN_FAILURE</option>
+                            <option value="LOGOUT">LOGOUT</option>
+                        </optgroup>
+                        <optgroup label="Leave Workflow">
+                            <option value="APPROVE">APPROVE</option>
+                            <option value="REJECT">REJECT</option>
+                        </optgroup>
                     </select>
                 </div>
             </div>
@@ -154,7 +203,7 @@ export default function AuditLogsPage() {
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Time</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">User</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Action</th>
-                                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Entity</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Entity / What Changed</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Details</th>
                             </tr>
                         </thead>
@@ -164,48 +213,57 @@ export default function AuditLogsPage() {
                             ) : logs.length === 0 ? (
                                 <tr><td colSpan={5} className="py-12 text-center text-slate-500">No logs found.</td></tr>
                             ) : (
-                                logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">
-                                            {new Date(log.createdAt).toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                                                    <FaUser size={10} />
+                                logs.map((log) => {
+                                    const details = parseDetails(log.details);
+                                    return (
+                                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
+                                                {new Date(log.createdAt).toLocaleString("en-IN", {
+                                                    day: "2-digit", month: "short", year: "numeric",
+                                                    hour: "2-digit", minute: "2-digit"
+                                                })}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                                                        <FaUser size={10} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900">{log.performerName}</p>
+                                                        <p className="text-xs text-slate-500">{log.performerRole}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-slate-900">{log.performerName}</p>
-                                                    <p className="text-xs text-slate-500">{log.performerRole}</p>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${getActionBadgeClass(log.action)}`}>
+                                                    {log.action}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 max-w-xs">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                                                        {getEntityEmoji(log.entity)} {log.entity}
+                                                    </span>
+                                                    {log.entityId && (
+                                                        <span className="text-sm font-medium text-slate-800 leading-snug break-words">
+                                                            {log.entityId}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium 
-                                                ${log.action === 'CREATE' ? 'bg-green-100 text-green-800' :
-                                                    log.action === 'DELETE' ? 'bg-red-100 text-red-800' :
-                                                    log.action === 'LOGIN_FAILURE' ? 'bg-red-100 text-red-800 border border-red-200 animate-pulse' :
-                                                    log.action === 'LOGIN_SUCCESS' ? 'bg-emerald-100 text-emerald-800' :
-                                                    log.action === 'LOGOUT' ? 'bg-amber-100 text-amber-800' :
-                                                    'bg-blue-100 text-blue-800'}`}>
-                                                {log.action}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            {log.entity} <span className="text-slate-400">({log.entityId})</span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <details className="group">
-                                                <summary className="flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 select-none">
-                                                    <FaInfoCircle /> View Details
-                                                </summary>
-                                                <pre className="mt-2 max-w-xs overflow-auto rounded bg-slate-900 p-2 text-[10px] text-slate-300">
-                                                    {log.details}
-                                                </pre>
-                                            </details>
-                                        </td>
-                                    </tr>
-                                ))
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <details className="group">
+                                                    <summary className="flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 select-none">
+                                                        <FaInfoCircle /> View Details
+                                                    </summary>
+                                                    <pre className="mt-2 max-w-sm overflow-auto rounded bg-slate-900 p-2 text-[10px] text-slate-300 leading-relaxed">
+                                                        {typeof details === "object" ? JSON.stringify(details, null, 2) : details}
+                                                    </pre>
+                                                </details>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

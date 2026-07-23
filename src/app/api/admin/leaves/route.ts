@@ -12,10 +12,14 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = req.nextUrl;
-    const calendarYear = searchParams.get("year") || new Date().getFullYear().toString();
+    const calendarYear = searchParams.get("year");
     const departmentId = searchParams.get("departmentId") || undefined;
     const facultyId = searchParams.get("facultyId") || undefined;
     const status = searchParams.get("status") || undefined;
+    const leaveType = searchParams.get("leaveType") || undefined;
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
+    const upcoming = searchParams.get("upcoming") === "true";
 
     // Build filter for leave requests
     const whereClause: any = {};
@@ -27,14 +31,35 @@ export async function GET(req: NextRequest) {
     if (status) {
       whereClause.status = status;
     }
+    if (leaveType) {
+      whereClause.leaveType = leaveType;
+    }
 
-    // Filter by calendar year of request
-    const startOfYear = new Date(`${calendarYear}-01-01T00:00:00.000Z`);
-    const endOfYear = new Date(`${calendarYear}-12-31T23:59:59.999Z`);
-    whereClause.startDate = {
-      gte: startOfYear,
-      lte: endOfYear,
-    };
+    if (upcoming) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      whereClause.endDate = { gte: today };
+      if (!status) {
+        whereClause.status = { in: ["APPROVED", "PENDING_HOD", "PENDING_DIRECTOR"] };
+      }
+    } else if (startDateParam || endDateParam) {
+      if (startDateParam && endDateParam) {
+        const start = new Date(`${startDateParam}T00:00:00.000Z`);
+        const end = new Date(`${endDateParam}T23:59:59.999Z`);
+        whereClause.startDate = { lte: end };
+        whereClause.endDate = { gte: start };
+      } else if (startDateParam) {
+        const start = new Date(`${startDateParam}T00:00:00.000Z`);
+        whereClause.endDate = { gte: start };
+      } else if (endDateParam) {
+        const end = new Date(`${endDateParam}T23:59:59.999Z`);
+        whereClause.startDate = { lte: end };
+      }
+    } else if (calendarYear && calendarYear !== "ALL") {
+      const startOfYear = new Date(`${calendarYear}-01-01T00:00:00.000Z`);
+      const endOfYear = new Date(`${calendarYear}-12-31T23:59:59.999Z`);
+      whereClause.startDate = { gte: startOfYear, lte: endOfYear };
+    }
 
     const leaveRequests = await prisma.leaveRequest.findMany({
       where: whereClause,
@@ -87,9 +112,10 @@ export async function GET(req: NextRequest) {
       orderBy: { empName: "asc" },
     });
 
-    // Fetch all quotas for the current year
+    // Fetch all quotas for the target year
+    const targetYear = calendarYear && calendarYear !== "ALL" ? calendarYear : new Date().getFullYear().toString();
     const quotas = await prisma.facultyLeaveQuota.findMany({
-      where: { calendarYear },
+      where: { calendarYear: targetYear },
     });
 
     // Ensure every faculty has a quota in the list
@@ -102,7 +128,7 @@ export async function GET(req: NextRequest) {
     for (const fac of facultyList) {
       let q = quotasMap[fac.id];
       if (!q) {
-        q = await getOrCreateFacultyLeaveQuota(fac.id, calendarYear);
+        q = await getOrCreateFacultyLeaveQuota(fac.id, targetYear);
       }
       enrichedFaculty.push({
         ...fac,

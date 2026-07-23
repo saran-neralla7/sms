@@ -23,10 +23,24 @@ export default function AdminLeavesPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"requests" | "quotas">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "upcoming" | "quotas">("requests");
   const [requests, setRequests] = useState<any[]>([]);
+  const [upcomingRequests, setUpcomingRequests] = useState<any[]>([]);
   const [facultyList, setFacultyList] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Filters
+  const [deptFilter, setDeptFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
+
+  // Date Filters
+  const [dateMode, setDateMode] = useState<"ALL" | "TODAY" | "SPECIFIC" | "RANGE">("ALL");
+  const [specificDate, setSpecificDate] = useState("");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
 
   // Edit Request Modal State
   const [editingRequest, setEditingRequest] = useState<any>(null);
@@ -54,7 +68,7 @@ export default function AdminLeavesPage() {
     } else if (status === "authenticated") {
       fetchAdminLeavesData();
     }
-  }, [status, role]);
+  }, [status, role, activeTab, deptFilter, statusFilter, leaveTypeFilter, yearFilter, dateMode, specificDate, startDateFilter, endDateFilter]);
 
   // Calculate days for Edit Modal
   useEffect(() => {
@@ -72,12 +86,40 @@ export default function AdminLeavesPage() {
   }, [editStartDate, editEndDate]);
 
   const fetchAdminLeavesData = async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/leaves");
+      let url = `/api/admin/leaves?1=1`;
+
+      if (activeTab === "upcoming") {
+        url += `&upcoming=true`;
+      } else {
+        if (yearFilter && yearFilter !== "ALL") url += `&year=${yearFilter}`;
+      }
+
+      if (deptFilter) url += `&departmentId=${deptFilter}`;
+      if (statusFilter) url += `&status=${statusFilter}`;
+      if (leaveTypeFilter) url += `&leaveType=${leaveTypeFilter}`;
+
+      if (dateMode === "TODAY") {
+        const todayStr = new Date().toISOString().split("T")[0];
+        url += `&startDate=${todayStr}&endDate=${todayStr}`;
+      } else if (dateMode === "SPECIFIC" && specificDate) {
+        url += `&startDate=${specificDate}&endDate=${specificDate}`;
+      } else if (dateMode === "RANGE") {
+        if (startDateFilter) url += `&startDate=${startDateFilter}`;
+        if (endDateFilter) url += `&endDate=${endDateFilter}`;
+      }
+
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setRequests(data.leaveRequests || []);
+        if (activeTab === "upcoming") {
+          setUpcomingRequests(data.leaveRequests || []);
+        } else {
+          setRequests(data.leaveRequests || []);
+        }
         setFacultyList(data.faculty || []);
+        if (data.departments) setDepartments(data.departments);
       }
     } catch (err) {
       console.error(err);
@@ -254,6 +296,16 @@ export default function AdminLeavesPage() {
             Leave Requests Overrides
           </button>
           <button
+            onClick={() => setActiveTab("upcoming")}
+            className={`px-4 py-2 font-semibold text-sm transition-colors border-b-2 flex items-center gap-1.5 ${
+              activeTab === "upcoming"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <FaCalendarAlt className="text-emerald-600" /> Upcoming Leaves
+          </button>
+          <button
             onClick={() => setActiveTab("quotas")}
             className={`px-4 py-2 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 ${
               activeTab === "quotas"
@@ -265,15 +317,128 @@ export default function AdminLeavesPage() {
           </button>
         </div>
 
-        {/* Tab 1: Requests Override */}
-        {activeTab === "requests" && (
+        {/* Filters (For requests & upcoming tabs) */}
+        {(activeTab === "requests" || activeTab === "upcoming") && (
+          <div className="mb-6 flex flex-wrap gap-3 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            {/* Department Filter */}
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">All Departments</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Leave Type Filter */}
+            <select
+              value={leaveTypeFilter}
+              onChange={(e) => setLeaveTypeFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">All Leave Types</option>
+              <option value="CL">CL (Casual Leave)</option>
+              <option value="OD">OD (On Duty)</option>
+              <option value="AL">AL (Academic Leave)</option>
+              <option value="ML">ML (Medical Leave)</option>
+            </select>
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">All Statuses</option>
+              <option value="PENDING_HOD">Pending HOD</option>
+              <option value="PENDING_DIRECTOR">Pending Director</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+
+            {/* Date Preset Filter */}
+            <select
+              value={dateMode}
+              onChange={(e) => setDateMode(e.target.value as any)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500 font-medium text-slate-700"
+            >
+              <option value="ALL">📅 All Dates</option>
+              <option value="TODAY">📍 Today</option>
+              <option value="SPECIFIC">🎯 Specific Date</option>
+              <option value="RANGE">📆 Date Range</option>
+            </select>
+
+            {/* Specific Date Input */}
+            {dateMode === "SPECIFIC" && (
+              <input
+                type="date"
+                value={specificDate}
+                onChange={(e) => setSpecificDate(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-500"
+              />
+            )}
+
+            {/* Date Range Inputs */}
+            {dateMode === "RANGE" && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  placeholder="From"
+                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                />
+                <span className="text-xs text-slate-400">to</span>
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  placeholder="To"
+                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Year Filter (only when Date Preset is ALL) */}
+            {dateMode === "ALL" && activeTab === "requests" && (
+              <select
+                value={yearFilter}
+                onChange={(e) => setYearFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="ALL">All Years</option>
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <span className="ml-auto text-xs text-slate-500 font-medium">
+              {activeTab === "upcoming" ? upcomingRequests.length : requests.length} record(s)
+            </span>
+          </div>
+        )}
+
+        {/* Tab 1 & Tab 2: Requests / Upcoming */}
+        {(activeTab === "requests" || activeTab === "upcoming") && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-slate-200">
-              <div className="border-b border-slate-200 px-6 py-4">
-                <h3 className="text-lg font-bold text-slate-900 font-sans">All Faculty Leave Requests</h3>
+              <div className="border-b border-slate-200 px-6 py-4 flex justify-between items-center bg-slate-50">
+                <h3 className="text-lg font-bold text-slate-900 font-sans">
+                  {activeTab === "upcoming" ? "Upcoming Scheduled Leaves & ODs" : "All Faculty Leave Requests"}
+                </h3>
+                <span className="bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                  {(activeTab === "upcoming" ? upcomingRequests : requests).length} total
+                </span>
               </div>
 
-              {requests.length > 0 ? (
+              {(activeTab === "upcoming" ? upcomingRequests : requests).length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-600 border-collapse">
                     <thead className="bg-slate-50 text-slate-700 border-b border-slate-200">
@@ -289,7 +454,7 @@ export default function AdminLeavesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {requests.map((req: any) => (
+                      {(activeTab === "upcoming" ? upcomingRequests : requests).map((req: any) => (
                         <tr key={req.id} className="hover:bg-slate-50/50">
                           <td className="px-6 py-4">
                             <p className="font-bold text-slate-800">{req.faculty?.empName}</p>

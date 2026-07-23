@@ -204,6 +204,7 @@ export default function AttendancePage() {
                 const query = new URLSearchParams({
                     year,
                     semester,
+                    onlyElectives: "true",
                     includeElectives: "true",
                     ...(userDept ? { departmentId: userDept } : {})
                 });

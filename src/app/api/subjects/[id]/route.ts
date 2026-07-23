@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isBSHHod } from "@/lib/permissions";
+import { logActivity } from "@/lib/logging";
 
 export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
@@ -71,6 +72,13 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
                 departmentId
             }
         });
+        await logActivity(
+            session.user.id,
+            "UPDATE",
+            "Subject",
+            `${name} (${code}) | Year ${year} Sem ${semester}`,
+            { subjectId: params.id, name, code, year, semester, type }
+        );
         return NextResponse.json(subject);
     } catch (error: any) {
         console.error("Update Subject Error:", error);
@@ -100,6 +108,13 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
         await prisma.subject.delete({
             where: { id: params.id }
         });
+        await logActivity(
+            session.user.id,
+            "DELETE",
+            "Subject",
+            params.id,
+            { subjectId: params.id }
+        );
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("Error deleting subject:", error);
