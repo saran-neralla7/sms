@@ -53,27 +53,21 @@ export async function GET(request: Request) {
             finalDepartmentId = userDeptId || undefined;
         } else if (userRole === "FACULTY") {
             let isAllowed = false;
-            // 1. Check if they belong to the requested department
-            if (userDeptId && departmentId && userDeptId === departmentId) {
-                isAllowed = true;
-            } else {
-                // 2. Check if they are mapped to teach in the requested section/subject
-                if (userFacultyId) {
-                    const mappingWhere: any = { facultyId: userFacultyId };
-                    if (sectionId) mappingWhere.sectionId = sectionId;
-                    if (subjectId) mappingWhere.subjectId = subjectId;
+            if (userFacultyId) {
+                const mappingWhere: any = { facultyId: userFacultyId };
+                if (sectionId) mappingWhere.sectionId = sectionId;
+                if (subjectId) mappingWhere.subjectId = subjectId;
 
-                    const mappingCount = await prisma.facultySubjectMapping.count({
-                        where: mappingWhere
-                    });
-                    if (mappingCount > 0) {
-                        isAllowed = true;
-                    }
+                const mappingCount = await prisma.facultySubjectMapping.count({
+                    where: mappingWhere
+                });
+                if (mappingCount > 0) {
+                    isAllowed = true;
                 }
             }
 
             if (!isAllowed) {
-                return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for this department/section." }, { status: 403 });
+                return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for this section/subject." }, { status: 403 });
             }
             finalDepartmentId = departmentId || userDeptId || undefined;
         } else {
@@ -167,7 +161,7 @@ export async function GET(request: Request) {
 
         const classStudents = await getStudentsForClass({
             academicYearId,
-            departmentId: finalDepartmentId || undefined,
+            departmentId: isElective ? undefined : (finalDepartmentId || undefined),
             year,
             semester,
             sectionId: (isElective ? undefined : sectionId) || undefined,

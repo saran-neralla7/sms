@@ -977,18 +977,18 @@ export default function AttendancePage() {
                                         <div
                                             key={s.id}
                                             onClick={() => toggleStudentStatus(s.id)}
-                                            className={`cursor-pointer rounded-lg border p-3 sm:p-4 text-center transition-all shadow-sm select-none ${s.status === "Absent"
+                                            className={`cursor-pointer rounded-lg border p-2.5 sm:p-3 text-center transition-all shadow-sm select-none ${s.status === "Absent"
                                                 ? "bg-red-50 border-red-500 ring-1 ring-red-500" // Red for Absent
                                                 : "bg-white border-slate-200 hover:border-green-400 hover:shadow-md" // White/Greenish hover for Present
                                                 }`}
                                         >
-                                            <p className={`font-bold truncate ${viewMode === "elective" ? "text-sm sm:text-base tracking-tight" : "text-lg"} ${s.status === "Absent" ? "text-red-700" : "text-slate-800"}`} title={s.rollNumber}>
-                                                {viewMode === "elective" ? s.rollNumber : (s.rollNumber.slice(-3) || s.rollNumber)}
+                                            <p className={`font-bold truncate text-xs sm:text-sm tracking-tight ${s.status === "Absent" ? "text-red-700" : "text-slate-800"}`} title={s.rollNumber}>
+                                                {s.rollNumber}
                                             </p>
-                                            <p className="mt-1 truncate text-xs font-medium text-slate-500" title={s.name}>
+                                            <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500" title={s.name}>
                                                 {s.name} <span className="text-slate-400 font-semibold">({s.department?.code || s.department?.name || "N/A"}-{s.section?.name || "N/A"})</span>
                                             </p>
-                                            <div className="mt-2 flex flex-wrap items-center justify-center gap-1">
+                                            <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
                                                 {viewMode === "elective" && (
                                                     <span className="text-[9px] font-extrabold uppercase text-slate-500 bg-slate-100 px-1 py-0.5 rounded select-none shrink-0" title="Student Department">
                                                         {s.department?.code || s.department?.name || "N/A"}

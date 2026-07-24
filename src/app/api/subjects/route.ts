@@ -86,10 +86,7 @@ export async function GET(request: Request) {
                         select: { subjectId: true }
                     });
                     const mappedIds = Array.from(new Set(mappings.map(m => m.subjectId)));
-                    
-                    if (mappedIds.length > 0) {
-                        where.id = { in: mappedIds };
-                    }
+                    where.id = { in: mappedIds };
                 }
             }
         }

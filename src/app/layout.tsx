@@ -25,6 +25,8 @@ export const metadata: Metadata = {
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
+import ImpersonationBanner from "@/components/ImpersonationBanner";
+
 export default async function RootLayout({
   children,
 }: {
@@ -49,7 +51,7 @@ export default async function RootLayout({
     <html lang="en">
       <body className={`${inter.className} relative min-h-screen flex flex-col`} suppressHydrationWarning>
         <Providers>
-
+          <ImpersonationBanner />
           <div className="relative z-10 flex flex-col flex-grow pt-16">
             <Navbar years={years} currentYearId={currentYearId} />
             <main className="flex-grow">{children}</main>

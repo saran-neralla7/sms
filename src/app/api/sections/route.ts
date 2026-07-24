@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 export async function GET(request: Request) {
+    const session = await getServerSession(authOptions);
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");
 
@@ -12,6 +13,26 @@ export async function GET(request: Request) {
         where.departments = {
             some: { id: departmentId }
         };
+    }
+
+    if (session?.user?.role === "FACULTY") {
+        let facultyId = (session.user as any).facultyId;
+        if (!facultyId && session.user.username) {
+            const fac = await prisma.faculty.findFirst({
+                where: { user: { username: session.user.username } },
+                select: { id: true }
+            });
+            if (fac) facultyId = fac.id;
+        }
+
+        if (facultyId) {
+            const mappings = await prisma.facultySubjectMapping.findMany({
+                where: { facultyId },
+                select: { sectionId: true }
+            });
+            const mappedSectionIds = Array.from(new Set(mappings.map(m => m.sectionId).filter(Boolean)));
+            where.id = { in: mappedSectionIds as string[] };
+        }
     }
 
     try {

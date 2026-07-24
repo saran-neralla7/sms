@@ -100,6 +100,33 @@ export async function POST(request: Request) {
             }
         }
 
+        // Faculty Subject Mapping Enforcement: Prevent Faculty from posting for unmapped subjects
+        if (userRole === "FACULTY" && finalSubjectId) {
+            let facultyId = (session.user as any).facultyId;
+            if (!facultyId && session.user?.username) {
+                const fac = await prisma.faculty.findFirst({
+                    where: { user: { username: session.user.username } },
+                    select: { id: true }
+                });
+                if (fac) facultyId = fac.id;
+            }
+
+            if (facultyId) {
+                const mappingCount = await prisma.facultySubjectMapping.count({
+                    where: {
+                        facultyId: facultyId,
+                        subjectId: finalSubjectId
+                    }
+                });
+
+                if (mappingCount === 0) {
+                    return NextResponse.json({
+                        error: "Access Denied: You are not assigned/mapped to teach this subject."
+                    }, { status: 403 });
+                }
+            }
+        }
+
         // Normalize periods
         const finalPeriodIds: (string | null)[] = (periodIds && periodIds.length > 0)
             ? periodIds
@@ -173,16 +200,19 @@ export async function POST(request: Request) {
         const studentsBySection = new Map<string, any[]>();
 
         if (isElective) {
-            // Group elective students by their actual database sectionId!
+            // For Electives, keep ALL students together in a single list
+            const electiveStudents: any[] = [];
             for (const s of students) {
                 const roll = String(s.rollNumber).toLowerCase();
                 const dbStudent = validStudentMap.get(roll);
-                const sId = dbStudent?.sectionId;
-                if (sId) {
-                    const list = studentsBySection.get(sId) || [];
-                    list.push(s);
-                    studentsBySection.set(sId, list);
+                if (dbStudent) {
+                    electiveStudents.push(s);
                 }
+            }
+            // Assign all to a single group key
+            const defaultSectionId = validStudents[0]?.sectionId || sectionId || (sectionIds && sectionIds[0]);
+            if (defaultSectionId) {
+                studentsBySection.set(defaultSectionId, electiveStudents);
             }
         } else if (sectionIds && sectionIds.length > 0) {
             // Multi-section mode: Expect students to contain 'sectionId'
@@ -205,16 +235,14 @@ export async function POST(request: Request) {
             studentsBySection.set(sectionId, students);
         }
 
-        const targetSectionIds: string[] = isElective
-            ? Array.from(studentsBySection.keys())
-            : tempTargetSectionIds;
+        const targetSectionIds: string[] = Array.from(studentsBySection.keys());
 
         const recordType = userRole === "SMS_USER" ? "SMS" : "ACADEMIC";
 
         const records = await prisma.$transaction(async (tx) => {
             const results = [];
 
-            // For each section, for each period, create a record
+            // For each section group, create/update record
             for (const sid of targetSectionIds) {
                 const sectionStudentsRaw = studentsBySection.get(sid) || [];
                 const sectionStudents = [];
@@ -224,7 +252,6 @@ export async function POST(request: Request) {
                     const roll = String(s.rollNumber).toLowerCase();
                     const dbStudent = validStudentMap.get(roll);
 
-                    // If student exists and their DB sectionId matches the target sid (or is elective), accept them
                     if (dbStudent && (isElective || dbStudent.sectionId === sid)) {
                         sectionStudents.push({
                             "Roll Number": dbStudent.rollNumber,
@@ -237,10 +264,10 @@ export async function POST(request: Request) {
                     }
                 }
 
-                // If the filtered list is empty, skip this section to prevent blank records
+                // If the filtered list is empty, skip to prevent blank records
                 if (sectionStudents.length === 0) continue;
 
-                // Resolve departmentId for this section's students if elective
+                // Resolve departmentId
                 let sectionDeptId = departmentId;
                 if (isElective && sectionStudents.length > 0) {
                     const firstRoll = String(sectionStudents[0]["Roll Number"]).toLowerCase();
@@ -250,10 +277,12 @@ export async function POST(request: Request) {
                     }
                 }
 
-                // Serialize details for this section only
+                // Serialize details for this group
                 const details = JSON.stringify(sectionStudents);
 
-                for (const pid of finalPeriodIds) {
+                const periodsToProcess = finalPeriodIds;
+
+                for (const pid of periodsToProcess) {
                     // Check if duplicate already exists based strictly on the DB unique constraint
                     const existing = await tx.attendanceHistory.findFirst({
                         where: {
@@ -266,7 +295,7 @@ export async function POST(request: Request) {
                     });
 
                     if (existing) {
-                        // Pull existing details to support merging (e.g., merging Batch 1 and Batch 2 in the same class hour)
+                        // Pull existing details to support merging
                         let currentDetails: any[] = [];
                         try {
                             if (existing.details) {
@@ -282,7 +311,7 @@ export async function POST(request: Request) {
                             mergedMap.set(student["Roll Number"], student);
                         });
 
-                        // Overwrite/Append with the newly submitted students (this covers Batch 2 adding to Batch 1)
+                        // Overwrite/Append with the newly submitted students
                         sectionStudents.forEach((s: any) => {
                             mergedMap.set(s["Roll Number"], {
                                 "Roll Number": s["Roll Number"],

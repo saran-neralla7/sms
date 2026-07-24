@@ -80,6 +80,10 @@ export default function ReportsPage() {
         return bshDept ? bshDept.id === session.user.departmentId : false;
     }, [session, departments]);
 
+    const isFaculty = useMemo(() => {
+        return (session?.user?.role || "").toUpperCase() === "FACULTY";
+    }, [session]);
+
     const isGlobal = useMemo(() => {
         const role = (session?.user?.role || "").toUpperCase();
         return ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role) || isBSHUser;
@@ -1002,15 +1006,17 @@ export default function ReportsPage() {
                                 </div>
                             </div>
 
-                            <div className="mt-4 flex w-full justify-end border-t border-slate-100 pt-4">
-                                <button
-                                    onClick={handleDownloadOverall}
-                                    disabled={!year || !semester || !sectionId || !startDate || !endDate}
-                                    className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
-                                >
-                                    <FaFileExcel /> Download Overall Subject Summary (Excel)
-                                </button>
-                            </div>
+                            {!isFaculty && (
+                                <div className="mt-4 flex w-full justify-end border-t border-slate-100 pt-4">
+                                    <button
+                                        onClick={handleDownloadOverall}
+                                        disabled={!year || !semester || !sectionId || !startDate || !endDate}
+                                        className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                    >
+                                        <FaFileExcel /> Download Overall Subject Summary (Excel)
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )

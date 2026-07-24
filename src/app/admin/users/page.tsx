@@ -5,7 +5,9 @@ import { User } from "@/types";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import Modal from "@/components/Modal";
 import { useSession } from "next-auth/react";
-import { FaEdit, FaTrash, FaUserPlus, FaUserShield, FaUsers, FaSearch, FaFilter, FaFileExport, FaMagic } from "react-icons/fa";
+import { FaEdit, FaTrash, FaUserPlus, FaUserShield, FaUsers, FaSearch, FaFilter, FaFileExport, FaMagic, FaUserSecret, FaHistory } from "react-icons/fa";
+import Link from "next/link";
+import ImpersonationStartModal from "@/components/ImpersonationStartModal";
 import * as XLSX from "xlsx";
 
 export default function AdminUsersPage() {
@@ -13,6 +15,10 @@ export default function AdminUsersPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const { data: session } = useSession();
+
+    // Impersonation State
+    const [impersonateTarget, setImpersonateTarget] = useState<User | null>(null);
+    const [isImpersonateModalOpen, setIsImpersonateModalOpen] = useState(false);
 
     // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -346,6 +352,12 @@ export default function AdminUsersPage() {
                             <FaTrash /> Delete Selected ({selectedIds.size})
                         </button>
                     )}
+                    <Link
+                        href="/admin/impersonation-logs"
+                        className="flex items-center gap-2 rounded-lg bg-indigo-50 text-indigo-700 px-4 py-2 text-sm font-semibold hover:bg-indigo-100 transition-colors border border-indigo-200"
+                    >
+                        <FaHistory /> Impersonation Audit Logs
+                    </Link>
                     <button
                         onClick={openAddModal}
                         className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
@@ -486,7 +498,20 @@ export default function AdminUsersPage() {
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-3">
+                                            <div className="flex items-center justify-end gap-2">
+                                                {user.id !== session?.user?.id && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setImpersonateTarget(user);
+                                                            setIsImpersonateModalOpen(true);
+                                                        }}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                                                        title="Impersonate User Login"
+                                                    >
+                                                        <FaUserSecret size={13} />
+                                                        <span>Impersonate</span>
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => openEditModal(user)}
                                                     className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
@@ -614,6 +639,18 @@ export default function AdminUsersPage() {
                     : `Are you sure you want to delete ${userToDelete?.username}?`}
                 confirmText="Delete"
                 isDangerous={true}
+            />
+
+            <ImpersonationStartModal
+                isOpen={isImpersonateModalOpen}
+                targetUser={impersonateTarget ? {
+                    id: impersonateTarget.id,
+                    username: impersonateTarget.username,
+                    name: (impersonateTarget as any).faculty?.empName || impersonateTarget.username,
+                    role: impersonateTarget.role
+                } : null}
+                onClose={() => setIsImpersonateModalOpen(false)}
+                onSuccess={() => setIsImpersonateModalOpen(false)}
             />
         </div >
     );
