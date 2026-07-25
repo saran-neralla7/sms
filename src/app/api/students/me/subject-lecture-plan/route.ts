@@ -86,8 +86,33 @@ export async function GET(request: Request) {
             });
         }
 
+        const rawPlan = courseFile?.lecturePlan || [];
+        let flattenedPlan: any[] = [];
+        if (Array.isArray(rawPlan) && rawPlan.length > 0) {
+            if (rawPlan[0] && typeof rawPlan[0] === "object" && "topics" in rawPlan[0] && Array.isArray(rawPlan[0].topics)) {
+                rawPlan.forEach((unitObj: any) => {
+                    const uName = unitObj.unit || "Unit I";
+                    if (Array.isArray(unitObj.topics)) {
+                        unitObj.topics.forEach((tItem: any) => {
+                            const topicText = typeof tItem === "string" ? tItem : (tItem?.topic || "");
+                            if (topicText && topicText.trim() !== "") {
+                                flattenedPlan.push({
+                                    unit: uName,
+                                    topic: topicText,
+                                    plannedPeriods: tItem.plannedPeriods || 1,
+                                    actualDate: tItem.actualDate || tItem.tentativeDate || ""
+                                });
+                            }
+                        });
+                    }
+                });
+            } else {
+                flattenedPlan = rawPlan;
+            }
+        }
+
         return NextResponse.json({
-            lecturePlan: courseFile?.lecturePlan || []
+            lecturePlan: flattenedPlan
         });
 
     } catch (error) {

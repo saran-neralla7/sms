@@ -74,32 +74,35 @@ export async function GET(req: NextRequest) {
 
     const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     sortedSections.sort((a, b) => a.name.localeCompare(b.name));
-    const canonicalSectionId = sortedSections[0]?.id || sectionId;
 
-    // Determine the sectionIds to query based on elective status
-    let sectionIds: string[] = [];
-    if (isElective) {
-      sectionIds = Array.from(new Set(mappings.map(m => m.sectionId)));
-      if (sectionId && !sectionIds.includes(sectionId)) {
-        sectionIds.push(sectionId);
-      }
-    } else {
-      sectionIds = [sectionId];
-    }
+    // 1. Fetch CourseFile metadata using the specific sectionId (or canonicalSectionId if elective)
+    const targetSectionId = isElective ? (sortedSections[0]?.id || sectionId) : sectionId;
 
-    // 1. Fetch CourseFile metadata using the canonicalSectionId
-    const courseFile = await prisma.courseFile.findUnique({
+    let courseFile = await prisma.courseFile.findUnique({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
           academicYearId,
           departmentId,
           year,
           semester,
-          sectionId: canonicalSectionId,
+          sectionId: targetSectionId,
           subjectId
         }
       }
     });
+
+    // If section-specific course file does not exist yet, fallback to check any existing course file for this subject to pre-fill common fields
+    if (!courseFile && !isElective) {
+      courseFile = await prisma.courseFile.findFirst({
+        where: {
+          academicYearId,
+          departmentId,
+          year,
+          semester,
+          subjectId
+        }
+      });
+    }
 
     // Fetch Faculty
     let faculty = null;
@@ -174,7 +177,7 @@ export async function GET(req: NextRequest) {
       departmentId,
       year,
       semester,
-      sectionId: sectionIds,
+      sectionId: targetSectionId,
       subjectId,
       include: {
         section: true
@@ -203,7 +206,7 @@ export async function GET(req: NextRequest) {
     // 5. Fetch Faculty Timetable for this subject and all mapped sections (Item 7)
     const timetable = await prisma.timetable.findMany({
       where: {
-        sectionId: { in: sectionIds },
+        sectionId: targetSectionId,
         subjectId
       },
       include: {
@@ -218,7 +221,7 @@ export async function GET(req: NextRequest) {
 
     // 6. Fetch Mid exam papers (Items 10, 15) and marks (Items 12, 17) for all sections
     const mid1Papers = await prisma.midExamPaper.findMany({
-      where: { academicYearId, departmentId, year, semester, sectionId: { in: sectionIds }, subjectId, examType: "MID_I" },
+      where: { academicYearId, departmentId, year, semester, sectionId: targetSectionId, subjectId, examType: "MID_I" },
       include: {
         questions: {
           include: {
@@ -239,7 +242,7 @@ export async function GET(req: NextRequest) {
     });
 
     const mid2Papers = await prisma.midExamPaper.findMany({
-      where: { academicYearId, departmentId, year, semester, sectionId: { in: sectionIds }, subjectId, examType: "MID_II" },
+      where: { academicYearId, departmentId, year, semester, sectionId: targetSectionId, subjectId, examType: "MID_II" },
       include: {
         questions: {
           include: {
@@ -311,7 +314,7 @@ export async function GET(req: NextRequest) {
 
     // 8. Fetch assignment marks
     const assignmentMarks = await prisma.assignmentMark.findMany({
-      where: { academicYearId, departmentId, year, semester, sectionId: { in: sectionIds }, subjectId }
+      where: { academicYearId, departmentId, year, semester, sectionId: targetSectionId, subjectId }
     });
 
     // 9. Fetch SemesterResult for students in this subject (Item 22)
@@ -430,9 +433,12 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    const subjectObj = await prisma.subject.findUnique({ where: { id: subjectId } });
+    const isElective = subjectObj?.isElective ?? false;
+
     const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     sortedSections.sort((a, b) => a.name.localeCompare(b.name));
-    const canonicalSectionId = sortedSections[0]?.id || sectionId;
+    const targetSectionId = isElective ? (sortedSections[0]?.id || sectionId) : sectionId;
 
     const courseFile = await prisma.courseFile.upsert({
       where: {
@@ -441,7 +447,7 @@ export async function POST(req: NextRequest) {
           departmentId,
           year,
           semester,
-          sectionId: canonicalSectionId,
+          sectionId: targetSectionId,
           subjectId
         }
       },
@@ -464,7 +470,7 @@ export async function POST(req: NextRequest) {
         departmentId,
         year,
         semester,
-        sectionId: canonicalSectionId,
+        sectionId: targetSectionId,
         subjectId,
         facultyId: resolvedFacultyId,
         teachingSupportText,
@@ -484,11 +490,11 @@ export async function POST(req: NextRequest) {
     // Audit log
     try {
       const subject = await prisma.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
-      const section = await prisma.section.findUnique({ where: { id: canonicalSectionId }, select: { name: true } });
+      const section = await prisma.section.findUnique({ where: { id: targetSectionId }, select: { name: true } });
       const label = `${subject?.name || subjectId} | Year ${year} Sem ${semester}${section ? ` | ${section.name}` : ''}`;
       const session = await getServerSession(authOptions);
       if (session) {
-        await logActivity(session.user.id, courseFile.createdAt === courseFile.updatedAt ? "CREATE" : "UPDATE", "CourseFile", label, { subjectId, year, semester, sectionId: canonicalSectionId });
+        await logActivity(session.user.id, courseFile.createdAt === courseFile.updatedAt ? "CREATE" : "UPDATE", "CourseFile", label, { subjectId, year, semester, sectionId: targetSectionId });
       }
     } catch (_) {}
 
@@ -548,19 +554,22 @@ export async function PATCH(req: NextRequest) {
       }
     });
 
+    const subjectObj = await prisma.subject.findUnique({ where: { id: subjectId } });
+    const isElective = subjectObj?.isElective ?? false;
+
     const sortedSections = mappings.map(m => m.section).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     sortedSections.sort((a, b) => a.name.localeCompare(b.name));
-    const canonicalSectionId = sortedSections[0]?.id || sectionId;
+    const targetSectionId = isElective ? (sortedSections[0]?.id || sectionId) : sectionId;
 
     const courseFile = await prisma.courseFile.upsert({
       where: {
         academicYearId_departmentId_year_semester_sectionId_subjectId: {
-          academicYearId, departmentId, year, semester, sectionId: canonicalSectionId, subjectId
+          academicYearId, departmentId, year, semester, sectionId: targetSectionId, subjectId
         }
       },
       update: updateData,
       create: {
-        academicYearId, departmentId, year, semester, sectionId: canonicalSectionId, subjectId,
+        academicYearId, departmentId, year, semester, sectionId: targetSectionId, subjectId,
         facultyId: resolvedFacultyId,
         ...updateData
       }
@@ -569,10 +578,10 @@ export async function PATCH(req: NextRequest) {
     // Audit log
     try {
       const subject = await prisma.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
-      const section = await prisma.section.findUnique({ where: { id: canonicalSectionId }, select: { name: true } });
+      const section = await prisma.section.findUnique({ where: { id: targetSectionId }, select: { name: true } });
       const label = `${subject?.name || subjectId} | Year ${year} Sem ${semester}${section ? ` | ${section.name}` : ''}`;
       if (session) {
-        await logActivity(session.user.id, "UPDATE", "CourseFile", label, { subjectId, year, semester, sectionId: canonicalSectionId, ...updateData });
+        await logActivity(session.user.id, "UPDATE", "CourseFile", label, { subjectId, year, semester, sectionId: targetSectionId, ...updateData });
       }
     } catch (_) {}
 

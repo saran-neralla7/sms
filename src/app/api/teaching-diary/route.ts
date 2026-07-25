@@ -281,10 +281,17 @@ export async function POST(request: Request) {
             if (currentYear) academicYearId = currentYear.id;
         }
 
+        // Calculate dayStart and dayEnd to handle timezone boundary differences cleanly
+        const parsedDate = new Date(date);
+        const dayStart = new Date(parsedDate);
+        dayStart.setUTCHours(0, 0, 0, 0);
+        const dayEnd = new Date(parsedDate);
+        dayEnd.setUTCHours(23, 59, 59, 999);
+
         // Check if there is already an AttendanceHistory record for this date, section, period, year, department
         const existing = await prisma.attendanceHistory.findFirst({
             where: {
-                date: new Date(date),
+                date: { gte: dayStart, lte: dayEnd },
                 sectionId,
                 periodId,
                 year: subject.year,
@@ -307,7 +314,7 @@ export async function POST(request: Request) {
             // Create new record
             record = await prisma.attendanceHistory.create({
                 data: {
-                    date: new Date(date),
+                    date: parsedDate,
                     year: subject.year,
                     semester: subject.semester,
                     sectionId,
@@ -362,7 +369,7 @@ export async function POST(request: Request) {
         for (const sid of otherSectionIds) {
             const existingOther = await prisma.attendanceHistory.findFirst({
                 where: {
-                    date: new Date(date),
+                    date: { gte: dayStart, lte: dayEnd },
                     sectionId: sid,
                     periodId,
                     year: subject.year,

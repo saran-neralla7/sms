@@ -241,9 +241,9 @@ export default function FacultyDashboard() {
                                         return (
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {filtered.map((mapping: any) => (
-                                                    <div key={mapping.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4 hover:shadow-md transition-shadow">
+                                                    <div key={mapping.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:shadow-md transition-all">
                                                         <div className="flex justify-between items-start">
-                                                            <div>
+                                                            <div className="flex-1">
                                                                 <div className="flex flex-wrap items-center gap-2 mb-2">
                                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
                                                                         {mapping.academicYear?.name}
@@ -257,10 +257,13 @@ export default function FacultyDashboard() {
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <h4 className="font-bold text-slate-900 text-lg leading-tight">{mapping.subject?.name}</h4>
+                                                                <h4 className="font-bold text-slate-900 text-lg leading-tight cursor-pointer hover:text-blue-600" onClick={() => router.push(`/faculty/subject-dashboard?subjectId=${mapping.subjectId}&sectionId=${mapping.sectionId}&academicYearId=${mapping.academicYearId}`)}>
+                                                                    {mapping.subject?.name}
+                                                                </h4>
                                                                 <p className="text-sm font-mono text-slate-500 mt-1">{mapping.subject?.code}</p>
                                                             </div>
                                                         </div>
+                                                        
                                                         <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
                                                             <span className="text-sm font-medium text-slate-600 flex items-center gap-2">
                                                                 <FaChalkboard className="text-slate-400" />
@@ -269,16 +272,22 @@ export default function FacultyDashboard() {
                                                                     : `Section ${mapping.section?.name}`
                                                                 }
                                                             </span>
+                                                            <Link
+                                                                href={`/faculty/subject-dashboard?subjectId=${mapping.subjectId}&sectionId=${mapping.sectionId}&academicYearId=${mapping.academicYearId}`}
+                                                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm flex items-center gap-1"
+                                                            >
+                                                                <FaBookOpen size={12} /> Detailed Dashboard
+                                                            </Link>
                                                         </div>
 
                                                         <button 
                                                             type="button"
                                                             onClick={() => toggleMapping(mapping.id)}
-                                                            className="mt-4 flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                                                            className="mt-3 flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
                                                         >
                                                             <span>{mapping.students?.length || 0} Students Assigned</span>
                                                             <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
-                                                                {expandedMappings[mapping.id] ? "Hide ▲" : "View ▼"}
+                                                                {expandedMappings[mapping.id] ? "Hide ▲" : "Quick Roster ▼"}
                                                             </span>
                                                         </button>
 
