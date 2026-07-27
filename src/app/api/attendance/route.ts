@@ -283,15 +283,20 @@ export async function POST(request: Request) {
                 const periodsToProcess = finalPeriodIds;
 
                 for (const pid of periodsToProcess) {
-                    // Check if duplicate already exists based strictly on the DB unique constraint
+                    const existingWhere: any = {
+                        date: new Date(date),
+                        sectionId: sid,
+                        periodId: pid,
+                        year: String(year),
+                        departmentId: sectionDeptId,
+                        downloadedBy: (session.user as any).id
+                    };
+                    if (finalSubjectId) {
+                        existingWhere.subjectId = finalSubjectId;
+                    }
+
                     const existing = await tx.attendanceHistory.findFirst({
-                        where: {
-                            date: new Date(date),
-                            sectionId: sid,
-                            periodId: pid,
-                            year: String(year),
-                            departmentId: sectionDeptId
-                        }
+                        where: existingWhere
                     });
 
                     if (existing) {

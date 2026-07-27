@@ -27,6 +27,12 @@ export default function ReportsPage() {
     const [semester, setSemester] = useState("");
     const [sectionId, setSectionId] = useState("");
     const [subjectId, setSubjectId] = useState("");
+    const [labBatches, setLabBatches] = useState<any[]>([]);
+    const [selectedLabBatchId, setSelectedLabBatchId] = useState("");
+    const [reportMode, setReportMode] = useState<"standard" | "scholarship" | "monthly">("standard");
+    const [targetWorkingDays, setTargetWorkingDays] = useState("");
+    const [subjectViewMode, setSubjectViewMode] = useState<"summary" | "register">("summary");
+    const [registerData, setRegisterData] = useState<{ sessions: any[]; students: any[] } | null>(null);
 
     // Consolidated Dates
     const [startDate, setStartDate] = useState("");
@@ -69,6 +75,7 @@ export default function ReportsPage() {
         setSemester("");
         setSectionId("");
         setSubjectId("");
+        setSelectedLabBatchId("");
         setStartDate("");
         setEndDate("");
         setWeekDate("");
@@ -88,6 +95,35 @@ export default function ReportsPage() {
         const role = (session?.user?.role || "").toUpperCase();
         return ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role) || isBSHUser;
     }, [session, isBSHUser]);
+
+    const effectiveDeptId = useMemo(() => {
+        return isGlobal ? departmentId : (session?.user as any)?.departmentId;
+    }, [isGlobal, departmentId, session]);
+
+    const selectedSubjectObj = useMemo(() => {
+        return subjects.find(s => s.id === subjectId);
+    }, [subjects, subjectId]);
+
+    const isLabSubject = useMemo(() => {
+        return selectedSubjectObj?.type === "LAB";
+    }, [selectedSubjectObj]);
+
+    useEffect(() => {
+        if (sectionId && effectiveDeptId && year && semester) {
+            const query = new URLSearchParams({
+                departmentId: effectiveDeptId,
+                year,
+                semester
+            });
+            fetch(`/api/sections/${sectionId}/batches?${query.toString()}`)
+                .then(res => res.json())
+                .then(data => setLabBatches(data.batches || []))
+                .catch(console.error);
+        } else {
+            setLabBatches([]);
+        }
+        setSelectedLabBatchId("");
+    }, [sectionId, effectiveDeptId, year, semester]);
 
     useEffect(() => {
         fetchDepartments();
@@ -110,10 +146,9 @@ export default function ReportsPage() {
             fetchElectives();
             return;
         }
-        const effectiveDeptId = isGlobal ? departmentId : (session?.user as any)?.departmentId;
         if (effectiveDeptId) fetchSections(effectiveDeptId);
         if (effectiveDeptId && year && semester) fetchSubjects(effectiveDeptId);
-    }, [departmentId, session, year, semester, activeTab, isGlobal]);
+    }, [effectiveDeptId, year, semester, activeTab]);
 
     // Refetch when filters change (Daily Only)
     useEffect(() => {
@@ -224,8 +259,44 @@ export default function ReportsPage() {
         }
     };
 
+    const fetchSubjectRegister = async () => {
+        if (!startDate || !endDate || !subjectId || !sectionId) return;
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (year) params.append("year", year);
+            if (semester) params.append("semester", semester);
+            if (sectionId) params.append("sectionId", sectionId);
+            if (departmentId) params.append("departmentId", departmentId);
+            if (subjectId) params.append("subjectId", subjectId);
+            if (selectedLabBatchId) params.append("labBatchId", selectedLabBatchId);
+            params.append("startDate", startDate);
+            params.append("endDate", endDate);
+
+            const res = await fetch(`/api/reports/subject-register?${params.toString()}`);
+            if (res.ok) {
+                const data = await res.json();
+                setRegisterData(data);
+            } else {
+                const err = await res.json();
+                setStatus({ type: "error", message: err.error || "Failed to fetch Subject Register" });
+            }
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Error fetching Subject Register" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const fetchConsolidated = async () => {
         if (!startDate || !endDate) return;
+
+        if (activeTab === "subject" && subjectViewMode === "register") {
+            await fetchSubjectRegister();
+            return;
+        }
+
         setLoading(true);
         try {
             const params = new URLSearchParams();
@@ -237,6 +308,15 @@ export default function ReportsPage() {
             }
             if ((activeTab === "subject" || activeTab === "elective") && subjectId) {
                 params.append("subjectId", subjectId);
+            }
+            if (activeTab === "subject" && selectedLabBatchId) {
+                params.append("labBatchId", selectedLabBatchId);
+            }
+            if (reportMode) {
+                params.append("reportType", reportMode);
+            }
+            if (reportMode === "scholarship" && targetWorkingDays) {
+                params.append("targetWorkingDays", targetWorkingDays);
             }
             params.append("startDate", startDate);
             params.append("endDate", endDate);
@@ -290,20 +370,76 @@ export default function ReportsPage() {
     };
 
     const handleDownloadConsolidated = () => {
+        if (activeTab === "subject" && subjectViewMode === "register" && registerData) {
+            const exportRows = registerData.students.map(s => {
+                const row: any = {
+                    "Roll Number": s.rollNumber,
+                    "Name": s.name
+                };
+                registerData.sessions.forEach(sess => {
+                    const colName = `${sess.dateStr} (${sess.periodName})`;
+                    row[colName] = s.attendanceMap[sess.id] || "-";
+                });
+                row["Total Classes"] = s.totalClasses;
+                row["Present"] = s.present;
+                row["Absent"] = s.absent;
+                row["Percentage"] = s.percentage + "%";
+                return row;
+            });
+
+            const ws = XLSX.utils.json_to_sheet(exportRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Subject Register");
+            const subName = subjects.find(s => s.id === subjectId)?.name || "Subject";
+            XLSX.writeFile(wb, `${subName.replace(/\s+/g, '_')}_Register_${startDate}_to_${endDate}.xlsx`);
+            return;
+        }
+
         if (sortedConsolidatedData.length === 0) return;
 
-        const ws = XLSX.utils.json_to_sheet(sortedConsolidatedData.map(s => ({
-            "Roll Number": s.rollNumber,
-            "Name": s.name,
-            "Total Classes": s.totalClasses,
-            "Present": s.present,
-            "Absent": s.absent,
-            "Percentage": s.percentage + "%"
-        })));
+        let exportRows: any[] = [];
+        if (reportMode === "scholarship") {
+            exportRows = sortedConsolidatedData.map(s => ({
+                "Roll Number": s.rollNumber,
+                "Name": s.name,
+                "Govt Scholarship ID": s.scholarshipId || "N/A",
+                "Total Working Days": s.totalDays,
+                "Present Days": s.presentDays,
+                "Absent Days": s.absentDays,
+                "Attendance %": s.percentage + "%"
+            }));
+        } else if (reportMode === "monthly") {
+            exportRows = sortedConsolidatedData.map(s => {
+                const row: any = {
+                    "Roll Number": s.rollNumber,
+                    "Name": s.name
+                };
+                (s.monthlyStats || []).forEach((m: any) => {
+                    row[`${m.monthLabel} (P)`] = m.present;
+                    row[`${m.monthLabel} (A)`] = m.absent;
+                    row[`${m.monthLabel} (C)`] = m.totalClasses;
+                    row[`${m.monthLabel} (%)`] = m.percentage + "%";
+                });
+                return row;
+            });
+        } else {
+            exportRows = sortedConsolidatedData.map(s => ({
+                "Roll Number": s.rollNumber,
+                "Name": s.name,
+                "Total Classes": s.totalClasses,
+                "Present": s.present,
+                "Absent": s.absent,
+                "Percentage": s.percentage + "%"
+            }));
+        }
 
+        const ws = XLSX.utils.json_to_sheet(exportRows);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Consolidated Report");
-        XLSX.writeFile(wb, `Consolidated_Report_${startDate}_to_${endDate}.xlsx`);
+        const sheetTitle = reportMode === "scholarship" ? "Govt Scholarship Report" : (reportMode === "monthly" ? "Monthly Consolidation" : "Consolidated Report");
+        XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
+        const batchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
+        const batchSuffix = batchName ? `_Batch_${batchName}` : "";
+        XLSX.writeFile(wb, `${sheetTitle.replace(/\s+/g, '_')}_${startDate}_to_${endDate}${batchSuffix}.xlsx`);
     };
 
     const handleDownloadOverall = async () => {
@@ -371,6 +507,131 @@ export default function ReportsPage() {
     };
 
     const handleDownloadPDF = () => {
+        if (activeTab === "subject" && subjectViewMode === "register" && registerData) {
+            try {
+                const doc = new jsPDF({ orientation: "landscape" });
+                const pageWidth = doc.internal.pageSize.width;
+
+                doc.setFont("times", "bold");
+                doc.setFontSize(12);
+                doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, 11, { align: "center" });
+
+                doc.setFontSize(9.5);
+                doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, 16, { align: "center" });
+
+                const subName = subjects.find(s => s.id === subjectId)?.name || "Subject";
+                const deptName = departments.find(d => d.id === departmentId)?.name || "";
+                const secName = sections.find(s => s.id === sectionId)?.name || "";
+                const batchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
+
+                doc.setFontSize(11);
+                doc.setFont("times", "bold");
+                doc.text(`Subject Attendance Register - ${subName}`, pageWidth / 2, 22, { align: "center" });
+
+                doc.setFontSize(8.5);
+                doc.setFont("times", "normal");
+                doc.text(`Department: ${deptName} | Year: ${year} | Sem: ${semester} | Section: ${secName}${batchName ? ` | Batch: ${batchName}` : ""} | Dates: ${formatISTDate(startDate)} to ${formatISTDate(endDate)}`, pageWidth / 2, 27, { align: "center" });
+
+                const sessionCount = registerData.sessions.length;
+
+                const tableColumn = [
+                    "Roll No",
+                    "Name",
+                    ...registerData.sessions.map(sess => `${sess.dateStr}\n${sess.periodName}`),
+                    "Total",
+                    "P",
+                    "A",
+                    "%"
+                ];
+
+                const tableRows = registerData.students.map(s => [
+                    s.rollNumber,
+                    s.name,
+                    ...registerData.sessions.map(sess => s.attendanceMap[sess.id] || "-"),
+                    s.totalClasses,
+                    s.present,
+                    s.absent,
+                    s.percentage + "%"
+                ]);
+
+                const totalIdx = 2 + sessionCount;
+                const pIdx = 3 + sessionCount;
+                const aIdx = 4 + sessionCount;
+                const pctIdx = 5 + sessionCount;
+
+                const columnStylesObj: Record<number, any> = {
+                    0: { cellWidth: 22, halign: "left" },
+                    1: { cellWidth: 35, halign: "left" },
+                    [totalIdx]: { cellWidth: 12, halign: "center", fontStyle: "bold" },
+                    [pIdx]: { cellWidth: 10, halign: "center", fontStyle: "bold" },
+                    [aIdx]: { cellWidth: 10, halign: "center", fontStyle: "bold" },
+                    [pctIdx]: { cellWidth: 16, halign: "center", fontStyle: "bold" }
+                };
+
+                const autoTableFn = (doc as any).autoTable || autoTable;
+                if (typeof autoTableFn === 'function') {
+                    autoTableFn(doc, {
+                        head: [tableColumn],
+                        body: tableRows,
+                        startY: 31,
+                        theme: "grid",
+                        styles: {
+                            font: "times",
+                            fontSize: sessionCount > 15 ? 6.5 : (sessionCount > 10 ? 7 : 7.5),
+                            cellPadding: 1.2,
+                            halign: "center",
+                            lineColor: [200, 200, 200],
+                            lineWidth: 0.1
+                        },
+                        headStyles: {
+                            fillColor: [240, 243, 246],
+                            textColor: [30, 41, 59],
+                            fontStyle: "bold",
+                            halign: "center",
+                            fontSize: sessionCount > 15 ? 6 : (sessionCount > 10 ? 6.5 : 7.5),
+                            cellPadding: 1.5
+                        },
+                        columnStyles: columnStylesObj,
+                        didParseCell: (data: any) => {
+                            if (data.section === 'body') {
+                                const val = data.cell.raw ? String(data.cell.raw) : "";
+                                if (val === "P") {
+                                    data.cell.styles.fillColor = [220, 252, 231];
+                                    data.cell.styles.textColor = [22, 101, 52];
+                                    data.cell.styles.fontStyle = "bold";
+                                } else if (val === "A") {
+                                    data.cell.styles.fillColor = [254, 226, 226];
+                                    data.cell.styles.textColor = [153, 27, 27];
+                                    data.cell.styles.fontStyle = "bold";
+                                } else if (val.endsWith("%")) {
+                                    const pct = parseFloat(val.replace("%", ""));
+                                    if (!isNaN(pct)) {
+                                        if (pct >= 75) {
+                                            data.cell.styles.fillColor = [220, 252, 231];
+                                            data.cell.styles.textColor = [22, 101, 52];
+                                        } else if (pct >= 65) {
+                                            data.cell.styles.fillColor = [254, 243, 199];
+                                            data.cell.styles.textColor = [146, 64, 14];
+                                        } else {
+                                            data.cell.styles.fillColor = [254, 226, 226];
+                                            data.cell.styles.textColor = [153, 27, 27];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                doc.save(`${subName.replace(/\s+/g, '_')}_Register_${startDate}_to_${endDate}.pdf`);
+                setStatus({ type: "success", message: "Register PDF Generated!" });
+            } catch (err) {
+                console.error(err);
+                setStatus({ type: "error", message: "Failed to generate Register PDF" });
+            }
+            return;
+        }
+
         console.log("PDF: Button clicked");
         try {
             if (consolidatedData.length === 0) {
@@ -418,11 +679,12 @@ export default function ReportsPage() {
                     const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
                     const secName = sections.find(s => s.id === sectionId)?.name || "All";
                     const subName = subjects.find(s => s.id === subjectId)?.name;
+                    const batchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
 
                     // Left Side Details
                     doc.text(`Department: ${deptName}`, 15, 42);
                     doc.text(`Year: ${year}   Semester: ${semester}`, 15, 48);
-                    doc.text(`Section: ${secName} ${subName ? `   Subject: ${subName}` : ""}`, 15, 54);
+                    doc.text(`Section: ${secName} ${subName ? `   Subject: ${subName}` : ""}${batchName ? `   Batch: ${batchName}` : ""}`, 15, 54);
 
                     // Right Side Details
                     doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
@@ -432,60 +694,76 @@ export default function ReportsPage() {
                     // Title
                     doc.setFont("times", "bold");
                     doc.setFontSize(14);
-                    doc.text("Attendance Report", pageWidth / 2, 65, { align: "center" });
+                    const titleText = reportMode === "scholarship" ? "Govt Scholarship Day-Wise Attendance Report" : (reportMode === "monthly" ? "Progressive Monthly Attendance Report" : "Attendance Report");
+                    doc.text(titleText, pageWidth / 2, 65, { align: "center" });
 
                     // --- Table ---
-                    const tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
-                    const tableRows: any[] = [];
+                    let tableColumn: string[] = [];
+                    let tableRows: any[] = [];
 
-                    sortedConsolidatedData.forEach(student => {
-                        const rowData = [
-                            student.rollNumber,
-                            student.name,
-                            student.totalClasses,
-                            student.present,
-                            student.absent,
-                            student.percentage + "%"
-                        ];
-                        tableRows.push(rowData);
-                    });
+                    if (reportMode === "scholarship") {
+                        tableColumn = ["Roll No", "Name", "Scholarship ID", "Total Days", "Present", "Absent", "%"];
+                        tableRows = sortedConsolidatedData.map(s => [
+                            s.rollNumber,
+                            s.name,
+                            s.scholarshipId || "N/A",
+                            s.totalDays,
+                            s.presentDays,
+                            s.absentDays,
+                            s.percentage + "%"
+                        ]);
+                    } else if (reportMode === "monthly") {
+                        const monthLabels = (sortedConsolidatedData[0]?.monthlyStats || []).map((m: any) => m.monthLabel);
+                        tableColumn = ["Roll No", "Name", ...monthLabels.map((l: string) => `${l} %`)];
+                        tableRows = sortedConsolidatedData.map(s => [
+                            s.rollNumber,
+                            s.name,
+                            ...(s.monthlyStats || []).map((m: any) => m.percentage + "%")
+                        ]);
+                    } else {
+                        tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
+                        tableRows = sortedConsolidatedData.map(s => [
+                            s.rollNumber,
+                            s.name,
+                            s.totalClasses,
+                            s.present,
+                            s.absent,
+                            s.percentage + "%"
+                        ]);
+                    }
+
+                    const didParseCellFn = (data: any) => {
+                        if (data.section === 'body') {
+                            const textVal = data.cell.raw ? String(data.cell.raw) : "";
+                            if (textVal.endsWith("%")) {
+                                const pct = parseFloat(textVal.replace("%", ""));
+                                if (!isNaN(pct)) {
+                                    if (pct >= 75) {
+                                        data.cell.styles.fillColor = [220, 252, 231];
+                                        data.cell.styles.textColor = [22, 101, 52];
+                                    } else if (pct >= 65) {
+                                        data.cell.styles.fillColor = [254, 243, 199];
+                                        data.cell.styles.textColor = [146, 64, 14];
+                                    } else {
+                                        data.cell.styles.fillColor = [254, 226, 226];
+                                        data.cell.styles.textColor = [153, 27, 27];
+                                    }
+                                }
+                            }
+                        }
+                    };
 
                     console.log("PDF: Drawing table...", tableRows.length);
-                    // Try different autoTable invocations
-                    if ((doc as any).autoTable) {
-                        (doc as any).autoTable({
+                    const autoTableFn = (doc as any).autoTable || autoTable;
+                    if (typeof autoTableFn === 'function') {
+                        autoTableFn(doc, {
                             head: [tableColumn],
                             body: tableRows,
                             startY: 70,
                             theme: "plain",
                             styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.3 },
                             headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] },
-                            columnStyles: {
-                                0: { cellWidth: 30 },
-                                1: { cellWidth: 60 },
-                                2: { cellWidth: 20, halign: 'center' },
-                                3: { cellWidth: 20, halign: 'center' },
-                                4: { cellWidth: 20, halign: 'center' },
-                                5: { cellWidth: 20, halign: 'center' },
-                            }
-                        });
-                    } else if (typeof autoTable === 'function') {
-                        console.log("PDF: Using autoTable function directly");
-                        autoTable(doc, {
-                            head: [tableColumn],
-                            body: tableRows,
-                            startY: 70,
-                            theme: "plain",
-                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.3 },
-                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] },
-                            columnStyles: {
-                                0: { cellWidth: 30 },
-                                1: { cellWidth: 60 },
-                                2: { cellWidth: 20, halign: 'center' },
-                                3: { cellWidth: 20, halign: 'center' },
-                                4: { cellWidth: 20, halign: 'center' },
-                                5: { cellWidth: 20, halign: 'center' },
-                            }
+                            didParseCell: didParseCellFn
                         });
                     } else {
                         console.error("PDF: autoTable plugin not found");
@@ -930,6 +1208,25 @@ export default function ReportsPage() {
 
                         {/* Filters & Actions */}
                         <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">View Format:</span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubjectViewMode("summary")}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "summary" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Summary View
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubjectViewMode("register")}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "register" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Daily Register Matrix (Date-Wise)
+                                    </button>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                                 {isGlobal && (
                                     <div className="space-y-1">
@@ -971,7 +1268,7 @@ export default function ReportsPage() {
                                 </div>
                             </div>
 
-                            <div className="mt-4 grid grid-cols-2 gap-4 md:mt-0 md:w-full md:grid-cols-4">
+                            <div className={`mt-4 grid grid-cols-2 gap-4 md:mt-0 md:w-full ${isLabSubject && labBatches.length > 0 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
                                 <div className="space-y-1 col-span-2 md:col-span-1">
                                     <label className="text-xs font-semibold text-slate-500">Subject</label>
                                     <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -979,6 +1276,21 @@ export default function ReportsPage() {
                                         {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
                                     </select>
                                 </div>
+                                {isLabSubject && labBatches.length > 0 && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-slate-500">Lab Batch</label>
+                                        <select
+                                            value={selectedLabBatchId}
+                                            onChange={(e) => setSelectedLabBatchId(e.target.value)}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value="">All Batches</option>
+                                            {labBatches.map(b => (
+                                                <option key={b.id} value={b.id}>{b.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500">Start Date</label>
                                     <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-full" />
@@ -1282,9 +1594,89 @@ export default function ReportsPage() {
                 </div>
             )}
 
-            {/* Shared Table for Consolidated & Subject Tabs */}
+            {/* Subject Register Matrix Table View */}
             {
-                (activeTab === "consolidated" || activeTab === "subject" || activeTab === "elective") && (
+                activeTab === "subject" && subjectViewMode === "register" && registerData && (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm mb-8">
+                        <div className="flex flex-wrap justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3 gap-2">
+                            <div>
+                                <h3 className="font-semibold text-slate-700">Subject Daily Attendance Register Matrix</h3>
+                                <p className="text-xs text-slate-500">{registerData.sessions.length} class sessions recorded</p>
+                            </div>
+                            <div className="flex items-center">
+                                <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 hover:border-green-300">
+                                    <FaFileExcel className="text-green-600" /> Excel Register
+                                </button>
+                                <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
+                                    <FaFilePdf className="text-red-600" /> PDF Register
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto max-h-[600px]">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-100 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="sticky left-0 bg-slate-100 z-20 px-4 py-3 text-xs font-bold uppercase text-slate-600 border-b border-r border-slate-200 shadow-xs">Roll No</th>
+                                        <th className="sticky left-28 bg-slate-100 z-20 px-4 py-3 text-xs font-bold uppercase text-slate-600 border-b border-r border-slate-200 shadow-xs">Name</th>
+                                        {registerData.sessions.map((sess: any) => (
+                                            <th key={sess.id} className="px-3 py-2 text-center text-xs font-bold text-slate-600 border-b border-r border-slate-200 min-w-[65px]">
+                                                <div>{sess.dateStr}</div>
+                                                <div className="text-[10px] text-blue-600 font-medium">{sess.periodName}</div>
+                                            </th>
+                                        ))}
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-600 border-b border-r border-slate-200">Total</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-green-700 border-b border-r border-slate-200">P</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-red-700 border-b border-r border-slate-200">A</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-600 border-b border-slate-200">%</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {registerData.students.map((s: any) => {
+                                        const renderBadge = (pctStr: string) => {
+                                            const pct = parseFloat(pctStr);
+                                            if (isNaN(pct)) return <span className="text-slate-600 font-medium">{pctStr}%</span>;
+                                            if (pct >= 75) {
+                                                return <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-extrabold text-emerald-800 border border-emerald-300">{pct.toFixed(2)}%</span>;
+                                            } else if (pct >= 65) {
+                                                return <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800 border border-amber-300">{pct.toFixed(2)}%</span>;
+                                            } else {
+                                                return <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-extrabold text-rose-800 border border-rose-300">{pct.toFixed(2)}%</span>;
+                                            }
+                                        };
+
+                                        return (
+                                            <tr key={s.id} className="hover:bg-slate-50">
+                                                <td className="sticky left-0 bg-white z-10 px-4 py-2.5 text-xs font-mono text-slate-700 border-r border-slate-100 font-semibold">{s.rollNumber}</td>
+                                                <td className="sticky left-28 bg-white z-10 px-4 py-2.5 text-xs font-medium text-slate-900 border-r border-slate-100 max-w-[180px] truncate">{s.name}</td>
+                                                {registerData.sessions.map((sess: any) => {
+                                                    const st = s.attendanceMap[sess.id] || "-";
+                                                    return (
+                                                        <td key={sess.id} className="px-2 py-2 text-center text-xs border-r border-slate-100">
+                                                            {st === "P" && <span className="inline-block w-6 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black text-[11px]">P</span>}
+                                                            {st === "A" && <span className="inline-block w-6 py-0.5 rounded bg-rose-100 text-rose-800 font-black text-[11px]">A</span>}
+                                                            {st === "-" && <span className="text-slate-400 font-medium">-</span>}
+                                                        </td>
+                                                    );
+                                                })}
+                                                <td className="px-4 py-2.5 text-center text-xs text-slate-600 font-semibold border-r border-slate-100">{s.totalClasses}</td>
+                                                <td className="px-4 py-2.5 text-center text-xs text-emerald-600 font-bold border-r border-slate-100">{s.present}</td>
+                                                <td className="px-4 py-2.5 text-center text-xs text-rose-600 font-bold border-r border-slate-100">{s.absent}</td>
+                                                <td className="px-4 py-2.5 text-center text-xs font-bold">
+                                                    {renderBadge(s.percentage)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Shared Table for Consolidated & Subject Tabs (Summary Mode) */}
+            {
+                (activeTab === "consolidated" || (activeTab === "subject" && subjectViewMode === "summary") || activeTab === "elective") && (
                     <>
                         {consolidatedData.length > 0 && (
                             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -1321,49 +1713,102 @@ export default function ReportsPage() {
                                                     </div>
                                                 </th>
                                                 <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500">Name</th>
-                                                <th onClick={() => handleSort("totalClasses")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        Total Classes
-                                                        {sortConfig.key === "totalClasses" && (
-                                                            sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
-                                                        )}
-                                                    </div>
-                                                </th>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
-                                                <th onClick={() => handleSort("percentage")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        %
-                                                        {sortConfig.key === "percentage" && (
-                                                            sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
-                                                        )}
-                                                    </div>
-                                                </th>
+                                                {reportMode === "scholarship" && (
+                                                    <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Govt Scholarship ID</th>
+                                                )}
+                                                {reportMode === "monthly" ? (
+                                                    (sortedConsolidatedData[0]?.monthlyStats || []).map((m: any) => (
+                                                        <th key={m.monthKey} className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center">
+                                                            {m.monthLabel}
+                                                        </th>
+                                                    ))
+                                                ) : (
+                                                    <>
+                                                        <th onClick={() => handleSort("totalClasses")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                {reportMode === "scholarship" ? "Working Days" : "Total Classes"}
+                                                                {sortConfig.key === "totalClasses" && (
+                                                                    sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                                )}
+                                                            </div>
+                                                        </th>
+                                                        <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
+                                                        <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
+                                                        <th onClick={() => handleSort("percentage")} className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                %
+                                                                {sortConfig.key === "percentage" && (
+                                                                    sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                                )}
+                                                            </div>
+                                                        </th>
+                                                    </>
+                                                )}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {sortedConsolidatedData.map((s) => (
-                                                <tr key={s.rollNumber} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-3 text-sm font-mono text-slate-600">
-                                                        <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
-                                                            {s.rollNumber}
-                                                        </StudentHoverCard>
-                                                    </td>
-                                                    <td className="px-6 py-3 text-sm font-medium text-slate-900">
-                                                        <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
-                                                            {s.name}
-                                                        </StudentHoverCard>
-                                                    </td>
-                                                    <td className="px-6 py-3 text-sm text-center text-slate-600">{s.totalClasses}</td>
-                                                    <td className="px-6 py-3 text-sm text-center text-green-600 font-semibold">{s.present}</td>
-                                                    <td className="px-6 py-3 text-sm text-center text-red-600 font-semibold">{s.absent}</td>
-                                                    <td className="px-6 py-3 text-sm text-center font-bold">
-                                                        <span className={parseFloat(s.percentage) < 75 ? "text-red-600" : "text-green-600"}>
-                                                            {s.percentage}%
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {sortedConsolidatedData.map((s) => {
+                                                const renderHeatmapBadge = (pctStr: string) => {
+                                                    const pct = parseFloat(pctStr);
+                                                    if (isNaN(pct)) return <span className="text-slate-600 font-medium">{pctStr}%</span>;
+
+                                                    if (pct >= 75) {
+                                                        return (
+                                                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-extrabold text-emerald-800 border border-emerald-300">
+                                                                {pct.toFixed(2)}%
+                                                            </span>
+                                                        );
+                                                    } else if (pct >= 65) {
+                                                        return (
+                                                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-extrabold text-amber-800 border border-amber-300">
+                                                                {pct.toFixed(2)}%
+                                                            </span>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-extrabold text-rose-800 border border-rose-300">
+                                                                {pct.toFixed(2)}%
+                                                            </span>
+                                                        );
+                                                    }
+                                                };
+
+                                                return (
+                                                    <tr key={s.rollNumber} className="hover:bg-slate-50">
+                                                        <td className="px-6 py-3 text-sm font-mono text-slate-600">
+                                                            <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
+                                                                {s.rollNumber}
+                                                            </StudentHoverCard>
+                                                        </td>
+                                                        <td className="px-6 py-3 text-sm font-medium text-slate-900">
+                                                            <StudentHoverCard name={s.name} rollNumber={s.rollNumber} studentId={s.id}>
+                                                                {s.name}
+                                                            </StudentHoverCard>
+                                                        </td>
+                                                        {reportMode === "scholarship" && (
+                                                            <td className="px-6 py-3 text-sm text-center font-mono text-slate-500">
+                                                                {s.scholarshipId || "N/A"}
+                                                            </td>
+                                                        )}
+                                                        {reportMode === "monthly" ? (
+                                                            (s.monthlyStats || []).map((m: any) => (
+                                                                <td key={m.monthKey} className="px-4 py-3 text-sm text-center font-bold">
+                                                                    {renderHeatmapBadge(m.percentage)}
+                                                                </td>
+                                                            ))
+                                                        ) : (
+                                                            <>
+                                                                <td className="px-6 py-3 text-sm text-center text-slate-600">{s.totalClasses || s.totalDays}</td>
+                                                                <td className="px-6 py-3 text-sm text-center text-green-600 font-semibold">{s.present || s.presentDays}</td>
+                                                                <td className="px-6 py-3 text-sm text-center text-red-600 font-semibold">{s.absent || s.absentDays}</td>
+                                                                <td className="px-6 py-3 text-sm text-center font-bold">
+                                                                    {renderHeatmapBadge(s.percentage)}
+                                                                </td>
+                                                            </>
+                                                        )}
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

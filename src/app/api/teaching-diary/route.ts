@@ -83,12 +83,10 @@ export async function GET(request: Request) {
                 if (facultyMappings.length > 0) {
                     whereClause.OR = [
                         { downloadedBy: userId },
-                        {
-                            AND: [
-                                { subjectId: { in: facultyMappings.map(m => m.subjectId) } },
-                                { sectionId: { in: facultyMappings.map(m => m.sectionId) } }
-                            ]
-                        }
+                        ...facultyMappings.map(m => ({
+                            subjectId: m.subjectId,
+                            sectionId: m.sectionId
+                        }))
                     ];
                 } else {
                     whereClause.downloadedBy = userId;
@@ -365,28 +363,57 @@ export async function POST(request: Request) {
               )).filter(sid => sid !== sectionId)
             : [];
 
-        // Sync/replicate the entry to other sections for the same date and period
+        // Sync/replicate the entry to other sections for the same date
         for (const sid of otherSectionIds) {
             const existingOther = await prisma.attendanceHistory.findFirst({
                 where: {
                     date: { gte: dayStart, lte: dayEnd },
                     sectionId: sid,
-                    periodId,
+                    subjectId,
                     year: subject.year,
                     departmentId: subject.departmentId
                 }
             });
 
             if (existingOther) {
-                 await prisma.attendanceHistory.update({
-                     where: { id: existingOther.id },
-                     data: {
-                         topicsTaught,
-                         subjectId,
-                         downloadedBy: session.user.id
-                     }
-                 });
-             }
+                await prisma.attendanceHistory.update({
+                    where: { id: existingOther.id },
+                    data: {
+                        topicsTaught,
+                        downloadedBy: session.user.id
+                    }
+                });
+            } else {
+                // Determine which period to map. Search for timetable entry for this subject/section on this day of week.
+                const dayOfWeek = parsedDate.getDay();
+                const timetableEntry = await prisma.timetable.findFirst({
+                    where: {
+                        subjectId,
+                        sectionId: sid,
+                        dayOfWeek: dayOfWeek
+                    }
+                });
+                const targetPeriodId = timetableEntry?.periodId || periodId;
+
+                await prisma.attendanceHistory.create({
+                    data: {
+                        date: parsedDate,
+                        year: subject.year,
+                        semester: subject.semester,
+                        sectionId: sid,
+                        departmentId: subject.departmentId,
+                        academicYearId: academicYearId || null,
+                        subjectId,
+                        periodId: targetPeriodId,
+                        status: "Completed",
+                        type: "ACADEMIC",
+                        fileName: "Manual Entry",
+                        downloadedBy: session.user.id,
+                        details: "[]",
+                        topicsTaught
+                    }
+                });
+            }
         }
 
         // Fetch section name for human-readable logging
@@ -469,13 +496,17 @@ export async function PUT(request: Request) {
               )).filter(sid => sid !== targetRecord.sectionId)
             : [];
 
-        // Synchronize update to other sections' entries for the exact same date and period
-        if (otherSectionIds.length > 0 && targetRecord.date && targetRecord.periodId) {
+        // Synchronize update to other sections' entries on the same date
+        if (otherSectionIds.length > 0 && targetRecord.date && targetRecord.subjectId) {
+            const dayStart = new Date(targetRecord.date);
+            dayStart.setUTCHours(0, 0, 0, 0);
+            const dayEnd = new Date(targetRecord.date);
+            dayEnd.setUTCHours(23, 59, 59, 999);
+
             await prisma.attendanceHistory.updateMany({
                 where: {
-                    subjectId: targetRecord.subjectId || undefined,
-                    date: targetRecord.date,
-                    periodId: targetRecord.periodId,
+                    subjectId: targetRecord.subjectId,
+                    date: { gte: dayStart, lte: dayEnd },
                     sectionId: { in: otherSectionIds }
                 },
                 data: {
@@ -562,12 +593,16 @@ export async function DELETE(request: Request) {
             });
 
             // Delete other records that have no details as well
-            if (otherSectionIds.length > 0 && record.date && record.periodId) {
+            if (otherSectionIds.length > 0 && record.date && record.subjectId) {
+                const dayStart = new Date(record.date);
+                dayStart.setUTCHours(0, 0, 0, 0);
+                const dayEnd = new Date(record.date);
+                dayEnd.setUTCHours(23, 59, 59, 999);
+
                 await prisma.attendanceHistory.deleteMany({
                     where: {
-                        subjectId: record.subjectId || undefined,
-                        date: record.date,
-                        periodId: record.periodId,
+                        subjectId: record.subjectId,
+                        date: { gte: dayStart, lte: dayEnd },
                         sectionId: { in: otherSectionIds },
                         OR: [
                             { details: "" },
@@ -580,9 +615,8 @@ export async function DELETE(request: Request) {
                 // Clear topicsTaught for any that DO have details
                 await prisma.attendanceHistory.updateMany({
                     where: {
-                        subjectId: record.subjectId || undefined,
-                        date: record.date,
-                        periodId: record.periodId,
+                        subjectId: record.subjectId,
+                        date: { gte: dayStart, lte: dayEnd },
                         sectionId: { in: otherSectionIds },
                         NOT: [
                             { details: "" },
@@ -601,12 +635,16 @@ export async function DELETE(request: Request) {
             });
 
             // Clear topicsTaught for other sections
-            if (otherSectionIds.length > 0 && record.date && record.periodId) {
+            if (otherSectionIds.length > 0 && record.date && record.subjectId) {
+                const dayStart = new Date(record.date);
+                dayStart.setUTCHours(0, 0, 0, 0);
+                const dayEnd = new Date(record.date);
+                dayEnd.setUTCHours(23, 59, 59, 999);
+
                 await prisma.attendanceHistory.updateMany({
                     where: {
-                        subjectId: record.subjectId || undefined,
-                        date: record.date,
-                        periodId: record.periodId,
+                        subjectId: record.subjectId,
+                        date: { gte: dayStart, lte: dayEnd },
                         sectionId: { in: otherSectionIds }
                     },
                     data: { topicsTaught: null }

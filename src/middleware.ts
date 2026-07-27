@@ -5,7 +5,38 @@ export default withAuth(
     function middleware(req) {
         const token = req.nextauth.token;
         const path = req.nextUrl.pathname;
-        const role = token?.role;
+        let role = token?.role;
+
+        // Check for impersonate_session cookie to override role/identity in middleware
+        const impersonateSessionCookie = req.cookies.get("impersonate_session")?.value;
+        let isImpersonating = false;
+        let isReadOnly = false;
+        if (impersonateSessionCookie) {
+            try {
+                const parsed = JSON.parse(decodeURIComponent(impersonateSessionCookie));
+                // Only allow impersonation identity overriding if the actual authenticated token role is admin/director/superadmin
+                if (["ADMIN", "DIRECTOR", "SUPERADMIN"].includes(token?.role as string)) {
+                    role = parsed.targetRole;
+                    isImpersonating = true;
+                    isReadOnly = !!parsed.isReadOnly;
+                }
+            } catch (e) {
+                console.error("Error parsing impersonation cookie in middleware:", e);
+            }
+        }
+
+        // Global read-only enforcement during impersonation
+        if (isImpersonating && isReadOnly) {
+            const method = req.method.toUpperCase();
+            if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
+                if (!path.startsWith("/api/admin/impersonate/stop") && !path.startsWith("/api/auth")) {
+                    return new NextResponse(
+                        JSON.stringify({ error: "Access Denied: Impersonation session is in Read-Only mode." }),
+                        { status: 403, headers: { "Content-Type": "application/json" } }
+                    );
+                }
+            }
+        }
 
         // Global Restriction: Only ADMIN, DIRECTOR, PRINCIPAL, HOD can access dashboard and admin routes
         const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"];

@@ -137,6 +137,7 @@ model Student {
   aadharNumber          String?
   abcId                 String?
   reimbursement         Boolean              @default(false)
+  scholarshipId         String?
   isLateralEntry        Boolean              @default(false)
   certificatesSubmitted Boolean              @default(false)
   domainMailId          String?
@@ -250,7 +251,7 @@ model AttendanceHistory {
   section        Section       @relation(fields: [sectionId], references: [id])
   subject        Subject?      @relation(fields: [subjectId], references: [id])
 
-  @@unique([date, sectionId, periodId, year, departmentId], name: "unique_attendance")
+  @@unique([date, sectionId, periodId, year, departmentId, subjectId, downloadedBy], name: "unique_attendance")
 }
 
 model Alumni {

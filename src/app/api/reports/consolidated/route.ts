@@ -18,6 +18,9 @@ export async function GET(request: Request) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const subjectId = searchParams.get("subjectId");
+    const labBatchId = searchParams.get("labBatchId");
+    const reportType = searchParams.get("reportType") || "standard"; // "standard" | "scholarship" | "monthly"
+    const targetWorkingDaysParam = searchParams.get("targetWorkingDays");
 
     // Fetch user details from DB to enforce permissions
     const user = await prisma.user.findUnique({
@@ -49,7 +52,6 @@ export async function GET(request: Request) {
 
     if (!isGlobal) {
         if (userRole === "HOD") {
-            // Enforce HOD's department
             finalDepartmentId = userDeptId || undefined;
         } else if (userRole === "FACULTY") {
             let isAllowed = false;
@@ -71,7 +73,6 @@ export async function GET(request: Request) {
             }
             finalDepartmentId = departmentId || userDeptId || undefined;
         } else {
-            // Default lock down for other roles
             finalDepartmentId = userDeptId || undefined;
         }
     }
@@ -100,10 +101,7 @@ export async function GET(request: Request) {
     try {
         const start = new Date(startDate);
         const end = new Date(endDate);
-        end.setHours(23, 59, 59); // Include the entire end date
-
-        // 1. Fetch History Records for the range
-        console.log(`[DEBUG REPORT] Fetching consolidated. Dept: ${finalDepartmentId}, Sec: ${sectionId}, Sem: ${semester}, Start: ${start.toISOString()}, End: ${end.toISOString()}`);
+        end.setHours(23, 59, 59);
 
         const historyWhere: any = {
             semester,
@@ -124,28 +122,26 @@ export async function GET(request: Request) {
             }
         }
 
-        const history = await prisma.attendanceHistory.findMany({
+        const rawHistory = await prisma.attendanceHistory.findMany({
             where: historyWhere,
             select: {
                 id: true,
                 details: true,
                 date: true,
                 status: true,
-                academicYearId: true
-            }
+                academicYearId: true,
+                period: {
+                    select: { id: true, name: true }
+                }
+            },
+            orderBy: { date: "asc" }
         });
 
-        console.log(`[DEBUG REPORT] Found ${history.length} records.`);
-
-        // 2. Aggregate Data
-        const studentStats: Record<string, {
-            id: string,
-            name: string,
-            rollNumber: string,
-            totalClasses: number,
-            present: number,
-            absent: number
-        }> = {};
+        // Filter out Lunch Hour periods
+        const history = rawHistory.filter(rec => {
+            const periodName = rec.period?.name?.toUpperCase() || "";
+            return !periodName.includes("LUNCH");
+        });
 
         // Resolve target academic year
         const academicYearId = history[0]?.academicYearId || (await prisma.academicYear.findFirst({
@@ -159,7 +155,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Academic Year not found" }, { status: 400 });
         }
 
-        const classStudents = await getStudentsForClass({
+        let classStudents = await getStudentsForClass({
             academicYearId,
             departmentId: isElective ? undefined : (finalDepartmentId || undefined),
             year,
@@ -167,28 +163,226 @@ export async function GET(request: Request) {
             sectionId: (isElective ? undefined : sectionId) || undefined,
             subjectId: subjectId || undefined
         });
-        const students = classStudents.map(s => ({ id: s.id, rollNumber: s.rollNumber, name: s.name }));
 
-        // Initialize everyone with 0
-        students.forEach(s => {
+        if (labBatchId) {
+            classStudents = classStudents.filter(s => s.labBatchId === labBatchId);
+        }
+
+        // --- MODE 1: GOVT SCHOLARSHIP DAY-WISE MAJORITY RULE REPORT ---
+        if (reportType === "scholarship") {
+            const dateRecordsMap: Record<string, typeof history> = {};
+            history.forEach(rec => {
+                const dateStr = new Date(rec.date).toISOString().split("T")[0];
+                if (!dateRecordsMap[dateStr]) dateRecordsMap[dateStr] = [];
+                dateRecordsMap[dateStr].push(rec);
+            });
+
+            const targetDays = targetWorkingDaysParam ? parseInt(targetWorkingDaysParam, 10) : 0;
+
+            const scholarshipReport = classStudents.map(s => {
+                const isEligibleForTrim = (
+                    (year === "1" && semester === "1" && !s.isLateralEntry) ||
+                    (year === "2" && semester === "1" && s.isLateralEntry === true)
+                );
+                const repDate = (isEligibleForTrim && s.dateOfReporting) ? new Date(s.dateOfReporting) : null;
+                if (repDate) repDate.setHours(0, 0, 0, 0);
+
+                let presentDays = 0;
+                let absentDays = 0;
+                let totalWorkingDays = 0;
+
+                Object.entries(dateRecordsMap).forEach(([dateStr, recsOnDay]) => {
+                    const recDate = new Date(dateStr);
+                    recDate.setHours(0, 0, 0, 0);
+
+                    if (repDate && recDate < repDate) {
+                        return; // Exclude days prior to reporting date
+                    }
+
+                    totalWorkingDays += 1;
+                    const periodsConducted = recsOnDay.length;
+                    let periodsPresent = 0;
+
+                    recsOnDay.forEach(rec => {
+                        let details: any[] = [];
+                        try { details = JSON.parse(rec.details); } catch (e) { }
+                        const roll = s.rollNumber.toLowerCase();
+                        const detailMatch = details.find((d: any) => {
+                            const r = (d["Roll Number"] || d["rollNumber"] || "").toString().toLowerCase();
+                            return r === roll;
+                        });
+
+                        if (detailMatch) {
+                            const status = detailMatch["Status"] || detailMatch["status"];
+                            if (status === "Present" || status === "present") periodsPresent += 1;
+                        } else if (rec.status === "Marked Absent") {
+                            periodsPresent += 1;
+                        }
+                    });
+
+                    // Majority Rule: present if present for >= half of non-lunch periods conducted on that day
+                    if (periodsConducted > 0 && periodsPresent >= Math.ceil(periodsConducted / 2)) {
+                        presentDays += 1;
+                    } else {
+                        absentDays += 1;
+                    }
+                });
+
+                const effectiveTotalDays = (targetDays && targetDays > 0) ? targetDays : totalWorkingDays;
+                const percentage = effectiveTotalDays > 0 ? ((presentDays / effectiveTotalDays) * 100).toFixed(2) : "0.00";
+
+                return {
+                    id: s.id,
+                    rollNumber: s.rollNumber,
+                    name: s.name,
+                    scholarshipId: (s as any).scholarshipId || null,
+                    reimbursement: s.reimbursement,
+                    totalDays: effectiveTotalDays,
+                    presentDays,
+                    absentDays: Math.max(0, effectiveTotalDays - presentDays),
+                    percentage
+                };
+            }).sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+
+            return NextResponse.json(scholarshipReport);
+        }
+
+        // --- MODE 2: PROGRESSIVE MONTHLY REPORT ---
+        if (reportType === "monthly") {
+            const monthsMap: Record<string, Date> = {}; // "YYYY-MM" -> Max Date in Month
+            history.forEach(rec => {
+                const recDate = new Date(rec.date);
+                const monthKey = `${recDate.getFullYear()}-${String(recDate.getMonth() + 1).padStart(2, '0')}`;
+                if (!monthsMap[monthKey] || recDate > monthsMap[monthKey]) {
+                    monthsMap[monthKey] = recDate;
+                }
+            });
+
+            const sortedMonthKeys = Object.keys(monthsMap).sort();
+
+            const monthlyReport = classStudents.map(s => {
+                const isEligibleForTrim = (
+                    (year === "1" && semester === "1" && !s.isLateralEntry) ||
+                    (year === "2" && semester === "1" && s.isLateralEntry === true)
+                );
+                const repDate = (isEligibleForTrim && s.dateOfReporting) ? new Date(s.dateOfReporting) : null;
+                if (repDate) repDate.setHours(0, 0, 0, 0);
+
+                const monthlyStats = sortedMonthKeys.map(mKey => {
+                    const cutoffDate = new Date(monthsMap[mKey]);
+                    cutoffDate.setHours(23, 59, 59);
+
+                    const historyUpToCutoff = history.filter(r => new Date(r.date) <= cutoffDate);
+
+                    let totalClasses = 0;
+                    let present = 0;
+                    let absent = 0;
+
+                    historyUpToCutoff.forEach(rec => {
+                        const recDate = new Date(rec.date);
+                        recDate.setHours(0, 0, 0, 0);
+
+                        if (repDate && recDate < repDate) return;
+
+                        if (labBatchId) {
+                            try {
+                                const details = JSON.parse(rec.details);
+                                const firstDetail = details[0];
+                                const recordLabBatchId = firstDetail ? (firstDetail["Lab Batch ID"] || firstDetail["labBatchId"]) : null;
+                                if (recordLabBatchId && recordLabBatchId !== labBatchId) return;
+                            } catch (e) { }
+                        }
+
+                        totalClasses += 1;
+
+                        let details: any[] = [];
+                        try { details = JSON.parse(rec.details); } catch (e) { }
+                        const roll = s.rollNumber.toLowerCase();
+                        const recordStatusMap = new Map<string, string>();
+                        details.forEach((d: any) => {
+                            const rollRaw = d["Roll Number"] || d["rollNumber"];
+                            if (rollRaw) {
+                                const r = String(rollRaw).toLowerCase();
+                                const st = d["Status"] || d["status"];
+                                recordStatusMap.set(r, st);
+                            }
+                        });
+
+                        if (recordStatusMap.has(roll)) {
+                            const st = recordStatusMap.get(roll);
+                            if (st === "Present" || st === "present") present += 1;
+                            else absent += 1;
+                        } else {
+                            if (rec.status === "Marked Absent") present += 1;
+                            else totalClasses -= 1;
+                        }
+                    });
+
+                    const monthDateObj = new Date(`${mKey}-01`);
+                    const monthLabel = monthDateObj.toLocaleString('en-US', { month: 'short' });
+
+                    return {
+                        monthKey: mKey,
+                        monthLabel: `Up to ${monthLabel}`,
+                        totalClasses,
+                        present,
+                        absent,
+                        percentage: totalClasses > 0 ? ((present / totalClasses) * 100).toFixed(2) : "0.00"
+                    };
+                });
+
+                return {
+                    id: s.id,
+                    rollNumber: s.rollNumber,
+                    name: s.name,
+                    dateOfReporting: s.dateOfReporting,
+                    scholarshipId: (s as any).scholarshipId || null,
+                    monthlyStats
+                };
+            }).sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+
+            return NextResponse.json(monthlyReport);
+        }
+
+        // --- MODE 3: STANDARD PERIOD-WISE CONSOLIDATED REPORT ---
+        const studentStats: Record<string, {
+            id: string,
+            name: string,
+            rollNumber: string,
+            totalClasses: number,
+            present: number,
+            absent: number,
+            dateOfReporting?: Date | null,
+            scholarshipId?: string | null
+        }> = {};
+
+        classStudents.forEach(s => {
             studentStats[s.rollNumber.toLowerCase()] = {
                 id: s.id,
                 name: s.name,
                 rollNumber: s.rollNumber,
                 totalClasses: 0,
                 present: 0,
-                absent: 0
+                absent: 0,
+                dateOfReporting: s.dateOfReporting,
+                scholarshipId: (s as any).scholarshipId || null
             };
         });
 
-        history.forEach((record, index) => {
+        history.forEach((record) => {
             try {
                 const details = JSON.parse(record.details);
-                // details is either Full List (Manual Save) or Partial List (Marked Absent)
-                // We must map it for quick lookup
+
+                if (labBatchId) {
+                    const firstDetail = details[0];
+                    const recordLabBatchId = firstDetail ? (firstDetail["Lab Batch ID"] || firstDetail["labBatchId"]) : null;
+                    if (recordLabBatchId && recordLabBatchId !== labBatchId) {
+                        return;
+                    }
+                }
+
                 const recordStatusMap = new Map<string, string>();
                 details.forEach((s: any) => {
-                    // normalize keys: manual uses camelCase, bulk/old uses Title Case
                     const rollRaw = s["Roll Number"] || s["rollNumber"];
                     if (rollRaw) {
                         const roll = String(rollRaw).toLowerCase();
@@ -197,15 +391,29 @@ export async function GET(request: Request) {
                     }
                 });
 
-                // Iterate over ALL students in the section to update their stats for this record
-                Object.values(studentStats).forEach((stat, sIdx) => {
-                    const roll = stat.rollNumber.toLowerCase();
+                const recordDate = new Date(record.date);
+                recordDate.setHours(0, 0, 0, 0);
 
-                    // Increment total classes for everyone since the class happened for the section
+                classStudents.forEach((studentObj) => {
+                    const roll = studentObj.rollNumber.toLowerCase();
+                    const stat = studentStats[roll];
+                    if (!stat) return;
+
+                    // Date of joining trimming check
+                    const isEligibleForTrim = (
+                        (year === "1" && semester === "1" && !studentObj.isLateralEntry) ||
+                        (year === "2" && semester === "1" && studentObj.isLateralEntry === true)
+                    );
+                    const repDate = (isEligibleForTrim && studentObj.dateOfReporting) ? new Date(studentObj.dateOfReporting) : null;
+                    if (repDate) repDate.setHours(0, 0, 0, 0);
+
+                    if (repDate && recordDate < repDate) {
+                        return; // Exclude class before student reporting date
+                    }
+
                     stat.totalClasses += 1;
 
                     if (recordStatusMap.has(roll)) {
-                        // Explicit status found
                         const status = recordStatusMap.get(roll);
                         if (status === "Present" || status === "present") {
                             stat.present += 1;
@@ -213,21 +421,9 @@ export async function GET(request: Request) {
                             stat.absent += 1;
                         }
                     } else {
-                        // Status NOT found in this record.
-                        // Infer based on record.status
-                        // If record was "Marked Absent", it means this list ONLY contains absentees. 
-                        // So if you are not in it, you are Present.
                         if (record.status === "Marked Absent") {
                             stat.present += 1;
                         } else {
-                            // For "Manual Save" or "Marked Present", missing might mean they weren't in the list then?
-                            // Or imply Absent? 
-                            // Creating consistency: "Manual Save" saves ALL students. If missing, student didn't exist then.
-                            // If student didn't exist then, we technically shouldn't count this class for them?
-                            // But we just incremented totalClasses.
-                            // To be accurate: if not in details of a FULL report, decrement totalClasses back?
-                            // For now, let's assume if it's not "Marked Absent", and missing, we ignore this class for this student.
-
                             stat.totalClasses -= 1;
                         }
                     }

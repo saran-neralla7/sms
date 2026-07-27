@@ -77,7 +77,7 @@ export default function ImpersonationStartModal({ isOpen, targetUser, onClose, o
       // Redirect to target user appropriate dashboard
       const targetRole = targetUser.role?.toUpperCase();
       if (targetRole === "FACULTY") {
-        window.location.href = "/attendance";
+        window.location.href = "/faculty";
       } else if (targetRole === "STUDENT") {
         window.location.href = "/student/dashboard";
       } else {

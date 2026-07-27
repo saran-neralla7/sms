@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/logging";
+import { cookies } from "next/headers";
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -88,6 +89,26 @@ export const authOptions: NextAuthOptions = {
                 (session.user as any).username = token.username;
                 (session.user as any).facultyId = token.facultyId;
                 session.user.name = token.name as string | null | undefined;
+
+                try {
+                    const cookieStore = await cookies();
+                    const impersonateCookie = cookieStore.get("impersonate_session")?.value;
+                    if (impersonateCookie) {
+                        const parsed = JSON.parse(decodeURIComponent(impersonateCookie));
+                        if (["ADMIN", "DIRECTOR", "SUPERADMIN"].includes(token.role as string)) {
+                            (session.user as any).role = parsed.targetRole;
+                            (session.user as any).id = parsed.targetUserId;
+                            (session.user as any).departmentId = parsed.targetDepartmentId;
+                            (session.user as any).username = parsed.targetUsername;
+                            (session.user as any).facultyId = parsed.targetFacultyId;
+                            session.user.name = parsed.targetName;
+                            (session.user as any).isImpersonating = true;
+                            (session.user as any).impersonateReadOnly = parsed.isReadOnly;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error parsing impersonation cookie in session callback:", e);
+                }
             }
             return session;
         },
