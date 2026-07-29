@@ -62,7 +62,7 @@ export async function GET(request: Request) {
         });
         if (mbaDept) {
             const isMbaUser = userProfileForMbaCheck?.departmentId === mbaDept.id;
-            const isAdminUser = userProfileForMbaCheck?.role === "ADMIN";
+            const isAdminUser = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userProfileForMbaCheck?.role || "");
             if (!isMbaUser && !isAdminUser) {
                 if (whereClause.departmentId === mbaDept.id) {
                     whereClause.departmentId = "NONE";
@@ -107,7 +107,7 @@ export async function GET(request: Request) {
                 subject: true,
                 period: true,
                 department: { select: { name: true, code: true } },
-                user: { select: { username: true, role: true } }
+                user: { select: { username: true, role: true, faculty: { select: { empName: true } } } }
             },
             orderBy: { date: 'desc' }
         });

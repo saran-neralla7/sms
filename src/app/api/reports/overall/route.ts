@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     });
 
     if (mbaDept && (departmentId === mbaDept.id || finalDepartmentId === mbaDept.id)) {
-        if (userRole !== "ADMIN" && userDeptId !== mbaDept.id) {
+        if (!["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole) && userDeptId !== mbaDept.id) {
             return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for the MBA department." }, { status: 403 });
         }
     }

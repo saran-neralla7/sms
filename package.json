@@ -6,7 +6,7 @@
     "dev": "next dev --webpack",
     "build": "npx prisma db push && next build --webpack",
     "postinstall": "prisma generate",
-    "start": "next start",
+    "start": "next start -p 3000",
     "lint": "eslint"
   },
   "dependencies": {

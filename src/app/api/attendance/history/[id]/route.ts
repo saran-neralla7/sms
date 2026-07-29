@@ -9,7 +9,8 @@ export async function DELETE(
 ) {
     const params = await props.params;
     const session = await getServerSession(authOptions);
-    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "HOD")) {
+    const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"];
+    if (!session || !allowedRoles.includes((session.user.role || "").toUpperCase())) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -29,7 +30,8 @@ export async function PUT(
 ) {
     const params = await props.params;
     const session = await getServerSession(authOptions);
-    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "HOD")) {
+    const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"];
+    if (!session || !allowedRoles.includes((session.user.role || "").toUpperCase())) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

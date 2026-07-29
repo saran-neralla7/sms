@@ -59,6 +59,8 @@ model User {
   faculty               Faculty?               @relation(fields: [facultyId], references: [id])
   internalMarks         InternalMark[]
   issuedCertificates    Certificate[]
+  notifications         Notification[]
+  pushSubscriptions     PushSubscription[]
 }
 
 model Faculty {
@@ -947,4 +949,29 @@ model AcademicSemesterTimeline {
 
   @@unique([academicYearId, year, semester])
 }
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // "ATTENDANCE_POSTED" | "LOW_ATTENDANCE" | "TIMETABLE_ADDED" | "SYSTEM"
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 

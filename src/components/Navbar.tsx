@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { FaArrowLeft, FaHome, FaSignOutAlt, FaKey, FaClipboardList, FaHistory } from "react-icons/fa"; // Added icons
 import AcademicYearSelector from "./AcademicYearSelector";
 import ChangePasswordModal from "./ChangePasswordModal";
+import NotificationBell from "./NotificationBell";
 import { useState } from "react";
 
 interface Props {
@@ -93,6 +94,8 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                                 <span className="hidden sm:inline">Home</span>
                             </Link>
                         )}
+
+                        <NotificationBell />
 
                         <div className="h-6 w-px bg-slate-200 mx-1"></div>
 

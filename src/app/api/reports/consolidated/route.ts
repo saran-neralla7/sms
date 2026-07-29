@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     });
 
     if (mbaDept && (departmentId === mbaDept.id || finalDepartmentId === mbaDept.id)) {
-        if (userRole !== "ADMIN" && userDeptId !== mbaDept.id) {
+        if (!["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole) && userDeptId !== mbaDept.id) {
             return NextResponse.json({ error: "Access Denied: You are not authorized to view reports for the MBA department." }, { status: 403 });
         }
     }
@@ -104,6 +104,7 @@ export async function GET(request: Request) {
         end.setHours(23, 59, 59);
 
         const historyWhere: any = {
+            year,
             semester,
             date: {
                 gte: start,
@@ -342,6 +343,331 @@ export async function GET(request: Request) {
             }).sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
 
             return NextResponse.json(monthlyReport);
+        }
+
+        // --- MODE 4: CONSOLIDATED SUBJECT-WISE SUMMARY REPORT ---
+        if (reportType === "subject_summary") {
+            const officialSubjects = await prisma.subject.findMany({
+                where: {
+                    ...(finalDepartmentId ? { departmentId: finalDepartmentId } : {}),
+                    year,
+                    semester
+                },
+                include: {
+                    electiveSlotRelation: true
+                }
+            });
+
+            const historyWithSubjects = await prisma.attendanceHistory.findMany({
+                where: historyWhere,
+                include: {
+                    subject: {
+                        select: {
+                            id: true,
+                            name: true,
+                            shortName: true,
+                            code: true,
+                            year: true,
+                            semester: true,
+                            isElective: true,
+                            electiveSlotId: true,
+                            electiveSlotRelation: { select: { id: true, name: true } }
+                        }
+                    },
+                    period: { select: { id: true, name: true } }
+                },
+                orderBy: { date: "asc" }
+            });
+
+            const validHistory = historyWithSubjects.filter(rec => {
+                const periodName = rec.period?.name?.toUpperCase() || "";
+                return !periodName.includes("LUNCH");
+            });
+
+            // Detect Open Elective subjects strictly:
+            // 1. Subject belongs to an elective slot whose name contains "OE" or "OPEN"
+            // 2. Subject name explicitly contains "OPEN ELECTIVE"
+            // 3. Subject is marked isElective AND belongs to an OE slot
+            // NOTE: "Elective - I" (Professional Elective) must NOT be classified as OE
+            function isOpenElective(sub: any) {
+                if (!sub) return false;
+                const slotName = (sub.electiveSlotRelation?.name || "").toUpperCase();
+                if (slotName.includes("OE") || slotName.includes("OPEN")) {
+                    return true;
+                }
+                const nameUpper = (sub.name || "").toUpperCase();
+                if (nameUpper.includes("OPEN ELECTIVE")) {
+                    return true;
+                }
+                // isElective flag + has an elective slot that is OE-type
+                if (sub.isElective && sub.electiveSlotId) {
+                    return true;
+                }
+                return false;
+            }
+
+            const regularSubjects: any[] = [];
+            const oeSubjects: any[] = [];
+
+            officialSubjects.forEach(sub => {
+                if (isOpenElective(sub)) {
+                    oeSubjects.push(sub);
+                } else {
+                    regularSubjects.push(sub);
+                }
+            });
+
+            // Determine OE slot label from the subjects
+            let oeSlotLabel = "OE";
+            const slotFromSub = oeSubjects.find(s => s.electiveSlotRelation?.name)?.electiveSlotRelation?.name;
+            if (slotFromSub) {
+                oeSlotLabel = slotFromSub;
+            }
+
+            const OE_COL_ID = "OE_GROUP_COLUMN";
+            const subjectMap = new Map<string, { id: string; name: string; shortName: string; code: string; totalHeld: number; isOE: boolean }>();
+
+            regularSubjects.forEach(sub => {
+                subjectMap.set(sub.id, {
+                    id: sub.id,
+                    name: sub.name,
+                    shortName: sub.shortName || sub.code || sub.name,
+                    code: sub.code || "",
+                    totalHeld: 0,
+                    isOE: false
+                });
+            });
+
+            // Register single Open Elective grouped column
+            if (oeSubjects.length > 0) {
+                subjectMap.set(OE_COL_ID, {
+                    id: OE_COL_ID,
+                    name: `Open Elective (${oeSlotLabel})`,
+                    shortName: oeSlotLabel,
+                    code: oeSlotLabel,
+                    totalHeld: 0,
+                    isOE: true
+                });
+            }
+
+            // Count totalHeld for regular subjects from history
+            validHistory.forEach(rec => {
+                const subj = rec.subject;
+                if (!subj) return;
+
+                const isRecOE = isOpenElective(subj);
+
+                if (isRecOE) {
+                    // OE totalHeld is counted per-student later, not globally
+                } else if (subj.year === year && subj.semester === semester) {
+                    if (subjectMap.has(subj.id)) {
+                        subjectMap.get(subj.id)!.totalHeld += 1;
+                    }
+                }
+            });
+
+            // Fetch students with their elective subject mappings
+            const targetStudents = await prisma.student.findMany({
+                where: {
+                    ...(finalDepartmentId ? { departmentId: finalDepartmentId } : {}),
+                    year,
+                    semester,
+                    ...(sectionId && !isElective ? { sectionId } : {}),
+                    isLeftCollege: false,
+                    isDetained: false
+                },
+                select: {
+                    id: true,
+                    rollNumber: true,
+                    name: true,
+                    dateOfReporting: true,
+                    isLateralEntry: true,
+                    subjects: {
+                        where: { electiveSlotId: { not: null } },
+                        select: { id: true, electiveSlotId: true }
+                    }
+                },
+                orderBy: { rollNumber: "asc" }
+            });
+
+            const activeStudents = targetStudents.length > 0 ? targetStudents : classStudents;
+
+            // Collect all OE subject IDs from the elective slots
+            const oeSubjectIds = new Set(oeSubjects.map(s => s.id));
+
+            // Also collect OE slot IDs
+            const oeSlotIds = new Set<string>();
+            oeSubjects.forEach(s => {
+                if (s.electiveSlotId) oeSlotIds.add(s.electiveSlotId);
+                if (s.electiveSlotRelation?.id) oeSlotIds.add(s.electiveSlotRelation.id);
+            });
+
+            // For OE: count how many OE history records each student appears in
+            // First, collect all OE history records
+            const oeHistoryRecords = validHistory.filter(rec => {
+                const subj = rec.subject;
+                return subj && isOpenElective(subj);
+            });
+
+            // Build per-student OE totalHeld count (count only records where student appears in details)
+            const studentOeHeld: Record<string, number> = {};
+            const studentOePresent: Record<string, number> = {};
+
+            oeHistoryRecords.forEach(rec => {
+                let details: any[] = [];
+                try { details = JSON.parse(rec.details); } catch (e) { }
+
+                details.forEach((d: any) => {
+                    const rollRaw = d["Roll Number"] || d["rollNumber"];
+                    if (!rollRaw) return;
+                    const roll = String(rollRaw).toLowerCase();
+                    const status = d["Status"] || d["status"];
+
+                    if (!studentOeHeld[roll]) studentOeHeld[roll] = 0;
+                    if (!studentOePresent[roll]) studentOePresent[roll] = 0;
+
+                    studentOeHeld[roll] += 1;
+                    if (status === "Present" || status === "present") {
+                        studentOePresent[roll] += 1;
+                    }
+                });
+            });
+
+            // Build subject list - set OE totalHeld to max across students (or from history)
+            const maxOeHeld = Object.values(studentOeHeld).length > 0
+                ? Math.max(...Object.values(studentOeHeld))
+                : 0;
+            if (subjectMap.has(OE_COL_ID)) {
+                subjectMap.get(OE_COL_ID)!.totalHeld = maxOeHeld;
+            }
+
+            // Remove OE column if 0 held classes and no OE subjects
+            if (subjectMap.has(OE_COL_ID) && subjectMap.get(OE_COL_ID)!.totalHeld === 0 && oeSubjects.length === 0) {
+                subjectMap.delete(OE_COL_ID);
+            }
+
+            const subjectList = Array.from(subjectMap.values());
+
+            const studentStatsMap: Record<string, {
+                id: string;
+                rollNumber: string;
+                name: string;
+                subjectStats: Record<string, { present: number; totalHeld: number }>;
+                totalClasses: number;
+                totalPresent: number;
+                totalAbsent: number;
+                percentage: string;
+            }> = {};
+
+            activeStudents.forEach(s => {
+                const roll = s.rollNumber.toLowerCase();
+                const subStats: Record<string, { present: number; totalHeld: number }> = {};
+
+                subjectList.forEach(sub => {
+                    if (sub.isOE) {
+                        // Per-student OE totalHeld
+                        subStats[sub.id] = { present: studentOePresent[roll] || 0, totalHeld: studentOeHeld[roll] || 0 };
+                    } else {
+                        subStats[sub.id] = { present: 0, totalHeld: sub.totalHeld };
+                    }
+                });
+
+                studentStatsMap[roll] = {
+                    id: s.id,
+                    rollNumber: s.rollNumber,
+                    name: s.name,
+                    subjectStats: subStats,
+                    totalClasses: 0,
+                    totalPresent: 0,
+                    totalAbsent: 0,
+                    percentage: "0.00"
+                };
+            });
+
+            // Process regular (non-OE) history records for attendance
+            validHistory.forEach(rec => {
+                const subj = rec.subject;
+                if (!subj) return;
+
+                // Skip OE records - already handled above
+                if (isOpenElective(subj)) return;
+
+                if (!subjectMap.has(subj.id)) return;
+
+                let details: any[] = [];
+                try { details = JSON.parse(rec.details); } catch (e) { }
+
+                const recordStatusMap = new Map<string, string>();
+                details.forEach((s: any) => {
+                    const rollRaw = s["Roll Number"] || s["rollNumber"];
+                    if (rollRaw) {
+                        const roll = String(rollRaw).toLowerCase();
+                        const status = s["Status"] || s["status"];
+                        recordStatusMap.set(roll, status);
+                    }
+                });
+
+                const recordDate = new Date(rec.date);
+                recordDate.setHours(0, 0, 0, 0);
+
+                activeStudents.forEach(studentObj => {
+                    const roll = studentObj.rollNumber.toLowerCase();
+                    const stat = studentStatsMap[roll];
+                    if (!stat) return;
+
+                    const isEligibleForTrim = (
+                        (year === "1" && semester === "1" && !studentObj.isLateralEntry) ||
+                        (year === "2" && semester === "1" && studentObj.isLateralEntry === true)
+                    );
+                    const repDate = (isEligibleForTrim && studentObj.dateOfReporting) ? new Date(studentObj.dateOfReporting) : null;
+                    if (repDate) repDate.setHours(0, 0, 0, 0);
+
+                    if (repDate && recordDate < repDate) return;
+
+                    if (recordStatusMap.has(roll)) {
+                        const status = recordStatusMap.get(roll);
+                        if (status === "Present" || status === "present") {
+                            if (stat.subjectStats[subj.id]) {
+                                stat.subjectStats[subj.id].present += 1;
+                            }
+                            stat.totalPresent += 1;
+                        } else {
+                            stat.totalAbsent += 1;
+                        }
+                    }
+                });
+            });
+
+            // Add OE present counts to totalPresent
+            activeStudents.forEach(s => {
+                const roll = s.rollNumber.toLowerCase();
+                const stat = studentStatsMap[roll];
+                if (!stat) return;
+                stat.totalPresent += (studentOePresent[roll] || 0);
+            });
+
+            const studentReports = Object.values(studentStatsMap).map(stat => {
+                // Per-student total: sum of regular totalHeld + their specific OE totalHeld
+                let totalClasses = 0;
+                Object.values(stat.subjectStats).forEach(ss => {
+                    totalClasses += ss.totalHeld;
+                });
+
+                const percentage = totalClasses > 0
+                    ? ((stat.totalPresent / totalClasses) * 100).toFixed(2)
+                    : "0.00";
+
+                return {
+                    ...stat,
+                    totalClasses,
+                    percentage
+                };
+            }).sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+
+            return NextResponse.json({
+                subjects: subjectList,
+                students: studentReports
+            });
         }
 
         // --- MODE 3: STANDARD PERIOD-WISE CONSOLIDATED REPORT ---

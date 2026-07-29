@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { logActivity } from "@/lib/logging";
 import { cookies } from "next/headers";
+import { createTargetedAttendanceNotifications } from "@/lib/notification-service";
 
 export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
@@ -457,6 +458,17 @@ export async function POST(request: Request) {
                 recordCount: records.length
             }
         );
+
+        // Dispatch targeted notifications asynchronously to students of this specific class section
+        createTargetedAttendanceNotifications({
+            departmentId,
+            year: String(year),
+            semester: String(semester),
+            sectionId: sectionId || (sectionIds && sectionIds[0]),
+            subjectId: finalSubjectId,
+            date,
+            students
+        }).catch(err => console.error("Async Notification Error:", err));
 
         return NextResponse.json({ success: true, count: records.length });
 

@@ -155,8 +155,8 @@ export async function getStudentsForClass({
       ...(sectionFilter ? { sectionId: sectionFilter } : {}),
       ...(isElective && subjectId ? { subjects: { some: { id: subjectId } } } : {}),
       isLeftCollege: false,
-      // If it's the current academic year, exclude alumni and detained. If past, they might be alumni now, so include them.
-      ...(yearDiff === 0 ? { isAlumni: false, isDetained: false } : {})
+      // If it's the current academic year, exclude alumni and detained and match year & semester strictly.
+      ...(yearDiff === 0 ? { year, semester, isAlumni: false, isDetained: false } : {})
     });
   } else {
     // Fallback to original logic if we couldn't parse the batch start year

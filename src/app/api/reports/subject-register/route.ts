@@ -20,9 +20,7 @@ export async function GET(request: Request) {
     const subjectId = searchParams.get("subjectId");
     const labBatchId = searchParams.get("labBatchId");
 
-    if (!departmentId || !year || !semester || !sectionId || !subjectId || !startDate || !endDate) {
-        return NextResponse.json({ error: "Missing required query parameters." }, { status: 400 });
-    }
+    let finalDepartmentId: string | null | undefined = departmentId || (session.user as any)?.departmentId;
 
     const user = await prisma.user.findUnique({
         where: { id: session.user.id },
@@ -33,10 +31,24 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "User profile not found." }, { status: 403 });
     }
 
+    if (!finalDepartmentId && user.departmentId) {
+        finalDepartmentId = user.departmentId;
+    }
+
+    const targetSubject = subjectId ? await prisma.subject.findUnique({ where: { id: subjectId } }) : null;
+    const isOpenElective = targetSubject?.type === "OPEN_ELECTIVE" || targetSubject?.isElective;
+
+    if (!year || !semester || !startDate || !endDate) {
+        return NextResponse.json({ error: "Missing required query parameters." }, { status: 400 });
+    }
+
+    if (!isOpenElective && (!sectionId || !finalDepartmentId)) {
+        return NextResponse.json({ error: "Missing required department or section parameter." }, { status: 400 });
+    }
+
     const userRole = (user.role || "").toUpperCase();
     const userDeptCode = user.department?.code || "";
     const isGlobal = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(userRole) || userDeptCode === "BSH";
-    let finalDepartmentId: string | null | undefined = departmentId;
 
     if (!isGlobal && userRole === "HOD") {
         finalDepartmentId = user.departmentId;
@@ -56,27 +68,49 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Academic Year not found" }, { status: 400 });
         }
 
-        // Fetch students for section
-        let students = await prisma.student.findMany({
-            where: {
-                sectionId: sectionId,
-                departmentId: finalDepartmentId || undefined,
-                year: year,
-                semester: semester,
-                isLeftCollege: false
-            },
-            orderBy: { rollNumber: "asc" }
-        });
-
-        if (students.length === 0) {
-            students = await getStudentsForClass({
-                academicYearId,
-                departmentId: finalDepartmentId || undefined,
-                year,
-                semester,
-                sectionId: sectionId || undefined,
-                subjectId: subjectId || undefined
+        // Fetch students
+        let students: any[] = [];
+        if (isOpenElective && subjectId) {
+            students = await prisma.student.findMany({
+                where: {
+                    subjects: { some: { id: subjectId } },
+                    year: year,
+                    semester: semester,
+                    isLeftCollege: false
+                },
+                orderBy: { rollNumber: "asc" }
             });
+
+            if (students.length === 0) {
+                students = await getStudentsForClass({
+                    academicYearId,
+                    year,
+                    semester,
+                    subjectId
+                });
+            }
+        } else {
+            students = await prisma.student.findMany({
+                where: {
+                    sectionId: sectionId!,
+                    departmentId: finalDepartmentId || undefined,
+                    year: year,
+                    semester: semester,
+                    isLeftCollege: false
+                },
+                orderBy: { rollNumber: "asc" }
+            });
+
+            if (students.length === 0) {
+                students = await getStudentsForClass({
+                    academicYearId,
+                    departmentId: finalDepartmentId || undefined,
+                    year,
+                    semester,
+                    sectionId: sectionId || undefined,
+                    subjectId: subjectId || undefined
+                });
+            }
         }
 
         // Filter by Lab Batch if provided
@@ -89,25 +123,30 @@ export async function GET(request: Request) {
 
         // Where clause for attendance history
         const whereClause: any = {
-            departmentId: finalDepartmentId,
             year: year,
             semester: semester,
-            sectionId: sectionId,
-            subjectId: subjectId,
+            type: "ACADEMIC",
             date: {
                 gte: new Date(startDate),
                 lte: new Date(endDate + "T23:59:59.999Z")
             }
         };
 
-        if (labBatchId) {
-            whereClause.labBatchId = labBatchId;
+        if (subjectId) {
+            whereClause.subjectId = subjectId;
+        }
+
+        if (!isOpenElective) {
+            if (finalDepartmentId) whereClause.departmentId = finalDepartmentId;
+            if (sectionId) whereClause.sectionId = sectionId;
+            if (labBatchId) whereClause.labBatchId = labBatchId;
         }
 
         const historyRecords = await prisma.attendanceHistory.findMany({
             where: whereClause,
             include: {
-                period: true
+                period: true,
+                subject: { select: { id: true, name: true, code: true, shortName: true } }
             },
             orderBy: [
                 { date: 'asc' },
@@ -119,12 +158,15 @@ export async function GET(request: Request) {
         const sessionMap = new Map<string, { id: string; dateStr: string; rawDate: Date; periodName: string }>();
 
         historyRecords.forEach(rec => {
+            if (!rec.subjectId || !rec.subject) return; // Skip non-academic/SMS records with no subject
+
             const periodName = rec.period?.name?.toUpperCase() || "";
             if (periodName.includes("LUNCH")) return;
 
             const dateIso = new Date(rec.date).toISOString().split('T')[0];
             const periodLabel = rec.period?.name || `P${rec.periodId || ''}`;
-            const sessionKey = `${dateIso}_${rec.periodId || rec.period?.name || 'P'}`;
+            const subjCode = rec.subject?.shortName || rec.subject?.code || rec.subject?.name || "";
+            const sessionKey = `${dateIso}_${rec.periodId || rec.period?.name || 'P'}_${rec.subjectId || 'S'}`;
 
             if (!sessionMap.has(sessionKey)) {
                 const d = new Date(rec.date);
@@ -134,7 +176,7 @@ export async function GET(request: Request) {
                     id: sessionKey,
                     dateStr: `${day}/${month}`,
                     rawDate: d,
-                    periodName: periodLabel
+                    periodName: (!subjectId && subjCode) ? `${periodLabel}\n(${subjCode})` : periodLabel
                 });
             }
         });
@@ -173,7 +215,7 @@ export async function GET(request: Request) {
 
                 const rec = historyRecords.find(h => {
                     const hDate = new Date(h.date).toISOString().split('T')[0];
-                    const hKey = `${hDate}_${h.periodId || h.period?.name || 'P'}`;
+                    const hKey = `${hDate}_${h.periodId || h.period?.name || 'P'}_${h.subjectId || 'S'}`;
                     return hKey === sess.id;
                 });
 

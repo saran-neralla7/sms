@@ -13,13 +13,48 @@ import StudentHoverCard from "@/components/StudentHoverCard";
 import LogoSpinner from "@/components/LogoSpinner";
 import { formatISTDate, formatISTDateTime } from "@/lib/dateUtils";
 
+const getAcademicYear = (dStr?: string) => {
+    const d = dStr ? new Date(dStr) : new Date();
+    const yr = d.getFullYear();
+    const m = d.getMonth() + 1;
+    return m >= 6 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+};
+
+const getBatchNameString = (yrNum?: string, dStr?: string) => {
+    const ay = getAcademicYear(dStr);
+    const startYr = parseInt(ay.split("-")[0]);
+    const yearVal = parseInt(yrNum || "1") || 1;
+    const joinYear = startYr - (yearVal - 1);
+    const endYear = joinYear + 4;
+    return `${joinYear}-${endYear} Batch`;
+};
+
 export default function ReportsPage() {
     const { data: session } = useSession();
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Tab State
-    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject" | "weekly" | "elective">("daily");
+    const [activeTab, setActiveTab] = useState<"daily" | "consolidated" | "subject" | "weekly" | "elective" | "tracker" | "defaulter" | "comparative" | "transcript">("daily");
+
+    // Faculty Submission Tracker State
+    const [trackerDate, setTrackerDate] = useState<string>(new Date().toISOString().split("T")[0]);
+    const [trackerData, setTrackerData] = useState<any>(null);
+    const [trackerLoading, setTrackerLoading] = useState<boolean>(false);
+
+    // Defaulter Report (#1) State
+    const [defaulterThreshold, setDefaulterThreshold] = useState<string>("75");
+    const [defaulterData, setDefaulterData] = useState<any>(null);
+    const [defaulterLoading, setDefaulterLoading] = useState<boolean>(false);
+
+    // Comparative Report (#3) State
+    const [comparativeData, setComparativeData] = useState<any>(null);
+    const [comparativeLoading, setComparativeLoading] = useState<boolean>(false);
+
+    // Student Transcript (#5) State
+    const [transcriptRollNo, setTranscriptRollNo] = useState<string>("");
+    const [transcriptData, setTranscriptData] = useState<any>(null);
+    const [transcriptLoading, setTranscriptLoading] = useState<boolean>(false);
 
     // Filters
     const [departmentId, setDepartmentId] = useState("");
@@ -29,7 +64,7 @@ export default function ReportsPage() {
     const [subjectId, setSubjectId] = useState("");
     const [labBatches, setLabBatches] = useState<any[]>([]);
     const [selectedLabBatchId, setSelectedLabBatchId] = useState("");
-    const [reportMode, setReportMode] = useState<"standard" | "scholarship" | "monthly">("standard");
+    const [reportMode, setReportMode] = useState<"standard" | "subject_summary" | "scholarship" | "monthly">("standard");
     const [targetWorkingDays, setTargetWorkingDays] = useState("");
     const [subjectViewMode, setSubjectViewMode] = useState<"summary" | "register">("summary");
     const [registerData, setRegisterData] = useState<{ sessions: any[]; students: any[] } | null>(null);
@@ -38,6 +73,7 @@ export default function ReportsPage() {
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [consolidatedData, setConsolidatedData] = useState<any[]>([]);
+    const [subjectSummarySubjects, setSubjectSummarySubjects] = useState<any[]>([]);
 
     // Sorting State
     const [sortConfig, setSortConfig] = useState<{ key: "percentage" | "rollNumber" | "totalClasses" | null, direction: "asc" | "desc" }>({ key: null, direction: "asc" });
@@ -157,6 +193,53 @@ export default function ReportsPage() {
         }
     }, [year, semester, sectionId, departmentId, activeTab]);
 
+    useEffect(() => {
+        if (activeTab === "tracker") {
+            fetchTrackerData();
+        }
+    }, [activeTab, trackerDate, effectiveDeptId, year, semester]);
+
+    const fetchTrackerData = async () => {
+        setTrackerLoading(true);
+        try {
+            let url = `/api/reports/posting-status?date=${trackerDate}`;
+            if (effectiveDeptId) url += `&departmentId=${effectiveDeptId}`;
+            if (year) url += `&year=${year}`;
+            if (semester) url += `&semester=${semester}`;
+
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                setTrackerData(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch tracker data", e);
+        } finally {
+            setTrackerLoading(false);
+        }
+    };
+
+    const handleDownloadPendingTracker = () => {
+        if (!trackerData || !trackerData.pendingList || trackerData.pendingList.length === 0) {
+            alert("No pending faculty entries to download.");
+            return;
+        }
+        const ws = XLSX.utils.json_to_sheet(trackerData.pendingList.map((item: any) => ({
+            "Faculty Name": item.facultyName,
+            "Username": item.username,
+            "Mobile": item.mobile,
+            "Department": item.deptCode,
+            "Subject": item.subjectName,
+            "Subject Code": item.subjectCode,
+            "Class": item.yrSem,
+            "Section": item.sectionName,
+            "Status": "Pending (Not Posted)"
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Pending_Faculty");
+        XLSX.writeFile(wb, `Pending_Attendance_Faculty_${trackerDate}.xlsx`);
+    };
+
     const fetchDepartments = async () => {
         const res = await fetch("/api/departments");
         if (res.ok) setDepartments(await res.json());
@@ -260,15 +343,17 @@ export default function ReportsPage() {
     };
 
     const fetchSubjectRegister = async () => {
-        if (!startDate || !endDate || !subjectId || !sectionId) return;
+        if (!startDate || !endDate) return;
+        if ((activeTab === "subject" || activeTab === "elective") && !subjectId) return;
+        if (activeTab !== "elective" && !sectionId) return;
         setLoading(true);
         try {
             const params = new URLSearchParams();
             if (year) params.append("year", year);
             if (semester) params.append("semester", semester);
-            if (sectionId) params.append("sectionId", sectionId);
-            if (departmentId) params.append("departmentId", departmentId);
-            if (subjectId) params.append("subjectId", subjectId);
+            if (activeTab !== "elective" && sectionId) params.append("sectionId", sectionId);
+            if (effectiveDeptId) params.append("departmentId", effectiveDeptId);
+            if (activeTab !== "consolidated" && subjectId) params.append("subjectId", subjectId);
             if (selectedLabBatchId) params.append("labBatchId", selectedLabBatchId);
             params.append("startDate", startDate);
             params.append("endDate", endDate);
@@ -292,7 +377,7 @@ export default function ReportsPage() {
     const fetchConsolidated = async () => {
         if (!startDate || !endDate) return;
 
-        if (activeTab === "subject" && subjectViewMode === "register") {
+        if (subjectViewMode === "register") {
             await fetchSubjectRegister();
             return;
         }
@@ -324,7 +409,12 @@ export default function ReportsPage() {
             const res = await fetch(`/api/reports/consolidated?${params.toString()}`);
             if (res.ok) {
                 const data = await res.json();
-                setConsolidatedData(data);
+                if (reportMode === "subject_summary" && data.subjects) {
+                    setSubjectSummarySubjects(data.subjects);
+                    setConsolidatedData(data.students);
+                } else {
+                    setConsolidatedData(data);
+                }
             } else {
                 const err = await res.json();
                 setStatus({ type: "error", message: err.error || "Failed to fetch report" });
@@ -370,7 +460,7 @@ export default function ReportsPage() {
     };
 
     const handleDownloadConsolidated = () => {
-        if (activeTab === "subject" && subjectViewMode === "register" && registerData) {
+        if ((activeTab === "subject" || activeTab === "elective") && subjectViewMode === "register" && registerData) {
             const exportRows = registerData.students.map(s => {
                 const row: any = {
                     "Roll Number": s.rollNumber,
@@ -420,6 +510,22 @@ export default function ReportsPage() {
                     row[`${m.monthLabel} (C)`] = m.totalClasses;
                     row[`${m.monthLabel} (%)`] = m.percentage + "%";
                 });
+                return row;
+            });
+        } else if (reportMode === "subject_summary") {
+            exportRows = sortedConsolidatedData.map(s => {
+                const row: any = {
+                    "Roll Number": s.rollNumber,
+                    "Name": s.name
+                };
+                subjectSummarySubjects.forEach(sub => {
+                    const subLabel = `${sub.shortName || sub.name} (Total: ${sub.totalHeld})`;
+                    row[subLabel] = s.subjectStats?.[sub.id]?.present ?? 0;
+                });
+                row["Total Classes"] = s.totalClasses;
+                row["Total Present"] = s.totalPresent || s.present;
+                row["Total Absent"] = s.totalAbsent || s.absent;
+                row["Attendance %"] = `${s.percentage}%`;
                 return row;
             });
         } else {
@@ -506,125 +612,150 @@ export default function ReportsPage() {
         }
     };
 
-    const handleDownloadPDF = () => {
-        if (activeTab === "subject" && subjectViewMode === "register" && registerData) {
+    const handleDownloadPDF = (action: "view" | "download" = "view") => {
+        if ((activeTab === "subject" || activeTab === "elective" || activeTab === "consolidated") && subjectViewMode === "register" && registerData) {
             try {
                 const doc = new jsPDF({ orientation: "landscape" });
                 const pageWidth = doc.internal.pageSize.width;
 
-                doc.setFont("times", "bold");
-                doc.setFontSize(12);
-                doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, 11, { align: "center" });
-
-                doc.setFontSize(9.5);
-                doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, 16, { align: "center" });
-
-                const subName = subjects.find(s => s.id === subjectId)?.name || "Subject";
+                const subName = (subjectId ? subjects.find(s => s.id === subjectId)?.name : null) || "Consolidated_Class";
                 const deptName = departments.find(d => d.id === departmentId)?.name || "";
                 const secName = sections.find(s => s.id === sectionId)?.name || "";
-                const batchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
+                const academicYr = getAcademicYear(startDate);
+                const batchStr = getBatchNameString(year, startDate);
+                const labBatchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
+                const fullBatchText = labBatchName ? `${batchStr} (${labBatchName})` : batchStr;
 
-                doc.setFontSize(11);
-                doc.setFont("times", "bold");
-                doc.text(`Subject Attendance Register - ${subName}`, pageWidth / 2, 22, { align: "center" });
-
-                doc.setFontSize(8.5);
-                doc.setFont("times", "normal");
-                doc.text(`Department: ${deptName} | Year: ${year} | Sem: ${semester} | Section: ${secName}${batchName ? ` | Batch: ${batchName}` : ""} | Dates: ${formatISTDate(startDate)} to ${formatISTDate(endDate)}`, pageWidth / 2, 27, { align: "center" });
-
-                const sessionCount = registerData.sessions.length;
-
-                const tableColumn = [
-                    "Roll No",
-                    "Name",
-                    ...registerData.sessions.map(sess => `${sess.dateStr}\n${sess.periodName}`),
-                    "Total",
-                    "P",
-                    "A",
-                    "%"
-                ];
-
-                const tableRows = registerData.students.map(s => [
-                    s.rollNumber,
-                    s.name,
-                    ...registerData.sessions.map(sess => s.attendanceMap[sess.id] || "-"),
-                    s.totalClasses,
-                    s.present,
-                    s.absent,
-                    s.percentage + "%"
-                ]);
-
-                const totalIdx = 2 + sessionCount;
-                const pIdx = 3 + sessionCount;
-                const aIdx = 4 + sessionCount;
-                const pctIdx = 5 + sessionCount;
-
-                const columnStylesObj: Record<number, any> = {
-                    0: { cellWidth: 22, halign: "left" },
-                    1: { cellWidth: 35, halign: "left" },
-                    [totalIdx]: { cellWidth: 12, halign: "center", fontStyle: "bold" },
-                    [pIdx]: { cellWidth: 10, halign: "center", fontStyle: "bold" },
-                    [aIdx]: { cellWidth: 10, halign: "center", fontStyle: "bold" },
-                    [pctIdx]: { cellWidth: 16, halign: "center", fontStyle: "bold" }
-                };
-
+                const SESSIONS_PER_PAGE = 15;
+                const totalSessions = registerData.sessions.length;
+                const totalChunks = Math.max(1, Math.ceil(totalSessions / SESSIONS_PER_PAGE));
                 const autoTableFn = (doc as any).autoTable || autoTable;
-                if (typeof autoTableFn === 'function') {
-                    autoTableFn(doc, {
-                        head: [tableColumn],
-                        body: tableRows,
-                        startY: 31,
-                        theme: "grid",
-                        styles: {
-                            font: "times",
-                            fontSize: sessionCount > 15 ? 6.5 : (sessionCount > 10 ? 7 : 7.5),
-                            cellPadding: 1.2,
-                            halign: "center",
-                            lineColor: [200, 200, 200],
-                            lineWidth: 0.1
-                        },
-                        headStyles: {
-                            fillColor: [240, 243, 246],
-                            textColor: [30, 41, 59],
-                            fontStyle: "bold",
-                            halign: "center",
-                            fontSize: sessionCount > 15 ? 6 : (sessionCount > 10 ? 6.5 : 7.5),
-                            cellPadding: 1.5
-                        },
-                        columnStyles: columnStylesObj,
-                        didParseCell: (data: any) => {
-                            if (data.section === 'body') {
-                                const val = data.cell.raw ? String(data.cell.raw) : "";
-                                if (val === "P") {
-                                    data.cell.styles.fillColor = [220, 252, 231];
-                                    data.cell.styles.textColor = [22, 101, 52];
-                                    data.cell.styles.fontStyle = "bold";
-                                } else if (val === "A") {
-                                    data.cell.styles.fillColor = [254, 226, 226];
-                                    data.cell.styles.textColor = [153, 27, 27];
-                                    data.cell.styles.fontStyle = "bold";
-                                } else if (val.endsWith("%")) {
-                                    const pct = parseFloat(val.replace("%", ""));
-                                    if (!isNaN(pct)) {
-                                        if (pct >= 75) {
-                                            data.cell.styles.fillColor = [220, 252, 231];
-                                            data.cell.styles.textColor = [22, 101, 52];
-                                        } else if (pct >= 65) {
-                                            data.cell.styles.fillColor = [254, 243, 199];
-                                            data.cell.styles.textColor = [146, 64, 14];
-                                        } else {
-                                            data.cell.styles.fillColor = [254, 226, 226];
-                                            data.cell.styles.textColor = [153, 27, 27];
+
+                for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+                    if (chunkIdx > 0) {
+                        doc.addPage();
+                    }
+
+                    doc.setFont("times", "bold");
+                    doc.setFontSize(12);
+                    doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, 10, { align: "center" });
+
+                    doc.setFontSize(9.5);
+                    doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, 15, { align: "center" });
+
+                    doc.setFontSize(11);
+                    doc.setFont("times", "bold");
+                    const titlePrefix = activeTab === "consolidated" ? "Consolidated Class Daily Attendance Register" : `Subject Attendance Register - ${subName}`;
+                    doc.text(`${titlePrefix}${totalChunks > 1 ? ` (Part ${chunkIdx + 1} of ${totalChunks})` : ""}`, pageWidth / 2, 21, { align: "center" });
+
+                    const chunkSessions = registerData.sessions.slice(chunkIdx * SESSIONS_PER_PAGE, (chunkIdx + 1) * SESSIONS_PER_PAGE);
+                    const isLastChunk = chunkIdx === totalChunks - 1;
+
+                    doc.setFontSize(8.5);
+                    doc.setFont("times", "normal");
+                    doc.text(`Department: ${deptName} | Academic Year: ${academicYr} | Batch: ${fullBatchText}`, pageWidth / 2, 26, { align: "center" });
+                    
+                    const chunkRangeText = totalChunks > 1 && chunkSessions.length > 0 ? ` (Part ${chunkIdx + 1}: ${chunkSessions[0].dateStr} - ${chunkSessions[chunkSessions.length - 1].dateStr})` : "";
+                    doc.text(`Year: ${year} | Sem: ${semester} | Section: ${secName} | Dates: ${formatISTDate(startDate)} to ${formatISTDate(endDate)}${chunkRangeText}`, pageWidth / 2, 30, { align: "center" });
+
+                    const tableColumn = [
+                        "Roll No",
+                        "Name",
+                        ...chunkSessions.map(sess => `${sess.dateStr}\n${sess.periodName}`),
+                        ...(isLastChunk ? ["Total", "P", "A", "%"] : [])
+                    ];
+
+                    const tableRows = registerData.students.map(s => [
+                        s.rollNumber,
+                        s.name,
+                        ...chunkSessions.map(sess => s.attendanceMap[sess.id] || "-"),
+                        ...(isLastChunk ? [s.totalClasses, s.present, s.absent, s.percentage + "%"] : [])
+                    ]);
+
+                    const chunkSessionCount = chunkSessions.length;
+                    const totalIdx = 2 + chunkSessionCount;
+                    const pIdx = 3 + chunkSessionCount;
+                    const aIdx = 4 + chunkSessionCount;
+                    const pctIdx = 5 + chunkSessionCount;
+
+                    const columnStylesObj: Record<number, any> = {
+                        0: { cellWidth: 22, halign: "left" },
+                        1: { cellWidth: 35, halign: "left" }
+                    };
+
+                    if (isLastChunk) {
+                        columnStylesObj[totalIdx] = { cellWidth: 12, halign: "center", fontStyle: "bold" };
+                        columnStylesObj[pIdx] = { cellWidth: 10, halign: "center", fontStyle: "bold" };
+                        columnStylesObj[aIdx] = { cellWidth: 10, halign: "center", fontStyle: "bold" };
+                        columnStylesObj[pctIdx] = { cellWidth: 16, halign: "center", fontStyle: "bold" };
+                    }
+
+                    if (typeof autoTableFn === 'function') {
+                        autoTableFn(doc, {
+                            head: [tableColumn],
+                            body: tableRows,
+                            startY: 34,
+                            theme: "grid",
+                            styles: {
+                                font: "times",
+                                fontSize: 7.5,
+                                cellPadding: 1.2,
+                                halign: "center",
+                                lineColor: [0, 0, 0],
+                                lineWidth: 0.3
+                            },
+                            headStyles: {
+                                fillColor: [240, 243, 246],
+                                textColor: [30, 41, 59],
+                                fontStyle: "bold",
+                                halign: "center",
+                                fontSize: 7.5,
+                                cellPadding: 1.5,
+                                lineColor: [0, 0, 0],
+                                lineWidth: 0.4
+                            },
+                            columnStyles: columnStylesObj,
+                            didParseCell: (data: any) => {
+                                if (data.section === 'body') {
+                                    const val = data.cell.raw ? String(data.cell.raw) : "";
+                                    if (val === "P") {
+                                        data.cell.styles.fillColor = [220, 252, 231];
+                                        data.cell.styles.textColor = [22, 101, 52];
+                                        data.cell.styles.fontStyle = "bold";
+                                    } else if (val === "A") {
+                                        data.cell.styles.fillColor = [254, 226, 226];
+                                        data.cell.styles.textColor = [153, 27, 27];
+                                        data.cell.styles.fontStyle = "bold";
+                                    } else if (val.endsWith("%")) {
+                                        const pct = parseFloat(val.replace("%", ""));
+                                        if (!isNaN(pct)) {
+                                            if (pct >= 75) {
+                                                data.cell.styles.fillColor = [220, 252, 231];
+                                                data.cell.styles.textColor = [22, 101, 52];
+                                            } else if (pct >= 65) {
+                                                data.cell.styles.fillColor = [254, 243, 199];
+                                                data.cell.styles.textColor = [146, 64, 14];
+                                            } else {
+                                                data.cell.styles.fillColor = [254, 226, 226];
+                                                data.cell.styles.textColor = [153, 27, 27];
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
 
-                doc.save(`${subName.replace(/\s+/g, '_')}_Register_${startDate}_to_${endDate}.pdf`);
-                setStatus({ type: "success", message: "Register PDF Generated!" });
+                if (action === "view") {
+                    const pdfBlob = doc.output("blob");
+                    const blobUrl = URL.createObjectURL(pdfBlob);
+                    window.open(blobUrl, "_blank");
+                    setStatus({ type: "success", message: "Opening PDF in new tab..." });
+                } else {
+                    doc.save(`${subName.replace(/\s+/g, '_')}_Register_${startDate}_to_${endDate}.pdf`);
+                    setStatus({ type: "success", message: "Register PDF Downloaded!" });
+                }
             } catch (err) {
                 console.error(err);
                 setStatus({ type: "error", message: "Failed to generate Register PDF" });
@@ -642,7 +773,7 @@ export default function ReportsPage() {
 
             setStatus({ type: "success", message: "Generating PDF..." }); // Show status
 
-            const doc = new jsPDF();
+            const doc = new jsPDF(reportMode === "subject_summary" ? "l" : "p", "mm", "a4");
             const pageWidth = doc.internal.pageSize.width;
 
             // --- Header ---
@@ -679,23 +810,26 @@ export default function ReportsPage() {
                     const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
                     const secName = sections.find(s => s.id === sectionId)?.name || "All";
                     const subName = subjects.find(s => s.id === subjectId)?.name;
-                    const batchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
+                    const academicYr = getAcademicYear(startDate);
+                    const batchStr = getBatchNameString(year, startDate);
+                    const labBatchName = labBatches.find(b => b.id === selectedLabBatchId)?.name;
+                    const fullBatchText = labBatchName ? `${batchStr} (${labBatchName})` : batchStr;
 
                     // Left Side Details
-                    doc.text(`Department: ${deptName}`, 15, 42);
-                    doc.text(`Year: ${year}   Semester: ${semester}`, 15, 48);
-                    doc.text(`Section: ${secName} ${subName ? `   Subject: ${subName}` : ""}${batchName ? `   Batch: ${batchName}` : ""}`, 15, 54);
+                    doc.text(`Department: ${deptName}`, 15, 41);
+                    doc.text(`Academic Year: ${academicYr}     Batch: ${fullBatchText}`, 15, 46);
+                    doc.text(`Year: ${year}   Semester: ${semester}   Section: ${secName}${subName ? `   Subject: ${subName}` : ""}`, 15, 51);
 
                     // Right Side Details
-                    doc.text(`Report Type: Consolidated`, pageWidth - 15, 42, { align: "right" });
-                    doc.text(`From: ${formatISTDate(startDate)}`, pageWidth - 15, 48, { align: "right" });
-                    doc.text(`To: ${formatISTDate(endDate)}`, pageWidth - 15, 54, { align: "right" });
+                    doc.text(`Report Type: Consolidated`, pageWidth - 15, 41, { align: "right" });
+                    doc.text(`From: ${formatISTDate(startDate)}`, pageWidth - 15, 46, { align: "right" });
+                    doc.text(`To: ${formatISTDate(endDate)}`, pageWidth - 15, 51, { align: "right" });
 
                     // Title
                     doc.setFont("times", "bold");
-                    doc.setFontSize(14);
-                    const titleText = reportMode === "scholarship" ? "Govt Scholarship Day-Wise Attendance Report" : (reportMode === "monthly" ? "Progressive Monthly Attendance Report" : "Attendance Report");
-                    doc.text(titleText, pageWidth / 2, 65, { align: "center" });
+                    doc.setFontSize(13);
+                    const titleText = reportMode === "scholarship" ? "Govt Scholarship Day-Wise Attendance Report" : (reportMode === "monthly" ? "Progressive Monthly Attendance Report" : (reportMode === "subject_summary" ? "Consolidated Subject-Wise Attendance Summary" : "Attendance Report"));
+                    doc.text(titleText, pageWidth / 2, reportMode === "subject_summary" ? 58 : 64, { align: "center" });
 
                     // --- Table ---
                     let tableColumn: string[] = [];
@@ -719,6 +853,25 @@ export default function ReportsPage() {
                             s.rollNumber,
                             s.name,
                             ...(s.monthlyStats || []).map((m: any) => m.percentage + "%")
+                        ]);
+                    } else if (reportMode === "subject_summary") {
+                        tableColumn = [
+                            "Roll No",
+                            "Name",
+                            ...subjectSummarySubjects.map((sub: any) => `${sub.shortName || sub.name}\n(${sub.totalHeld})`),
+                            "Total",
+                            "P",
+                            "A",
+                            "%"
+                        ];
+                        tableRows = sortedConsolidatedData.map(s => [
+                            s.rollNumber,
+                            s.name,
+                            ...subjectSummarySubjects.map((sub: any) => s.subjectStats?.[sub.id]?.present ?? 0),
+                            s.totalClasses,
+                            s.totalPresent || s.present,
+                            s.totalAbsent || s.absent,
+                            s.percentage + "%"
                         ]);
                     } else {
                         tableColumn = ["Roll No", "Name", "Total", "Present", "Absent", "%"];
@@ -753,16 +906,49 @@ export default function ReportsPage() {
                         }
                     };
 
+                    const isSubjectSummary = reportMode === "subject_summary";
+                    const columnStylesConfig: any = {};
+
+                    if (isSubjectSummary) {
+                        columnStylesConfig[0] = { cellWidth: 22, halign: "center" }; // Roll No
+                        columnStylesConfig[1] = { cellWidth: 42, halign: "left" };   // Name
+                        const subCount = subjectSummarySubjects.length;
+                        for (let c = 2; c < 2 + subCount; c++) {
+                            columnStylesConfig[c] = { halign: "center" };
+                        }
+                        columnStylesConfig[2 + subCount] = { cellWidth: 12, halign: "center", fontStyle: "bold" };     // Total
+                        columnStylesConfig[2 + subCount + 1] = { cellWidth: 10, halign: "center", fontStyle: "bold" }; // P
+                        columnStylesConfig[2 + subCount + 2] = { cellWidth: 10, halign: "center", fontStyle: "bold" }; // A
+                        columnStylesConfig[2 + subCount + 3] = { cellWidth: 14, halign: "center", fontStyle: "bold" }; // %
+                    }
+
                     console.log("PDF: Drawing table...", tableRows.length);
                     const autoTableFn = (doc as any).autoTable || autoTable;
                     if (typeof autoTableFn === 'function') {
                         autoTableFn(doc, {
                             head: [tableColumn],
                             body: tableRows,
-                            startY: 70,
-                            theme: "plain",
-                            styles: { font: "times", fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.3 },
-                            headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold", lineWidth: 0.4, lineColor: [0, 0, 0] },
+                            startY: isSubjectSummary ? 62 : 68,
+                            theme: "grid",
+                            styles: {
+                                font: "times",
+                                fontSize: isSubjectSummary ? 7.5 : 9.5,
+                                cellPadding: isSubjectSummary ? { top: 1.5, bottom: 1.5, left: 1, right: 1 } : 2.5,
+                                lineColor: [0, 0, 0],
+                                lineWidth: 0.3,
+                                valign: "middle"
+                            },
+                            headStyles: {
+                                fillColor: [240, 243, 246],
+                                textColor: [15, 23, 42],
+                                fontStyle: "bold",
+                                fontSize: isSubjectSummary ? 7 : 9,
+                                lineWidth: 0.4,
+                                lineColor: [0, 0, 0],
+                                halign: "center",
+                                valign: "middle"
+                            },
+                            columnStyles: columnStylesConfig,
                             didParseCell: didParseCellFn
                         });
                     } else {
@@ -781,9 +967,15 @@ export default function ReportsPage() {
                         doc.text(`Generated on ${formatISTDate(new Date())}`, 15, doc.internal.pageSize.height - 10);
                     }
 
-                    console.log("PDF: Saving file...");
-                    doc.save(`Consolidated_Report_${startDate}_${endDate}.pdf`);
-                    setStatus({ type: "success", message: "PDF Downloaded!" });
+                    if (action === "view") {
+                        const pdfBlob = doc.output("blob");
+                        const blobUrl = URL.createObjectURL(pdfBlob);
+                        window.open(blobUrl, "_blank");
+                        setStatus({ type: "success", message: "Opening PDF in new tab..." });
+                    } else {
+                        doc.save(`Consolidated_Report_${startDate}_${endDate}.pdf`);
+                        setStatus({ type: "success", message: "PDF Downloaded!" });
+                    }
 
                 } catch (err: any) {
                     console.error("PDF Generation Internal Error:", err);
@@ -952,6 +1144,227 @@ export default function ReportsPage() {
         }
     };
 
+    const fetchDefaulterReport = async () => {
+        if (!departmentId || !year || !semester || !sectionId || !startDate || !endDate) {
+            setStatus({ type: "error", message: "Please select Department, Year, Sem, Section, Start Date, and End Date." });
+            return;
+        }
+        setDefaulterLoading(true);
+        try {
+            const params = new URLSearchParams({
+                departmentId,
+                year,
+                semester,
+                sectionId,
+                startDate,
+                endDate,
+                threshold: defaulterThreshold
+            });
+            const res = await fetch(`/api/reports/defaulter?${params}`);
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Failed to fetch defaulter report");
+            }
+            const data = await res.json();
+            setDefaulterData(data);
+        } catch (e: any) {
+            setStatus({ type: "error", message: e.message });
+        } finally {
+            setDefaulterLoading(false);
+        }
+    };
+
+    const fetchComparativeReport = async () => {
+        if (!departmentId || !year || !semester || !startDate || !endDate) {
+            setStatus({ type: "error", message: "Please select Department, Year, Semester, Start Date, and End Date." });
+            return;
+        }
+        setComparativeLoading(true);
+        try {
+            const params = new URLSearchParams({
+                departmentId,
+                year,
+                semester,
+                startDate,
+                endDate
+            });
+            const res = await fetch(`/api/reports/comparative?${params}`);
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Failed to fetch comparative report");
+            }
+            const data = await res.json();
+            setComparativeData(data);
+        } catch (e: any) {
+            setStatus({ type: "error", message: e.message });
+        } finally {
+            setComparativeLoading(false);
+        }
+    };
+
+    const fetchTranscriptReport = async () => {
+        if (!transcriptRollNo) {
+            setStatus({ type: "error", message: "Please enter a Student Roll Number." });
+            return;
+        }
+        setTranscriptLoading(true);
+        try {
+            const params = new URLSearchParams({ rollNumber: transcriptRollNo });
+            if (startDate) params.append("startDate", startDate);
+            if (endDate) params.append("endDate", endDate);
+
+            const res = await fetch(`/api/reports/transcript?${params}`);
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Failed to fetch student transcript");
+            }
+            const data = await res.json();
+            setTranscriptData(data);
+        } catch (e: any) {
+            setStatus({ type: "error", message: e.message });
+        } finally {
+            setTranscriptLoading(false);
+        }
+    };
+
+    const handleDownloadDefaulterNoticePDF = (student: any) => {
+        try {
+            const doc = new jsPDF({ orientation: "portrait" });
+            const pageWidth = doc.internal.pageSize.width;
+
+            doc.setFont("times", "bold");
+            doc.setFontSize(12);
+            doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, 12, { align: "center" });
+
+            doc.setFontSize(10);
+            doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, 17, { align: "center" });
+            doc.setFontSize(11);
+            doc.text("OFFICIAL PARENT WARNING NOTICE (ATTENDANCE SHORTAGE)", pageWidth / 2, 23, { align: "center" });
+
+            doc.setLineWidth(0.4);
+            doc.line(15, 27, pageWidth - 15, 27);
+
+            const academicYr = getAcademicYear(startDate);
+            const batchStr = getBatchNameString(year, startDate);
+
+            doc.setFont("times", "normal");
+            doc.setFontSize(10);
+            doc.text(`Ref No: GVP/ETH/ATT/${new Date().getFullYear()}/${student.rollNumber}`, 15, 33);
+            doc.text(`Date: ${formatISTDate(new Date().toISOString())}`, pageWidth - 15, 33, { align: "right" });
+
+            doc.text(`To Parent / Guardian of: ${student.parentName}`, 15, 41);
+            doc.text(`Student Name: ${student.name}`, 15, 47);
+            doc.text(`Roll Number: ${student.rollNumber}   |   Contact: ${student.mobile}`, 15, 53);
+            doc.text(`Academic Year: ${academicYr}   |   Batch: ${batchStr}`, 15, 59);
+
+            const autoTableFn = (doc as any).autoTable || autoTable;
+            if (typeof autoTableFn === 'function') {
+                autoTableFn(doc, {
+                    head: [["Total Classes Held", "Attended Classes", "Absent Classes", "Attendance %", "Shortage %", "Status"]],
+                    body: [[student.totalClasses, student.present, student.absent, student.percentage + "%", student.shortagePercentage + "%", student.statusLabel]],
+                    startY: 65,
+                    theme: "grid",
+                    styles: { font: "times", fontSize: 10, halign: "center", lineColor: [0, 0, 0], lineWidth: 0.3 },
+                    headStyles: { fillColor: [240, 243, 246], textColor: [15, 23, 42], fontStyle: "bold", lineColor: [0, 0, 0], lineWidth: 0.4 }
+                });
+            }
+
+            const currentY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 15 : 95;
+
+            doc.setFont("times", "normal");
+            doc.setFontSize(9.5);
+            const noticeBody = [
+                "WARNING REGARDING EXAM ELIGIBILITY:",
+                "As per Gayatri Vidya Parishad College academic regulations, a minimum of 75% attendance is MANDATORY to be eligible for semester end examinations.",
+                "• Attendance between 65.00% and 74.99% requires payment of a Condonation Fee subject to medical board approval.",
+                "• Attendance below 65.00% results in DETENTION, rendering the student ineligible for semester examinations.",
+                "",
+                "Please advise your ward to attend all regular classes without fail."
+            ];
+
+            let yOffset = currentY;
+            noticeBody.forEach((line) => {
+                doc.text(line, 15, yOffset);
+                yOffset += 6;
+            });
+
+            const sigY = yOffset + 25;
+            doc.setFont("times", "bold");
+            doc.text("Parent / Guardian Signature", 20, sigY);
+            doc.text("HOD Signature", pageWidth / 2, sigY, { align: "center" });
+            doc.text("Director / Principal", pageWidth - 20, sigY, { align: "right" });
+
+            doc.save(`Parent_Warning_Notice_${student.rollNumber}.pdf`);
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Failed to generate Parent Notice PDF" });
+        }
+    };
+
+    const handleDownloadTranscriptPDF = () => {
+        if (!transcriptData) return;
+        try {
+            const doc = new jsPDF({ orientation: "portrait" });
+            const pageWidth = doc.internal.pageSize.width;
+
+            doc.setFont("times", "bold");
+            doc.setFontSize(12);
+            doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, 12, { align: "center" });
+            doc.setFontSize(10);
+            doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, 17, { align: "center" });
+            doc.setFontSize(11);
+            doc.text("STUDENT CUMULATIVE ATTENDANCE TRANSCRIPT", pageWidth / 2, 23, { align: "center" });
+
+            doc.setLineWidth(0.4);
+            doc.line(15, 27, pageWidth - 15, 27);
+
+            const st = transcriptData.student;
+            const ov = transcriptData.overall;
+
+            doc.setFont("times", "normal");
+            doc.setFontSize(10);
+            doc.text(`Roll Number: ${st.rollNumber}   |   Name: ${st.name}`, 15, 33);
+            doc.text(`Department: ${st.departmentName}   |   Year: ${st.year}   |   Sem: ${st.semester}   |   Sec: ${st.sectionName}`, 15, 39);
+            doc.text(`Parent: ${st.parentName}   |   Mobile: ${st.mobile}`, 15, 45);
+
+            const tableCols = ["Subject Code/Name", "Faculty", "Classes Held", "Attended", "Absent", "%"];
+            const tableRows = transcriptData.subjectBreakdown.map((sub: any) => [
+                sub.name,
+                sub.facultyName,
+                sub.totalHeld,
+                sub.present,
+                sub.absent,
+                sub.percentage + "%"
+            ]);
+
+            tableRows.push(["OVERALL SUMMARY", "-", ov.totalHeld, ov.totalPresent, ov.totalAbsent, ov.percentage + "%"]);
+
+            const autoTableFn = (doc as any).autoTable || autoTable;
+            if (typeof autoTableFn === 'function') {
+                autoTableFn(doc, {
+                    head: [tableCols],
+                    body: tableRows,
+                    startY: 50,
+                    theme: "grid",
+                    styles: { font: "times", fontSize: 9, lineColor: [0, 0, 0], lineWidth: 0.3 },
+                    headStyles: { fillColor: [240, 243, 246], textColor: [15, 23, 42], fontStyle: "bold", lineColor: [0, 0, 0], lineWidth: 0.4 }
+                });
+            }
+
+            const currentY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 25 : 120;
+            doc.setFont("times", "bold");
+            doc.setFontSize(10);
+            doc.text("Parent / Guardian Signature", 20, currentY);
+            doc.text("HOD Signature", pageWidth / 2, currentY, { align: "center" });
+            doc.text("Director / Principal", pageWidth - 20, currentY, { align: "right" });
+
+            doc.save(`Attendance_Transcript_${st.rollNumber}.pdf`);
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Failed to generate Transcript PDF" });
+        }
+    };
+
     return (
         <div className="mx-auto max-w-7xl">
             {status.message && !isDeleteModalOpen && (
@@ -1002,6 +1415,38 @@ export default function ReportsPage() {
                 >
                     Open Elective Reports
                 </button>
+                {["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes((session?.user?.role || "").toUpperCase()) && (
+                    <>
+                        <button
+                            onClick={() => setActiveTab("tracker")}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "tracker" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                                }`}
+                        >
+                            Submission Tracker
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("defaulter")}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "defaulter" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                                }`}
+                        >
+                            Defaulter List (Notice)
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("comparative")}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "comparative" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                                }`}
+                        >
+                            Comparative View
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("transcript")}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === "transcript" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                                }`}
+                        >
+                            Student Transcript
+                        </button>
+                    </>
+                )}
             </div>
 
             {/* Daily Attendance Reports Section */}
@@ -1122,7 +1567,50 @@ export default function ReportsPage() {
                     <p className="mb-4 text-sm text-slate-500">View attendance percentage for the entire class across all subjects.</p>
 
                     {/* Filters & Actions */}
-                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:flex-row xl:items-end">
+                    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex flex-col gap-2 border-b border-slate-100 pb-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">View Format:</span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSubjectViewMode("summary"); setReportMode("standard"); }}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "summary" && reportMode === "standard" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Standard Overall
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSubjectViewMode("summary"); setReportMode("subject_summary"); }}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "summary" && reportMode === "subject_summary" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Consolidated Subject-Wise
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSubjectViewMode("summary"); setReportMode("scholarship"); }}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "summary" && reportMode === "scholarship" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Govt Scholarship (Majority Rule)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSubjectViewMode("summary"); setReportMode("monthly"); }}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "summary" && reportMode === "monthly" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Progressive Monthly
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubjectViewMode("register")}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "register" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                    >
+                                        Daily Register Matrix (Date-Wise)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
                         <div className="grid grid-cols-1 gap-4 flex-grow sm:grid-cols-2 lg:grid-cols-4">
                             {isGlobal && (
                                 <div className="space-y-1">
@@ -1197,6 +1685,7 @@ export default function ReportsPage() {
                         </div>
                     </div>
                 </div>
+            </div>
             )}
 
             {/* Subject Reports Section */}
@@ -1535,6 +2024,25 @@ export default function ReportsPage() {
 
                     {/* Filters & Actions */}
                     <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">View Format:</span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSubjectViewMode("summary")}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "summary" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                >
+                                    Summary View
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSubjectViewMode("register")}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${subjectViewMode === "register" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                                >
+                                    Daily Register Matrix (Date-Wise)
+                                </button>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500">Year</label>
@@ -1594,21 +2102,169 @@ export default function ReportsPage() {
                 </div>
             )}
 
-            {/* Subject Register Matrix Table View */}
+            {/* Faculty Attendance Submission Tracker Section */}
+            {activeTab === "tracker" && (
+                <div className="mb-8 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900">Faculty Attendance Submission Tracker</h2>
+                            <p className="text-xs text-slate-500">Monitor which faculty members have submitted attendance vs. pending submissions.</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Select Date</label>
+                                <input
+                                    type="date"
+                                    value={trackerDate}
+                                    onChange={(e) => setTrackerDate(e.target.value)}
+                                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+                            <button
+                                onClick={fetchTrackerData}
+                                className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                            >
+                                Refresh Status
+                            </button>
+                            {trackerData?.pendingList?.length > 0 && (
+                                <button
+                                    onClick={handleDownloadPendingTracker}
+                                    className="mt-5 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
+                                >
+                                    <FaFileExcel /> Export Pending List
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Summary Metrics */}
+                    {trackerData?.summary && (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                                <p className="text-xs font-semibold text-slate-500 uppercase">Total Assigned Classes</p>
+                                <p className="mt-1 text-2xl font-bold text-slate-900">{trackerData.summary.totalAssigned}</p>
+                            </div>
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
+                                <p className="text-xs font-semibold text-emerald-700 uppercase">Posted</p>
+                                <p className="mt-1 text-2xl font-bold text-emerald-700">{trackerData.summary.postedCount}</p>
+                            </div>
+                            <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-5 shadow-sm">
+                                <p className="text-xs font-semibold text-rose-700 uppercase">Pending (Not Posted)</p>
+                                <p className="mt-1 text-2xl font-bold text-rose-700">{trackerData.summary.pendingCount}</p>
+                            </div>
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-5 shadow-sm">
+                                <p className="text-xs font-semibold text-blue-700 uppercase">Submission Rate</p>
+                                <p className="mt-1 text-2xl font-bold text-blue-700">{trackerData.summary.completionRate}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {trackerLoading ? (
+                        <div className="flex justify-center p-12">
+                            <LogoSpinner />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Pending Table */}
+                            <div className="rounded-xl border border-rose-200 bg-white shadow-sm overflow-hidden">
+                                <div className="bg-rose-50 border-b border-rose-100 px-5 py-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="h-3 w-3 rounded-full bg-rose-500"></span>
+                                        <h3 className="font-bold text-rose-900">Pending Submissions ({trackerData?.pendingList?.length || 0})</h3>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto max-h-[500px]">
+                                    <table className="w-full text-left text-xs text-slate-700">
+                                        <thead className="bg-slate-50 text-slate-500 uppercase sticky top-0">
+                                            <tr>
+                                                <th className="px-4 py-3">Faculty Name</th>
+                                                <th className="px-4 py-3">Dept</th>
+                                                <th className="px-4 py-3">Subject</th>
+                                                <th className="px-4 py-3">Class / Sec</th>
+                                                <th className="px-4 py-3">Mobile</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {trackerData?.pendingList?.map((item: any, idx: number) => (
+                                                <tr key={idx} className="hover:bg-rose-50/30">
+                                                    <td className="px-4 py-3 font-medium text-slate-900">{item.facultyName}</td>
+                                                    <td className="px-4 py-3">{item.deptCode}</td>
+                                                    <td className="px-4 py-3 font-semibold text-slate-800">{item.subjectName}</td>
+                                                    <td className="px-4 py-3">{item.yrSem} ({item.sectionName})</td>
+                                                    <td className="px-4 py-3 text-slate-600">{item.mobile}</td>
+                                                </tr>
+                                            ))}
+                                            {(!trackerData?.pendingList || trackerData.pendingList.length === 0) && (
+                                                <tr>
+                                                    <td colSpan={5} className="p-6 text-center text-slate-400">All faculty members have submitted attendance for this date! 🎉</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Posted Table */}
+                            <div className="rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+                                <div className="bg-emerald-50 border-b border-emerald-100 px-5 py-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="h-3 w-3 rounded-full bg-emerald-500"></span>
+                                        <h3 className="font-bold text-emerald-900">Posted Submissions ({trackerData?.postedList?.length || 0})</h3>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto max-h-[500px]">
+                                    <table className="w-full text-left text-xs text-slate-700">
+                                        <thead className="bg-slate-50 text-slate-500 uppercase sticky top-0">
+                                            <tr>
+                                                <th className="px-4 py-3">Faculty Name</th>
+                                                <th className="px-4 py-3">Dept</th>
+                                                <th className="px-4 py-3">Subject</th>
+                                                <th className="px-4 py-3">Class / Sec</th>
+                                                <th className="px-4 py-3">Periods</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {trackerData?.postedList?.map((item: any, idx: number) => (
+                                                <tr key={idx} className="hover:bg-emerald-50/30">
+                                                    <td className="px-4 py-3 font-medium text-slate-900">{item.facultyName}</td>
+                                                    <td className="px-4 py-3">{item.deptCode}</td>
+                                                    <td className="px-4 py-3 font-semibold text-slate-800">{item.subjectName}</td>
+                                                    <td className="px-4 py-3">{item.yrSem} ({item.sectionName})</td>
+                                                    <td className="px-4 py-3 font-medium text-emerald-700">{item.periods}</td>
+                                                </tr>
+                                            ))}
+                                            {(!trackerData?.postedList || trackerData.postedList.length === 0) && (
+                                                <tr>
+                                                    <td colSpan={5} className="p-6 text-center text-slate-400">No attendance submissions recorded yet for this date.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Daily Register Matrix Table View */}
             {
-                activeTab === "subject" && subjectViewMode === "register" && registerData && (
+                (activeTab === "subject" || activeTab === "elective" || activeTab === "consolidated") && subjectViewMode === "register" && registerData && (
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm mb-8">
                         <div className="flex flex-wrap justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3 gap-2">
                             <div>
-                                <h3 className="font-semibold text-slate-700">Subject Daily Attendance Register Matrix</h3>
+                                <h3 className="font-semibold text-slate-700">{activeTab === "consolidated" ? "Consolidated Class Daily Attendance Register Matrix" : "Subject Daily Attendance Register Matrix"}</h3>
                                 <p className="text-xs text-slate-500">{registerData.sessions.length} class sessions recorded</p>
                             </div>
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-2">
                                 <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 hover:border-green-300">
                                     <FaFileExcel className="text-green-600" /> Excel Register
                                 </button>
-                                <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
-                                    <FaFilePdf className="text-red-600" /> PDF Register
+                                <button onClick={() => handleDownloadPDF("view")} className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300" title="View PDF in new tab">
+                                    <FaEye className="text-red-600" /> View PDF
+                                </button>
+                                <button onClick={() => handleDownloadPDF("download")} className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300" title="Download PDF file">
+                                    <FaDownload className="text-red-600" /> Download PDF
                                 </button>
                             </div>
                         </div>
@@ -1682,12 +2338,15 @@ export default function ReportsPage() {
                             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                                 <div className="flex justify-between items-center border-b border-slate-100 bg-slate-50 px-6 py-3">
                                     <h3 className="font-semibold text-slate-700">Report Summary</h3>
-                                    <div className="flex items-center">
+                                    <div className="flex items-center gap-2">
                                         <button onClick={handleDownloadConsolidated} className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 hover:border-green-300">
                                             <FaFileExcel className="text-green-600" /> Excel
                                         </button>
-                                        <button onClick={handleDownloadPDF} className="ml-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300">
-                                            <FaFilePdf className="text-red-600" /> PDF
+                                        <button onClick={() => handleDownloadPDF("view")} className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300" title="View PDF in new tab">
+                                            <FaEye className="text-red-600" /> View PDF
+                                        </button>
+                                        <button onClick={() => handleDownloadPDF("download")} className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 hover:border-red-300" title="Download PDF file">
+                                            <FaDownload className="text-red-600" /> Download PDF
                                         </button>
                                         {sortConfig.key && (
                                             <button
@@ -1716,7 +2375,34 @@ export default function ReportsPage() {
                                                 {reportMode === "scholarship" && (
                                                     <th className="px-6 py-3 text-xs font-bold uppercase text-slate-500 text-center">Govt Scholarship ID</th>
                                                 )}
-                                                {reportMode === "monthly" ? (
+                                                {reportMode === "subject_summary" ? (
+                                                    <>
+                                                        {subjectSummarySubjects.map((sub: any) => (
+                                                            <th key={sub.id} className="px-4 py-3 text-xs font-bold uppercase text-slate-700 text-center bg-slate-100/80 border-r border-slate-200">
+                                                                <div>{sub.shortName || sub.name}</div>
+                                                                <div className="text-[11px] font-bold text-blue-600 lowercase tracking-normal">Total Held: {sub.totalHeld}</div>
+                                                            </th>
+                                                        ))}
+                                                        <th onClick={() => handleSort("totalClasses")} className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                Total Held
+                                                                {sortConfig.key === "totalClasses" && (
+                                                                    sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                                )}
+                                                            </div>
+                                                        </th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center">Present</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center">Absent</th>
+                                                        <th onClick={() => handleSort("percentage")} className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                %
+                                                                {sortConfig.key === "percentage" && (
+                                                                    sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />
+                                                                )}
+                                                            </div>
+                                                        </th>
+                                                    </>
+                                                ) : reportMode === "monthly" ? (
                                                     (sortedConsolidatedData[0]?.monthlyStats || []).map((m: any) => (
                                                         <th key={m.monthKey} className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center">
                                                             {m.monthLabel}
@@ -1790,7 +2476,21 @@ export default function ReportsPage() {
                                                                 {s.scholarshipId || "N/A"}
                                                             </td>
                                                         )}
-                                                        {reportMode === "monthly" ? (
+                                                        {reportMode === "subject_summary" ? (
+                                                            <>
+                                                                {subjectSummarySubjects.map((sub: any) => (
+                                                                    <td key={sub.id} className="px-4 py-3 text-sm text-center font-bold text-slate-800 border-r border-slate-100">
+                                                                        {s.subjectStats?.[sub.id]?.present ?? 0}
+                                                                    </td>
+                                                                ))}
+                                                                <td className="px-4 py-3 text-sm text-center font-semibold text-slate-600">{s.totalClasses}</td>
+                                                                <td className="px-4 py-3 text-sm text-center font-bold text-emerald-600">{s.totalPresent || s.present}</td>
+                                                                <td className="px-4 py-3 text-sm text-center font-bold text-rose-600">{s.totalAbsent || s.absent}</td>
+                                                                <td className="px-4 py-3 text-sm text-center font-bold">
+                                                                    {renderHeatmapBadge(s.percentage)}
+                                                                </td>
+                                                            </>
+                                                        ) : reportMode === "monthly" ? (
                                                             (s.monthlyStats || []).map((m: any) => (
                                                                 <td key={m.monthKey} className="px-4 py-3 text-sm text-center font-bold">
                                                                     {renderHeatmapBadge(m.percentage)}
@@ -1822,6 +2522,249 @@ export default function ReportsPage() {
                     </>
                 )
             }
+
+            {/* Defaulter List (Report #1) */}
+            {activeTab === "defaulter" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Low Attendance & Parent Warning Notice Generator</h2>
+                    
+                    <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-5">
+                        {isGlobal && (
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700">Department</label>
+                                <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Select Dept</option>
+                                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                </select>
+                            </div>
+                        )}
+                        <div>
+                            <label className="text-xs font-semibold text-slate-700">Year / Sem / Sec</label>
+                            <div className="flex gap-1">
+                                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-1/3 rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Yr</option>
+                                    <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                                </select>
+                                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-1/3 rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Sem</option>
+                                    <option value="1">1</option><option value="2">2</option>
+                                </select>
+                                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="w-1/3 rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Sec</option>
+                                    {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-700">Threshold %</label>
+                            <select value={defaulterThreshold} onChange={(e) => setDefaulterThreshold(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
+                                <option value="75">&lt; 75% (Condonation & Detention)</option>
+                                <option value="65">&lt; 65% (Detention Risk Only)</option>
+                                <option value="80">&lt; 80% (Early Warning)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-700">Date Range</label>
+                            <div className="flex gap-1">
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-1/2 rounded-lg border border-slate-300 p-2 text-xs" />
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-1/2 rounded-lg border border-slate-300 p-2 text-xs" />
+                            </div>
+                        </div>
+                        <div className="flex items-end">
+                            <button onClick={fetchDefaulterReport} disabled={defaulterLoading} className="w-full rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 flex items-center justify-center gap-2">
+                                {defaulterLoading ? <LogoSpinner fullScreen={false} /> : <><FaFilter /> Generate Defaulters</>}
+                            </button>
+                        </div>
+                    </div>
+
+                    {defaulterData && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+                                    <span className="text-xs font-bold text-slate-500 uppercase">Total Classes Held</span>
+                                    <p className="text-2xl font-extrabold text-slate-800">{defaulterData.totalHeld}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+                                    <span className="text-xs font-bold text-slate-500 uppercase">Class Strength</span>
+                                    <p className="text-2xl font-extrabold text-slate-800">{defaulterData.totalStudents}</p>
+                                </div>
+                                <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 text-center">
+                                    <span className="text-xs font-bold text-rose-600 uppercase">Defaulter Count</span>
+                                    <p className="text-2xl font-extrabold text-rose-700">{defaulterData.defaulterCount}</p>
+                                </div>
+                            </div>
+
+                            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                <table className="w-full text-left border-collapse text-sm">
+                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600">Roll No</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600">Name</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600">Contact / Parent</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Held</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Attended</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Shortage %</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Attendance %</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Status</th>
+                                            <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {defaulterData.students.map((s: any) => (
+                                            <tr key={s.id} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 font-mono font-bold text-slate-800">{s.rollNumber}</td>
+                                                <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
+                                                <td className="px-4 py-3 text-xs text-slate-600">{s.mobile}<br/><span className="text-slate-400">({s.parentName})</span></td>
+                                                <td className="px-4 py-3 text-center">{s.totalClasses}</td>
+                                                <td className="px-4 py-3 text-center font-semibold text-emerald-600">{s.present}</td>
+                                                <td className="px-4 py-3 text-center font-semibold text-rose-600">{s.shortagePercentage}%</td>
+                                                <td className="px-4 py-3 text-center font-extrabold text-rose-700">{s.percentage}%</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${s.percentage < 65 ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
+                                                        {s.statusLabel}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <button onClick={() => handleDownloadDefaulterNoticePDF(s)} className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100 border border-rose-200">
+                                                        <FaFilePdf /> Parent Notice PDF
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Comparative Report (Report #3) */}
+            {activeTab === "comparative" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Class & Department Comparative Attendance Summary</h2>
+                    <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
+                        {isGlobal && (
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700">Department</label>
+                                <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Select Dept</option>
+                                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                </select>
+                            </div>
+                        )}
+                        <div>
+                            <label className="text-xs font-semibold text-slate-700">Year / Semester</label>
+                            <div className="flex gap-2">
+                                <select value={year} onChange={(e) => setYear(e.target.value)} className="w-1/2 rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Year</option>
+                                    <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                                </select>
+                                <select value={semester} onChange={(e) => setSemester(e.target.value)} className="w-1/2 rounded-lg border border-slate-300 p-2 text-sm">
+                                    <option value="">Sem</option>
+                                    <option value="1">1</option><option value="2">2</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-700">Date Range</label>
+                            <div className="flex gap-1">
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-1/2 rounded-lg border border-slate-300 p-2 text-xs" />
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-1/2 rounded-lg border border-slate-300 p-2 text-xs" />
+                            </div>
+                        </div>
+                        <div className="flex items-end">
+                            <button onClick={fetchComparativeReport} disabled={comparativeLoading} className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 flex items-center justify-center gap-2">
+                                {comparativeLoading ? <LogoSpinner fullScreen={false} /> : <><FaFilter /> Compare Sections</>}
+                            </button>
+                        </div>
+                    </div>
+
+                    {comparativeData && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {comparativeData.sections.map((sec: any) => (
+                                <div key={sec.sectionId} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                                    <div className="flex justify-between items-center border-b pb-2">
+                                        <h3 className="text-lg font-bold text-slate-800">Section {sec.sectionName}</h3>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${sec.averagePercentage >= 75 ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                                            Avg: {sec.averagePercentage}%
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                        <div className="bg-slate-50 p-2 rounded"><span className="text-xs text-slate-500 block font-bold">Strength</span><span className="font-bold text-slate-800">{sec.totalStudents}</span></div>
+                                        <div className="bg-slate-50 p-2 rounded"><span className="text-xs text-slate-500 block font-bold">Classes Held</span><span className="font-bold text-slate-800">{sec.totalClassesHeld}</span></div>
+                                        <div className="bg-emerald-50 p-2 rounded"><span className="text-xs text-emerald-700 block font-bold">≥ 75% Attendance</span><span className="font-bold text-emerald-800">{sec.highAttendanceCount}</span></div>
+                                        <div className="bg-rose-50 p-2 rounded"><span className="text-xs text-rose-700 block font-bold">&lt; 65% Detention</span><span className="font-bold text-rose-800">{sec.detentionCount}</span></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Student Transcript (Report #5) */}
+            {activeTab === "transcript" && (
+                <div className="mb-8">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-800 border-b pb-2">Student Cumulative Attendance Transcript</h2>
+                    <div className="mb-6 flex gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm items-end">
+                        <div className="flex-1">
+                            <label className="text-xs font-semibold text-slate-700">Enter Student Roll Number</label>
+                            <input type="text" placeholder="e.g. 2024101001" value={transcriptRollNo} onChange={(e) => setTranscriptRollNo(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm font-mono" />
+                        </div>
+                        <button onClick={fetchTranscriptReport} disabled={transcriptLoading} className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white hover:bg-emerald-700 flex items-center gap-2">
+                            {transcriptLoading ? <LogoSpinner fullScreen={false} /> : <><FaEye /> View Transcript</>}
+                        </button>
+                    </div>
+
+                    {transcriptData && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+                            <div className="flex justify-between items-start border-b pb-4">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-900">{transcriptData.student.name}</h3>
+                                    <p className="text-sm font-mono text-slate-500">Roll Number: {transcriptData.student.rollNumber}</p>
+                                    <p className="text-xs text-slate-500">{transcriptData.student.departmentName} | Year {transcriptData.student.year} | Sem {transcriptData.student.semester} | Sec {transcriptData.student.sectionName}</p>
+                                </div>
+                                <button onClick={handleDownloadTranscriptPDF} className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700">
+                                    <FaFilePdf /> Download Official Transcript PDF
+                                </button>
+                            </div>
+
+                            <table className="w-full text-left border-collapse text-sm">
+                                <thead className="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th className="px-4 py-3 text-xs font-bold text-slate-600">Subject Name</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-slate-600">Faculty</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Classes Held</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Attended</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Absent</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-slate-600 text-center">Subject %</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {transcriptData.subjectBreakdown.map((sub: any) => (
+                                        <tr key={sub.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3 font-semibold text-slate-800">{sub.name}</td>
+                                            <td className="px-4 py-3 text-xs text-slate-600">{sub.facultyName}</td>
+                                            <td className="px-4 py-3 text-center">{sub.totalHeld}</td>
+                                            <td className="px-4 py-3 text-center font-bold text-emerald-600">{sub.present}</td>
+                                            <td className="px-4 py-3 text-center font-bold text-rose-600">{sub.absent}</td>
+                                            <td className="px-4 py-3 text-center font-extrabold">{sub.percentage}%</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="bg-slate-100 font-bold">
+                                        <td colSpan={2} className="px-4 py-3 text-slate-900">OVERALL ATTENDANCE SUMMARY</td>
+                                        <td className="px-4 py-3 text-center">{transcriptData.overall.totalHeld}</td>
+                                        <td className="px-4 py-3 text-center text-emerald-700">{transcriptData.overall.totalPresent}</td>
+                                        <td className="px-4 py-3 text-center text-rose-700">{transcriptData.overall.totalAbsent}</td>
+                                        <td className="px-4 py-3 text-center text-base text-blue-700">{transcriptData.overall.percentage}%</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Edit Modal */}
             <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Attendance">
@@ -1902,6 +2845,10 @@ export default function ReportsPage() {
                                         <div className="col-span-2">
                                             <span className="block text-slate-500 text-xs uppercase font-bold">Subject</span>
                                             <span className="font-medium text-slate-900">{viewRecord.subject?.name || "N/A"}</span>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <span className="block text-slate-500 text-xs uppercase font-bold">Faculty / Posted By</span>
+                                            <span className="font-medium text-slate-900">{viewRecord.user?.faculty?.empName || viewRecord.user?.username || viewRecord.postedBy || "N/A"}</span>
                                         </div>
                                         <div className="col-span-2 my-2 border-t border-slate-200"></div>
                                         <div>
