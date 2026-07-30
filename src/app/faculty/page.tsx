@@ -1,13 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen, FaChartPie } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
+import BirthdayBanner from "@/components/BirthdayBanner";
+import BirthdayCelebrationModal from "@/components/BirthdayCelebrationModal";
 
 export default function FacultyIndexPage() {
     const { data: session, status } = useSession();
+    const [birthdayInfo, setBirthdayInfo] = useState<{ isBirthday: boolean; salutation?: string; empName?: string; photoUrl?: string | null }>({ isBirthday: false });
+
+    useEffect(() => {
+        if (status === "authenticated" && (session?.user as any)?.role === "FACULTY") {
+            fetch("/api/faculty/birthday-status")
+                .then((res) => res.json())
+                .then((data) => setBirthdayInfo(data))
+                .catch((err) => console.error("Error fetching birthday status:", err));
+        }
+    }, [status, session]);
 
     if (status === "loading") {
         return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
@@ -16,6 +29,20 @@ export default function FacultyIndexPage() {
     return (
         <div className="w-full bg-slate-50 px-4 py-8 sm:px-6 lg:px-8 flex-grow">
             <div className="mx-auto max-w-7xl">
+                {birthdayInfo.isBirthday && (
+                    <>
+                        <BirthdayCelebrationModal
+                            empName={birthdayInfo.empName || (session?.user as any)?.name || "Faculty"}
+                            salutation={birthdayInfo.salutation || "Sir"}
+                            photoUrl={birthdayInfo.photoUrl}
+                        />
+                        <BirthdayBanner
+                            empName={birthdayInfo.empName || (session?.user as any)?.name || "Faculty"}
+                            salutation={birthdayInfo.salutation || "Sir"}
+                        />
+                    </>
+                )}
+
                 <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
                     <h1 className="text-3xl font-extrabold text-slate-900">Faculty Gateway</h1>
                     <p className="mt-2 text-lg text-slate-600">

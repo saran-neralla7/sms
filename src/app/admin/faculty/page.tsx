@@ -589,6 +589,12 @@ export default function FacultyPage() {
                 maxWidth="max-w-4xl"
             >
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    {status.message && status.type === "error" && (
+                        <div className="rounded-lg bg-red-50 p-4 text-sm font-medium text-red-700 border border-red-200 flex items-center gap-2">
+                            <FaExclamationTriangle className="text-red-500 flex-shrink-0" />
+                            <span>{status.message}</span>
+                        </div>
+                    )}
                     {/* Basic Details */}
                     <div>
                         <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-purple-600">Basic Details</h3>

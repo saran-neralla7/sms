@@ -85,14 +85,17 @@ export async function GET(request: Request) {
             }
         });
 
-        // Build a map of lowercase clean topics -> earliest date taught
-        const taughtTopicsMap = new Map<string, string>();
+        // Store all taught topic entries (cleaned lowercase & earliest date)
+        const taughtTopicEntries: { cleanTopic: string; dateIso: string }[] = [];
         diaries.forEach(log => {
             if (log.topicsTaught) {
                 log.topicsTaught.split(",").forEach(topic => {
                     const cleanTopic = cleanHtmlText(topic).toLowerCase();
-                    if (cleanTopic && !taughtTopicsMap.has(cleanTopic)) {
-                        taughtTopicsMap.set(cleanTopic, log.date.toISOString());
+                    if (cleanTopic) {
+                        taughtTopicEntries.push({
+                            cleanTopic,
+                            dateIso: log.date.toISOString()
+                        });
                     }
                 });
             }
@@ -111,7 +114,15 @@ export async function GET(request: Request) {
 
             const topicsStatus = topicsList.map((topicName: string) => {
                 const cleanName = topicName.toLowerCase();
-                const isCompleted = taughtTopicsMap.has(cleanName);
+                
+                // Match if exact match OR if faculty entry contains the syllabus topic (topic + extra text) OR if syllabus topic contains faculty entry
+                const matchedEntry = taughtTopicEntries.find(entry => 
+                    entry.cleanTopic === cleanName ||
+                    (cleanName.length > 2 && entry.cleanTopic.includes(cleanName)) ||
+                    (entry.cleanTopic.length > 2 && cleanName.includes(entry.cleanTopic))
+                );
+
+                const isCompleted = !!matchedEntry;
                 if (isCompleted) {
                     completedInUnit++;
                     overallCompleted++;
@@ -121,7 +132,7 @@ export async function GET(request: Request) {
                 return {
                     name: topicName,
                     completed: isCompleted,
-                    dateTaught: isCompleted ? taughtTopicsMap.get(cleanName) : null
+                    dateTaught: isCompleted ? matchedEntry.dateIso : null
                 };
             });
 

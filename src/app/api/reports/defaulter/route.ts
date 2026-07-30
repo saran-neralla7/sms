@@ -55,7 +55,7 @@ export async function GET(request: Request) {
                 isLeftCollege: false,
                 isDetained: false
             },
-            select: { id: true, rollNumber: true, name: true, mobile: true, studentContactNumber: true, fatherName: true, motherName: true }
+            select: { id: true, rollNumber: true, name: true, mobile: true, studentContactNumber: true, fatherName: true, motherName: true, address: true }
         });
 
         // Fetch attendance history for the section and date range
@@ -129,6 +129,7 @@ export async function GET(request: Request) {
                 name: s.name,
                 mobile: s.mobile || s.studentContactNumber || "N/A",
                 parentName: s.fatherName || s.motherName || "Guardian",
+                address: s.address || null,
                 totalClasses: total,
                 present: stats.present,
                 absent: total - stats.present,

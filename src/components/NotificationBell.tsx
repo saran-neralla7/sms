@@ -10,13 +10,39 @@ export default function NotificationBell() {
     const [loading, setLoading] = useState<boolean>(false);
     const popoverRef = useRef<HTMLDivElement>(null);
 
+    const [notifiedIds, setNotifiedIds] = useState<Set<string>>(new Set());
+
+    const triggerBrowserPushAlert = (n: any) => {
+        if ("Notification" in window && Notification.permission === "granted") {
+            try {
+                const options: NotificationOptions = {
+                    body: n.message,
+                    icon: n.photoUrl || "/icons/icon-192x192.png",
+                    tag: n.id
+                };
+                new Notification(n.title, options);
+            } catch (err) {
+                console.error("Browser push alert error:", err);
+            }
+        }
+    };
+
     const fetchNotifications = async () => {
         try {
             const res = await fetch("/api/notifications");
             if (res.ok) {
                 const data = await res.json();
-                setNotifications(data.notifications || []);
+                const newNotifs: any[] = data.notifications || [];
+                setNotifications(newNotifs);
                 setUnreadCount(data.unreadCount || 0);
+
+                // Trigger PWA / Browser notification for unread items not yet alerted
+                newNotifs.forEach((n) => {
+                    if (!n.isRead && !notifiedIds.has(n.id)) {
+                        triggerBrowserPushAlert(n);
+                        setNotifiedIds(prev => new Set(prev).add(n.id));
+                    }
+                });
             }
         } catch (e) {
             console.error("Error loading notifications:", e);
@@ -27,7 +53,7 @@ export default function NotificationBell() {
         fetchNotifications();
         const interval = setInterval(fetchNotifications, 30000); // Polling every 30s
         return () => clearInterval(interval);
-    }, []);
+    }, [notifiedIds]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -126,19 +152,35 @@ export default function NotificationBell() {
                                 <div
                                     key={n.id}
                                     onClick={() => markAsRead(n.id)}
-                                    className={`p-3 rounded-xl transition-colors cursor-pointer text-left ${
+                                    className={`p-3 rounded-xl transition-colors cursor-pointer text-left flex items-start gap-3 ${
                                         n.isRead ? "bg-white hover:bg-slate-50" : "bg-blue-50/50 border-l-4 border-blue-500"
                                     }`}
                                 >
-                                    <div className="flex justify-between items-start">
-                                        <h4 className={`text-xs font-bold ${n.isRead ? "text-slate-700" : "text-blue-900"}`}>
-                                            {n.title}
-                                        </h4>
-                                        <span className="text-[10px] text-slate-400">
-                                            {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
+                                    {n.photoUrl ? (
+                                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-amber-300 shadow-sm mt-0.5">
+                                            <img src={n.photoUrl} alt="Faculty" className="h-full w-full object-cover" />
+                                        </div>
+                                    ) : n.type === "FACULTY_BIRTHDAY" ? (
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 text-lg shadow-sm mt-0.5">
+                                            🎂
+                                        </div>
+                                    ) : n.type === "SYSTEM_BACKUP" ? (
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 text-lg shadow-sm mt-0.5">
+                                            💾
+                                        </div>
+                                    ) : null}
+
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start gap-1">
+                                            <h4 className={`text-xs font-bold truncate ${n.isRead ? "text-slate-700" : "text-blue-900"}`}>
+                                                {n.title}
+                                            </h4>
+                                            <span className="text-[10px] text-slate-400 shrink-0">
+                                                {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-600 mt-1 leading-snug break-words">{n.message}</p>
                                     </div>
-                                    <p className="text-xs text-slate-600 mt-1 leading-snug">{n.message}</p>
                                 </div>
                             ))
                         )}

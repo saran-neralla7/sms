@@ -366,19 +366,23 @@ export default function HistoryPage() {
     // - SMS/Bulk: same date + section + department
     const displayRows = (() => {
         const groups: Map<string, any[]> = new Map();
-        
-        for (const record of filteredHistory) {
-            let key = "";
+
+        const getRecordKey = (record: any) => {
             const dateStr = new Date(record.date).toISOString().split('T')[0];
+            const posterId = record.postedByName || record.user?.username || record.downloadedBy || record.user?.id || "unknown";
             if (record.subject) {
                 if (record.subject.isElective) {
-                    key = `elective_${dateStr}_${record.subject.id}`;
+                    return `elective_${dateStr}_${record.subject.id}_${posterId}`;
                 } else {
-                    key = `regular_${dateStr}_${record.subject.id}_${record.sectionId}_${record.departmentId}`;
+                    return `regular_${dateStr}_Yr${record.year}_Sem${record.semester}_${record.subject.id}_${record.sectionId}_${record.departmentId}_${posterId}`;
                 }
             } else {
-                key = `sms_${dateStr}_${record.sectionId}_${record.departmentId}`;
+                return `sms_${dateStr}_Yr${record.year}_Sem${record.semester}_${record.sectionId}_${record.departmentId}_${posterId}`;
             }
+        };
+        
+        for (const record of filteredHistory) {
+            const key = getRecordKey(record);
 
             if (!groups.has(key)) {
                 groups.set(key, []);
@@ -391,17 +395,7 @@ export default function HistoryPage() {
 
         // Maintain the original order of the history records
         for (const record of filteredHistory) {
-            let key = "";
-            const dateStr = new Date(record.date).toISOString().split('T')[0];
-            if (record.subject) {
-                if (record.subject.isElective) {
-                    key = `elective_${dateStr}_${record.subject.id}`;
-                } else {
-                    key = `regular_${dateStr}_${record.subject.id}_${record.sectionId}_${record.departmentId}`;
-                }
-            } else {
-                key = `sms_${dateStr}_${record.sectionId}_${record.departmentId}`;
-            }
+            const key = getRecordKey(record);
 
             if (!seenKeys.has(key)) {
                 seenKeys.add(key);
@@ -733,7 +727,9 @@ export default function HistoryPage() {
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Class Details</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">View</th>
-                                <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Downloaded By</th>
+                                <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                    {viewMode === "sms" ? "Downloaded By" : "Faculty / Posted By"}
+                                </th>
                                 <th className="whitespace-nowrap px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Actions</th>
                             </tr>
                         </thead>
@@ -810,11 +806,51 @@ export default function HistoryPage() {
                                                     <span className="font-mono text-xs">{group.records.length > 1 ? "View All" : "View"}</span>
                                                 </button>
                                             </td>
-                                            <td className="whitespace-nowrap px-6 py-4">
-                                                <div className="flex items-center gap-2 text-sm text-slate-600">
-                                                    <FaUserCircle className="text-slate-400" />
-                                                    <span>{group.primaryRecord.user?.username || "Unknown"}</span>
-                                                </div>
+                                            <td className="px-6 py-4">
+                                                {(() => {
+                                                    const postedByNames = Array.from(
+                                                        new Set(
+                                                            group.records.map((r: any) => r.postedByName || r.user?.faculty?.empName || r.user?.username || "Unknown")
+                                                        )
+                                                    ).filter(Boolean);
+
+                                                    if (viewMode === "sms") {
+                                                        return (
+                                                            <div className="flex flex-col text-sm text-slate-700 max-w-[220px]">
+                                                                <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                                                                    <FaUserCircle className="text-slate-400 shrink-0" />
+                                                                    <span className="truncate" title={postedByNames.join(", ")}>
+                                                                        {postedByNames.join(", ") || "Unknown"}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    const allFacultyNames = Array.from(
+                                                        new Set(
+                                                            group.records.flatMap((r: any) =>
+                                                                (r.mappedFacultyNames && r.mappedFacultyNames.length > 0)
+                                                                    ? r.mappedFacultyNames
+                                                                    : [r.user?.faculty?.empName || r.user?.username || "Unknown"]
+                                                            )
+                                                        )
+                                                    ).filter(Boolean);
+
+                                                    return (
+                                                        <div className="flex flex-col text-sm text-slate-700 max-w-[220px]">
+                                                            <div className="flex items-center gap-1.5 font-medium text-slate-900">
+                                                                <FaUserCircle className="text-slate-400 shrink-0" />
+                                                                <span className="truncate" title={allFacultyNames.join(" & ")}>{allFacultyNames.join(" & ")}</span>
+                                                            </div>
+                                                            {postedByNames.length > 0 && (
+                                                                <span className="text-[11px] text-slate-500 italic mt-0.5 truncate" title={`Posted by ${postedByNames.join(", ")}`}>
+                                                                    (Posted by {postedByNames.join(", ")})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="whitespace-nowrap px-6 py-4 text-right">
                                                 {(() => {

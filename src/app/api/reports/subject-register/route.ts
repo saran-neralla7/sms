@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         finalDepartmentId = user.departmentId;
     }
 
-    const targetSubject = subjectId ? await prisma.subject.findUnique({ where: { id: subjectId } }) : null;
+    const targetSubject = subjectId ? await prisma.subject.findUnique({ where: { id: subjectId }, include: { department: true } }) : null;
     const isOpenElective = targetSubject?.type === "OPEN_ELECTIVE" || targetSubject?.isElective;
 
     if (!year || !semester || !startDate || !endDate) {
@@ -268,7 +268,8 @@ export async function GET(request: Request) {
             };
         });
 
-        return NextResponse.json({ sessions, students: studentRows });
+        const subjectDepartment = targetSubject?.department ? { id: targetSubject.department.id, name: targetSubject.department.name, code: targetSubject.department.code } : null;
+        return NextResponse.json({ sessions, students: studentRows, subjectDepartment });
     } catch (error: any) {
         console.error("Subject Register API Error:", error);
         return NextResponse.json({ error: "Failed to generate Subject Register Report." }, { status: 500 });

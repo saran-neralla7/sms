@@ -121,3 +121,135 @@ export async function createFacultyTimetableNotification(facultyId: string, deta
         console.error("Error creating faculty timetable notification:", error);
     }
 }
+
+export async function checkAndTriggerFacultyBirthdayNotifications() {
+    try {
+        const today = new Date();
+        const todayMonth = today.getMonth(); // 0-indexed (0-11)
+        const todayDay = today.getDate(); // 1-31
+
+        // Find active faculty members (resignDate is null)
+        const activeFaculty = await prisma.faculty.findMany({
+            where: {
+                resignDate: null
+            },
+            select: {
+                id: true,
+                empName: true,
+                gender: true,
+                dob: true,
+                photoUrl: true,
+                department: {
+                    select: {
+                        code: true,
+                        name: true
+                    }
+                },
+                user: {
+                    select: {
+                        id: true,
+                        role: true
+                    }
+                }
+            }
+        });
+
+        // Filter faculty whose birthday is today
+        const birthdayFacultyList = activeFaculty.filter(f => {
+            if (!f.dob) return false;
+            const d = new Date(f.dob);
+            return d.getMonth() === todayMonth && d.getDate() === todayDay;
+        });
+
+        if (birthdayFacultyList.length === 0) return;
+
+        // Fetch all active non-student users (role !== "STUDENT")
+        const nonStudentUsers = await prisma.user.findMany({
+            where: {
+                role: {
+                    not: "STUDENT"
+                }
+            },
+            select: {
+                id: true,
+                role: true,
+                facultyId: true
+            }
+        });
+
+        if (nonStudentUsers.length === 0) return;
+
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+        const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+        // Fetch notifications created today of type "FACULTY_BIRTHDAY"
+        const existingBirthdayNotifs = await prisma.notification.findMany({
+            where: {
+                type: "FACULTY_BIRTHDAY",
+                createdAt: {
+                    gte: startOfToday,
+                    lte: endOfToday
+                }
+            },
+            select: {
+                userId: true,
+                title: true
+            }
+        });
+
+        const existingSet = new Set<string>();
+        existingBirthdayNotifs.forEach(n => {
+            existingSet.add(`${n.userId}_${n.title}`);
+        });
+
+        const notificationsToCreate: Array<{
+            userId: string;
+            title: string;
+            message: string;
+            type: string;
+            link: string;
+            photoUrl: string | null;
+        }> = [];
+
+        for (const f of birthdayFacultyList) {
+            const genderStr = (f.gender || "").trim().toUpperCase();
+            const isFemale = genderStr === "FEMALE" || genderStr === "F" || genderStr === "WOMAN";
+            const titleSuffix = isFemale ? "Madam" : "Sir";
+            const possessiveSuffix = isFemale ? "Madam's" : "Sir's";
+
+            const personalTitle = `Happy Birthday ${titleSuffix}! 🎂`;
+            const personalMessage = `Happy Birthday ${titleSuffix}! 🎂 Wishing you a wonderful and successful year ahead from Gayatri Vidya Parishad College for Degree and PG Courses (A).`;
+
+            const broadcastTitle = `Faculty Birthday Celebration 🎉`;
+            const broadcastMessage = `🎉 Today is ${f.empName} ${possessiveSuffix} Birthday! Join us in wishing them a very Happy Birthday.`;
+
+            for (const user of nonStudentUsers) {
+                const isTargetBirthdayFaculty = user.facultyId === f.id || (f.user && f.user.id === user.id);
+                const notifTitle = isTargetBirthdayFaculty ? personalTitle : broadcastTitle;
+                const notifMessage = isTargetBirthdayFaculty ? personalMessage : broadcastMessage;
+
+                const dedupeKey = `${user.id}_${notifTitle}`;
+
+                if (!existingSet.has(dedupeKey)) {
+                    existingSet.add(dedupeKey);
+                    notificationsToCreate.push({
+                        userId: user.id,
+                        title: notifTitle,
+                        message: notifMessage,
+                        type: "FACULTY_BIRTHDAY",
+                        link: "/faculty/dashboard",
+                        photoUrl: f.photoUrl || null
+                    });
+                }
+            }
+        }
+
+        if (notificationsToCreate.length > 0) {
+            await prisma.notification.createMany({
+                data: notificationsToCreate
+            });
+        }
+    } catch (error) {
+        console.error("Error creating faculty birthday notifications:", error);
+    }
+}

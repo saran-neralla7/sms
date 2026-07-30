@@ -74,9 +74,35 @@ export async function GET(request: Request) {
             }
         }
 
-        if (userRole === "SMS_USER" || userRole === "FACULTY") {
-            // SMS_USER & FACULTY: Strictly sees ONLY what they uploaded
+        if (userRole === "SMS_USER") {
+            whereClause.type = "SMS";
             whereClause.downloadedBy = userId;
+        } else if (userRole === "FACULTY") {
+            whereClause.type = "ACADEMIC";
+
+            const facProfile = await prisma.faculty.findFirst({
+                where: { user: { id: userId } },
+                select: { id: true }
+            });
+
+            if (facProfile) {
+                const mappings = await prisma.facultySubjectMapping.findMany({
+                    where: { facultyId: facProfile.id },
+                    select: { subjectId: true, sectionId: true }
+                });
+
+                const mappedConditions = mappings.map(m => ({
+                    subjectId: m.subjectId,
+                    sectionId: m.sectionId
+                }));
+
+                whereClause.OR = [
+                    { downloadedBy: userId },
+                    ...(mappedConditions.length > 0 ? mappedConditions : [])
+                ];
+            } else {
+                whereClause.downloadedBy = userId;
+            }
         } else {
             // ACADEMIC (Admin/HOD): 
             const mode = searchParams.get("mode");
@@ -111,6 +137,36 @@ export async function GET(request: Request) {
             },
             orderBy: { date: 'desc' }
         });
+
+        // Pre-fetch FacultySubjectMapping to attach all assigned faculty names for each record
+        const allMappings = await prisma.facultySubjectMapping.findMany({
+            where: {
+                academicYearId: academicYearId || undefined
+            },
+            include: {
+                faculty: {
+                    select: {
+                        empName: true,
+                        user: { select: { username: true } }
+                    }
+                }
+            }
+        });
+
+        const mappedFacultyMap = new Map<string, Array<string>>();
+        for (const m of allMappings) {
+            const key = `${m.subjectId}_${m.sectionId}`;
+            if (!mappedFacultyMap.has(key)) {
+                mappedFacultyMap.set(key, []);
+            }
+            const name = m.faculty?.empName || m.faculty?.user?.username;
+            if (name) {
+                const list = mappedFacultyMap.get(key)!;
+                if (!list.includes(name)) {
+                    list.push(name);
+                }
+            }
+        }
 
         // Resolve student departments if details exist
         const rollNumbers = new Set<string>();
@@ -167,9 +223,20 @@ export async function GET(request: Request) {
                 // ignore
             }
 
+            const recKey = `${record.subjectId}_${record.sectionId}`;
+            const mappedFacs = mappedFacultyMap.get(recKey) || [];
+
+            const postedByEmpName = record.user?.faculty?.empName || record.user?.username || "Unknown";
+
+            const allFacNamesSet = new Set<string>();
+            mappedFacs.forEach(f => allFacNamesSet.add(f));
+            allFacNamesSet.add(postedByEmpName);
+
             return {
                 ...record,
-                resolvedDepts: Array.from(resolvedDeptsSet)
+                resolvedDepts: Array.from(resolvedDeptsSet),
+                mappedFacultyNames: Array.from(allFacNamesSet),
+                postedByName: postedByEmpName
             };
         });
 

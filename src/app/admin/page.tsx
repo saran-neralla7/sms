@@ -246,6 +246,13 @@ export default function AdminDashboardPage() {
             color: "bg-emerald-50 text-emerald-600"
         },
         {
+            title: "Broadcast Notifications",
+            icon: <FaMobileAlt className="h-6 w-6" />,
+            description: "Send push & in-app notifications filtered by role, department & batch.",
+            href: "/admin/notifications",
+            color: "bg-indigo-50 text-indigo-600"
+        },
+        {
             title: "Faculty Mapping",
             icon: <FaUsers className="h-6 w-6" />,
             description: "Map faculty to subjects for attendance and feedback.",

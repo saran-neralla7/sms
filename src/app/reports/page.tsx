@@ -67,7 +67,7 @@ export default function ReportsPage() {
     const [reportMode, setReportMode] = useState<"standard" | "subject_summary" | "scholarship" | "monthly">("standard");
     const [targetWorkingDays, setTargetWorkingDays] = useState("");
     const [subjectViewMode, setSubjectViewMode] = useState<"summary" | "register">("summary");
-    const [registerData, setRegisterData] = useState<{ sessions: any[]; students: any[] } | null>(null);
+    const [registerData, setRegisterData] = useState<{ sessions: any[]; students: any[]; subjectDepartment?: any } | null>(null);
 
     // Consolidated Dates
     const [startDate, setStartDate] = useState("");
@@ -618,8 +618,12 @@ export default function ReportsPage() {
                 const doc = new jsPDF({ orientation: "landscape" });
                 const pageWidth = doc.internal.pageSize.width;
 
-                const subName = (subjectId ? subjects.find(s => s.id === subjectId)?.name : null) || "Consolidated_Class";
-                const deptName = departments.find(d => d.id === departmentId)?.name || "";
+                const selectedSubObj = subjectId ? subjects.find(s => s.id === subjectId) : null;
+                const subName = selectedSubObj?.name || "Consolidated_Class";
+                const isSubjectSpecific = !!subjectId || activeTab === "subject" || activeTab === "elective";
+                const deptName = (isSubjectSpecific && (selectedSubObj?.department?.name || registerData?.subjectDepartment?.name))
+                    ? (selectedSubObj?.department?.name || registerData?.subjectDepartment?.name)
+                    : (departments.find(d => d.id === departmentId)?.name || "");
                 const secName = sections.find(s => s.id === sectionId)?.name || "";
                 const academicYr = getAcademicYear(startDate);
                 const batchStr = getBatchNameString(year, startDate);
@@ -807,7 +811,11 @@ export default function ReportsPage() {
                     doc.setFont("times", "normal");
                     doc.setFontSize(11);
 
-                    const deptName = departments.find(d => d.id === departmentId)?.name || "Department";
+                    const selectedSubObj = subjectId ? subjects.find(s => s.id === subjectId) : null;
+                    const isSubjectSpecific = !!subjectId || activeTab === "subject" || activeTab === "elective";
+                    const deptName = (isSubjectSpecific && selectedSubObj?.department?.name)
+                        ? selectedSubObj.department.name
+                        : (departments.find(d => d.id === departmentId)?.name || "Department");
                     const secName = sections.find(s => s.id === sectionId)?.name || "All";
                     const subName = subjects.find(s => s.id === subjectId)?.name;
                     const academicYr = getAcademicYear(startDate);
@@ -1227,77 +1235,308 @@ export default function ReportsPage() {
         }
     };
 
-    const handleDownloadDefaulterNoticePDF = (student: any) => {
+    const loadLogoBase64 = async (): Promise<string | null> => {
         try {
-            const doc = new jsPDF({ orientation: "portrait" });
-            const pageWidth = doc.internal.pageSize.width;
-
-            doc.setFont("times", "bold");
-            doc.setFontSize(12);
-            doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, 12, { align: "center" });
-
-            doc.setFontSize(10);
-            doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, 17, { align: "center" });
-            doc.setFontSize(11);
-            doc.text("OFFICIAL PARENT WARNING NOTICE (ATTENDANCE SHORTAGE)", pageWidth / 2, 23, { align: "center" });
-
-            doc.setLineWidth(0.4);
-            doc.line(15, 27, pageWidth - 15, 27);
-
-            const academicYr = getAcademicYear(startDate);
-            const batchStr = getBatchNameString(year, startDate);
-
-            doc.setFont("times", "normal");
-            doc.setFontSize(10);
-            doc.text(`Ref No: GVP/ETH/ATT/${new Date().getFullYear()}/${student.rollNumber}`, 15, 33);
-            doc.text(`Date: ${formatISTDate(new Date().toISOString())}`, pageWidth - 15, 33, { align: "right" });
-
-            doc.text(`To Parent / Guardian of: ${student.parentName}`, 15, 41);
-            doc.text(`Student Name: ${student.name}`, 15, 47);
-            doc.text(`Roll Number: ${student.rollNumber}   |   Contact: ${student.mobile}`, 15, 53);
-            doc.text(`Academic Year: ${academicYr}   |   Batch: ${batchStr}`, 15, 59);
-
-            const autoTableFn = (doc as any).autoTable || autoTable;
-            if (typeof autoTableFn === 'function') {
-                autoTableFn(doc, {
-                    head: [["Total Classes Held", "Attended Classes", "Absent Classes", "Attendance %", "Shortage %", "Status"]],
-                    body: [[student.totalClasses, student.present, student.absent, student.percentage + "%", student.shortagePercentage + "%", student.statusLabel]],
-                    startY: 65,
-                    theme: "grid",
-                    styles: { font: "times", fontSize: 10, halign: "center", lineColor: [0, 0, 0], lineWidth: 0.3 },
-                    headStyles: { fillColor: [240, 243, 246], textColor: [15, 23, 42], fontStyle: "bold", lineColor: [0, 0, 0], lineWidth: 0.4 }
-                });
-            }
-
-            const currentY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 15 : 95;
-
-            doc.setFont("times", "normal");
-            doc.setFontSize(9.5);
-            const noticeBody = [
-                "WARNING REGARDING EXAM ELIGIBILITY:",
-                "As per Gayatri Vidya Parishad College academic regulations, a minimum of 75% attendance is MANDATORY to be eligible for semester end examinations.",
-                "• Attendance between 65.00% and 74.99% requires payment of a Condonation Fee subject to medical board approval.",
-                "• Attendance below 65.00% results in DETENTION, rendering the student ineligible for semester examinations.",
-                "",
-                "Please advise your ward to attend all regular classes without fail."
-            ];
-
-            let yOffset = currentY;
-            noticeBody.forEach((line) => {
-                doc.text(line, 15, yOffset);
-                yOffset += 6;
+            const res = await fetch("/logo.png");
+            if (!res.ok) return null;
+            const blob = await res.blob();
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
             });
+        } catch {
+            return null;
+        }
+    };
 
-            const sigY = yOffset + 25;
-            doc.setFont("times", "bold");
-            doc.text("Parent / Guardian Signature", 20, sigY);
-            doc.text("HOD Signature", pageWidth / 2, sigY, { align: "center" });
-            doc.text("Director / Principal", pageWidth - 20, sigY, { align: "right" });
+    const drawHalfPageNotice = (doc: any, student: any, startY: number, logoBase64: string | null, copyLabel?: string) => {
+        const pageWidth = doc.internal.pageSize.width;
+        const academicYr = getAcademicYear(startDate);
+        const batchStr = getBatchNameString(year, startDate);
+        const now = new Date();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const yyyy = now.getFullYear();
+        const monthYearStr = `${mm}${yyyy}`;
+        const refNo = `GVP/E&T/ATT/${monthYearStr}/${student.rollNumber}`;
 
-            doc.save(`Parent_Warning_Notice_${student.rollNumber}.pdf`);
+        // College Logo
+        if (logoBase64) {
+            try {
+                doc.addImage(logoBase64, "PNG", 12, startY + 6, 15, 15);
+            } catch (e) {
+                // Ignore fallback
+            }
+        }
+
+        // Header Titles - Center Aligned cleanly
+        doc.setFont("times", "bold");
+        doc.setFontSize(10.5);
+        doc.text("GAYATRI VIDYA PARISHAD COLLEGE FOR DEGREE AND PG COURSES(A)", pageWidth / 2, startY + 9.5, { align: "center" });
+
+        doc.setFontSize(8.5);
+        doc.setFont("times", "normal");
+        doc.text("ENGINEERING AND TECHNOLOGY PROGRAM - RUSHIKONDA, VISAKHAPATNAM", pageWidth / 2, startY + 14, { align: "center" });
+
+        doc.setFontSize(9.5);
+        doc.setFont("times", "bold");
+        doc.text("OFFICIAL PARENT WARNING NOTICE (ATTENDANCE SHORTAGE)", pageWidth / 2, startY + 19, { align: "center" });
+
+        if (copyLabel) {
+            doc.setFontSize(7.5);
+            doc.setFont("times", "italic");
+            doc.text(`[${copyLabel}]`, pageWidth - 12, startY + 19, { align: "right" });
+        }
+
+        doc.setLineWidth(0.3);
+        doc.line(12, startY + 22.5, pageWidth - 12, startY + 22.5);
+
+        // Ref No & Date
+        doc.setFont("times", "normal");
+        doc.setFontSize(8.5);
+        doc.text(`Ref No: ${refNo}`, 12, startY + 28);
+        doc.text(`Date: ${formatISTDate(now.toISOString())}`, pageWidth - 12, startY + 28, { align: "right" });
+
+        // Student / Parent Info (Option 1 Layout - Spaced Nicely)
+        doc.setFont("times", "bold");
+        doc.setFontSize(9.5);
+        doc.text(`To Parent / Guardian of: ${student.name}`, 12, startY + 35);
+
+        doc.setFont("times", "normal");
+        doc.setFontSize(8.5);
+        doc.text(`Parent / Guardian Name: ${student.parentName || "Parent / Guardian"}`, 12, startY + 41);
+        doc.text(`Roll Number: ${student.rollNumber}   |   Contact: ${student.mobile || "N/A"}`, 12, startY + 47);
+        doc.text(`Academic Year: ${academicYr}   |   Batch: ${batchStr}`, 12, startY + 53);
+
+        // Attendance Table
+        const autoTableFn = (doc as any).autoTable || autoTable;
+        if (typeof autoTableFn === 'function') {
+            autoTableFn(doc, {
+                head: [["Total Classes Held", "Attended Classes", "Absent Classes", "Attendance %", "Shortage %", "Status"]],
+                body: [[student.totalClasses, student.present, student.absent, student.percentage + "%", student.shortagePercentage + "%", student.statusLabel]],
+                startY: startY + 58,
+                margin: { left: 12, right: 12 },
+                theme: "grid",
+                styles: { font: "times", fontSize: 8.5, halign: "center", cellPadding: 2.2, lineColor: [0, 0, 0], lineWidth: 0.2 },
+                headStyles: { fillColor: [240, 243, 246], textColor: [15, 23, 42], fontStyle: "bold", lineColor: [0, 0, 0], lineWidth: 0.3 }
+            });
+        }
+
+        const tableFinalY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : startY + 80;
+        let bodyY = tableFinalY + 6;
+
+        doc.setFont("times", "bold");
+        doc.setFontSize(9);
+        doc.text("WARNING REGARDING EXAM ELIGIBILITY:", 12, bodyY);
+
+        doc.setFont("times", "normal");
+        doc.setFontSize(8);
+        bodyY += 4.5;
+        doc.text("As per Gayatri Vidya Parishad College academic regulations, a minimum of 75% attendance is MANDATORY to be eligible for semester end examinations.", 12, bodyY);
+        bodyY += 4.2;
+        doc.text("• Attendance between 65.00% and 74.99% requires payment of a Condonation Fee subject to medical board approval.", 12, bodyY);
+        bodyY += 4.2;
+        doc.text("• Attendance below 65.00% results in DETENTION, rendering the student ineligible for semester examinations.", 12, bodyY);
+        bodyY += 5;
+        doc.setFont("times", "italic");
+        doc.text("Please advise your ward to attend all regular classes without fail.", 12, bodyY);
+
+        const sigY = startY + 138;
+        doc.setFont("times", "bold");
+        doc.setFontSize(8.5);
+
+        doc.setLineWidth(0.2);
+        doc.line(16, sigY - 4, 62, sigY - 4);
+        doc.line(pageWidth / 2 - 22, sigY - 4, pageWidth / 2 + 22, sigY - 4);
+        doc.line(pageWidth - 62, sigY - 4, pageWidth - 16, sigY - 4);
+
+        doc.text("Parent / Guardian Signature", 16, sigY);
+        doc.text("HOD Signature", pageWidth / 2, sigY, { align: "center" });
+        doc.text("Director / Principal", pageWidth - 16, sigY, { align: "right" });
+    };
+
+    const drawDividingLine = (doc: any) => {
+        const pageWidth = doc.internal.pageSize.width;
+        doc.setLineWidth(0.2);
+        doc.setLineDashPattern([2, 2], 0);
+        doc.line(10, 148.5, pageWidth - 10, 148.5);
+        doc.setLineDashPattern([], 0);
+    };
+
+    const handleDownloadDefaulterNoticePDF = async (student: any, actionMode: "download" | "preview" = "download") => {
+        try {
+            const logoBase64 = await loadLogoBase64();
+            const doc = new jsPDF({ orientation: "portrait" });
+
+            // Single student: 2 copies on 1 page (Parent Copy on top half, Office Copy on bottom half)
+            drawHalfPageNotice(doc, student, 0, logoBase64, "Parent Copy");
+            drawDividingLine(doc);
+            drawHalfPageNotice(doc, student, 148.5, logoBase64, "Office Copy");
+
+            if (actionMode === "preview") {
+                const pdfBlob = doc.output("blob");
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                window.open(blobUrl, "_blank");
+            } else {
+                doc.save(`Parent_Warning_Notice_${student.rollNumber}.pdf`);
+            }
         } catch (e) {
             console.error(e);
             setStatus({ type: "error", message: "Failed to generate Parent Notice PDF" });
+        }
+    };
+
+    const handleDownloadAllDefaulterNoticesPDF = async (actionMode: "download" | "preview" = "download") => {
+        if (!defaulterData || !defaulterData.students || defaulterData.students.length === 0) return;
+        try {
+            const logoBase64 = await loadLogoBase64();
+            const doc = new jsPDF({ orientation: "portrait" });
+
+            // Bulk download: 2 DIFFERENT students per page
+            for (let i = 0; i < defaulterData.students.length; i++) {
+                const student = defaulterData.students[i];
+                const isTopHalf = i % 2 === 0;
+
+                if (i > 0 && isTopHalf) {
+                    doc.addPage();
+                }
+
+                const startY = isTopHalf ? 0 : 148.5;
+                drawHalfPageNotice(doc, student, startY, logoBase64);
+
+                if (isTopHalf && i < defaulterData.students.length - 1) {
+                    drawDividingLine(doc);
+                }
+            }
+
+            const secName = sections.find(s => s.id === sectionId)?.name || "All";
+            if (actionMode === "preview") {
+                const pdfBlob = doc.output("blob");
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                window.open(blobUrl, "_blank");
+            } else {
+                doc.save(`All_Parent_Warning_Notices_Sec_${secName}.pdf`);
+            }
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Failed to generate Bulk Parent Notices PDF" });
+        }
+    };
+
+    const handleDownloadAddressSlipsPDF = (actionMode: "download" | "preview" = "download") => {
+        if (!defaulterData || !defaulterData.students || defaulterData.students.length === 0) return;
+
+        // Filter students having an address recorded in DB
+        const studentsWithAddress = defaulterData.students.filter((s: any) => s.address && String(s.address).trim().length > 0);
+
+        if (studentsWithAddress.length === 0) {
+            setStatus({ type: "error", message: "No student addresses found in database for the selected defaulters." });
+            return;
+        }
+
+        try {
+            const doc = new jsPDF({ orientation: "portrait" });
+            const cardsPerPage = 6;
+            const colWidth = 88;
+            const rowHeight = 82;
+            const startX = [12, 108];
+            const startY = [12, 102, 192];
+
+            const deptName = departments.find(d => d.id === departmentId)?.name || "";
+            const secName = sections.find(s => s.id === sectionId)?.name || "";
+
+            for (let i = 0; i < studentsWithAddress.length; i++) {
+                const s = studentsWithAddress[i];
+                const cardIndex = i % cardsPerPage;
+
+                if (i > 0 && cardIndex === 0) {
+                    doc.addPage();
+                }
+
+                const col = cardIndex % 2;
+                const row = Math.floor(cardIndex / 2);
+                const x = startX[col];
+                const y = startY[row];
+
+                // Outer border box for envelope sticker
+                doc.setDrawColor(180, 180, 180);
+                doc.setLineWidth(0.3);
+                doc.roundedRect(x, y, colWidth, rowHeight, 3, 3, "S");
+
+                // Sticker Header
+                doc.setFont("times", "bold");
+                doc.setFontSize(8.5);
+                doc.text("POSTAL ADDRESS SLIP", x + colWidth / 2, y + 6, { align: "center" });
+
+                doc.setLineWidth(0.2);
+                doc.line(x + 5, y + 8.5, x + colWidth - 5, y + 8.5);
+
+                // To Label
+                doc.setFontSize(8.5);
+                doc.setFont("times", "bold");
+                doc.text("To,", x + 5, y + 13.5);
+
+                doc.setFontSize(8);
+                doc.text("Parent / Guardian of:", x + 5, y + 18);
+
+                // Wrapped Student Name
+                doc.setFontSize(8.5);
+                doc.setFont("times", "bold");
+                const nameLines = doc.splitTextToSize(s.name, colWidth - 10);
+                let curY = y + 22.5;
+                nameLines.forEach((line: string) => {
+                    doc.text(line, x + 5, curY);
+                    curY += 4;
+                });
+
+                // Parent Name
+                doc.setFont("times", "normal");
+                doc.setFontSize(8);
+                const parentText = `Parent Name: ${s.parentName || "Parent / Guardian"}`;
+                const parentLines = doc.splitTextToSize(parentText, colWidth - 10);
+                parentLines.forEach((line: string) => {
+                    doc.text(line, x + 5, curY);
+                    curY += 4;
+                });
+
+                doc.text(`Roll No: ${s.rollNumber}   |   Contact: ${s.mobile || "N/A"}`, x + 5, curY);
+                curY += 4;
+                doc.text(`Dept: ${deptName} (${secName})`, x + 5, curY);
+                curY += 3.5;
+
+                doc.setLineWidth(0.2);
+                doc.line(x + 5, curY, x + colWidth - 5, curY);
+                curY += 4.5;
+
+                // Address Block
+                doc.setFont("times", "bold");
+                doc.setFontSize(8);
+                doc.text("Postal Address:", x + 5, curY);
+                curY += 4;
+
+                doc.setFont("times", "normal");
+                doc.setFontSize(7.5);
+
+                const splitAddress = doc.splitTextToSize(s.address, colWidth - 10);
+                splitAddress.forEach((line: string) => {
+                    if (curY < y + rowHeight - 3) {
+                        doc.text(line, x + 5, curY);
+                        curY += 3.8;
+                    }
+                });
+            }
+
+            if (actionMode === "preview") {
+                const pdfBlob = doc.output("blob");
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                window.open(blobUrl, "_blank");
+            } else {
+                doc.save(`Defaulter_Postal_Address_Slips_Sec_${secName}.pdf`);
+            }
+        } catch (e) {
+            console.error(e);
+            setStatus({ type: "error", message: "Failed to generate Postal Address Slips PDF" });
         }
     };
 
@@ -2594,6 +2833,49 @@ export default function ReportsPage() {
                                 </div>
                             </div>
 
+                            <div className="flex items-center justify-between px-4 pt-3 pb-2 bg-slate-50 border-b border-slate-200">
+                                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Defaulter Students List ({defaulterData.defaulterCount})</h3>
+                                {defaulterData.students && defaulterData.students.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {/* All Parent Notices Group */}
+                                        <div className="inline-flex rounded-lg shadow-sm border border-rose-300 overflow-hidden">
+                                            <button
+                                                onClick={() => handleDownloadAllDefaulterNoticesPDF("preview")}
+                                                className="inline-flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 border-r border-rose-200 transition-colors"
+                                                title="View All Parent Notices in New Tab"
+                                            >
+                                                <FaEye /> View All Notices
+                                            </button>
+                                            <button
+                                                onClick={() => handleDownloadAllDefaulterNoticesPDF("download")}
+                                                className="inline-flex items-center gap-1.5 bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 transition-colors"
+                                                title="Download All Parent Notices PDF"
+                                            >
+                                                <FaFilePdf /> Download All
+                                            </button>
+                                        </div>
+
+                                        {/* Address Slips Group */}
+                                        <div className="inline-flex rounded-lg shadow-sm border border-indigo-300 overflow-hidden">
+                                            <button
+                                                onClick={() => handleDownloadAddressSlipsPDF("preview")}
+                                                className="inline-flex items-center gap-1.5 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 border-r border-indigo-200 transition-colors"
+                                                title="View Postal Address Slips in New Tab"
+                                            >
+                                                <FaEye /> View Address Slips
+                                            </button>
+                                            <button
+                                                onClick={() => handleDownloadAddressSlipsPDF("download")}
+                                                className="inline-flex items-center gap-1.5 bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
+                                                title="Download Postal Address Slips PDF"
+                                            >
+                                                <FaFilePdf /> Download Slips
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                                 <table className="w-full text-left border-collapse text-sm">
                                     <thead className="bg-slate-50 border-b border-slate-200">
@@ -2625,9 +2907,22 @@ export default function ReportsPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-center">
-                                                    <button onClick={() => handleDownloadDefaulterNoticePDF(s)} className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100 border border-rose-200">
-                                                        <FaFilePdf /> Parent Notice PDF
-                                                    </button>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button
+                                                            onClick={() => handleDownloadDefaulterNoticePDF(s, "preview")}
+                                                            className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200 border border-slate-300 transition-colors"
+                                                            title="View Notice PDF in New Tab"
+                                                        >
+                                                            <FaEye /> View
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDownloadDefaulterNoticePDF(s, "download")}
+                                                            className="inline-flex items-center gap-1 rounded bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors"
+                                                            title="Download Notice PDF"
+                                                        >
+                                                            <FaFilePdf /> Download
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

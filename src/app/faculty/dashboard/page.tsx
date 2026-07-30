@@ -9,6 +9,9 @@ import { motion } from "framer-motion";
 import { FaUserTie, FaBuilding, FaIdCard, FaEnvelope, FaPhone, FaCalendarAlt, FaStar, FaBookOpen, FaClock, FaChalkboard } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 
+import BirthdayBanner from "@/components/BirthdayBanner";
+import BirthdayCelebrationModal from "@/components/BirthdayCelebrationModal";
+
 export default function FacultyDashboard() {
     const { data: session, status } = useSession();
     const router = useRouter();
@@ -19,6 +22,7 @@ export default function FacultyDashboard() {
     const [studentSearch, setStudentSearch] = useState<Record<string, string>>({});
     const [semFilter, setSemFilter] = useState<string>("ALL");
     const [selectedSectionIdx, setSelectedSectionIdx] = useState<number>(0);
+    const [birthdayInfo, setBirthdayInfo] = useState<{ isBirthday: boolean; salutation?: string; empName?: string; photoUrl?: string | null }>({ isBirthday: false });
 
     const toggleMapping = (id: string) => {
         setExpandedMappings(prev => ({ ...prev, [id]: !prev[id] }));
@@ -33,10 +37,23 @@ export default function FacultyDashboard() {
             router.push("/auth/signin");
         } else if (status === "authenticated" && session?.user?.role === "FACULTY") {
             fetchDashboardData();
+            checkBirthdayStatus();
         } else if (status === "authenticated" && session?.user?.role !== "FACULTY") {
             router.push("/");
         }
     }, [status, session, router]);
+
+    const checkBirthdayStatus = async () => {
+        try {
+            const res = await fetch("/api/faculty/birthday-status");
+            if (res.ok) {
+                const bData = await res.json();
+                setBirthdayInfo(bData);
+            }
+        } catch (e) {
+            console.error("Error fetching birthday status:", e);
+        }
+    };
 
     const fetchDashboardData = async () => {
         try {
@@ -93,6 +110,19 @@ export default function FacultyDashboard() {
     return (
         <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
             <div className="mx-auto max-w-7xl">
+                {birthdayInfo.isBirthday && (
+                    <>
+                        <BirthdayCelebrationModal
+                            empName={birthdayInfo.empName || profile.empName}
+                            salutation={birthdayInfo.salutation || "Sir"}
+                            photoUrl={birthdayInfo.photoUrl || profile.photoUrl}
+                        />
+                        <BirthdayBanner
+                            empName={birthdayInfo.empName || profile.empName}
+                            salutation={birthdayInfo.salutation || "Sir"}
+                        />
+                    </>
+                )}
                 
                 {/* Header Profile Card */}
                 <div className="mb-8 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">

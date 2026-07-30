@@ -955,8 +955,9 @@ model Notification {
   userId    String
   title     String
   message   String
-  type      String   // "ATTENDANCE_POSTED" | "LOW_ATTENDANCE" | "TIMETABLE_ADDED" | "SYSTEM"
+  type      String   // "ATTENDANCE_POSTED" | "LOW_ATTENDANCE" | "TIMETABLE_ADDED" | "SYSTEM" | "FACULTY_BIRTHDAY"
   link      String?
+  photoUrl  String?  // Optional faculty photo URL for birthday notifications
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkAndTriggerFacultyBirthdayNotifications } from "@/lib/notification-service";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -10,6 +11,11 @@ export async function GET(request: Request) {
     }
 
     try {
+        const userRole = (session.user as any).role;
+        if (userRole !== "STUDENT") {
+            await checkAndTriggerFacultyBirthdayNotifications();
+        }
+
         const notifications = await prisma.notification.findMany({
             where: { userId: session.user.id },
             orderBy: { createdAt: "desc" },
