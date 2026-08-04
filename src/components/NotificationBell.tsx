@@ -176,7 +176,7 @@ export default function NotificationBell() {
                                                 {n.title}
                                             </h4>
                                             <span className="text-[10px] text-slate-400 shrink-0">
-                                                {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(n.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' }) + ", " + new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
                                         <p className="text-xs text-slate-600 mt-1 leading-snug break-words">{n.message}</p>
