@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { FaUserTie, FaCheckSquare, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen, FaChartPie } from "react-icons/fa";
+import { FaUserTie, FaCheckSquare, FaUserGraduate, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen, FaChartPie } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
 import BirthdayBanner from "@/components/BirthdayBanner";
@@ -68,6 +68,16 @@ export default function FacultyIndexPage() {
                             description="Mark daily attendance for your assigned sections."
                             href="/attendance"
                             colorClass="bg-green-50 text-green-600"
+                        />
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                        <DashboardCard
+                            title="Students"
+                            icon={<FaUserGraduate className="h-6 w-6" />}
+                            description="View all student details, attendance history, results, and internal marks across any department."
+                            href="/admin/students"
+                            colorClass="bg-blue-50 text-blue-600"
                         />
                     </motion.div>
 

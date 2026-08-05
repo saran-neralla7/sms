@@ -82,8 +82,8 @@ export default withAuth(
         const adminRoutes = ["/admin", "/reports", "/faculty", "/fees", "/timetables"];
 
         if (adminRoutes.some(prefix => path.startsWith(prefix))) {
-            // Special exemption: FACULTY role can access /faculty and /reports routes
-            if ((path.startsWith("/faculty") || path.startsWith("/reports")) && role === "FACULTY") {
+            // Special exemption: FACULTY role can access /faculty, /reports, and /admin/students routes
+            if ((path.startsWith("/faculty") || path.startsWith("/reports") || path.startsWith("/admin/students")) && role === "FACULTY") {
                 return;
             }
 

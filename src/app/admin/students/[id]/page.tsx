@@ -80,11 +80,7 @@ export default function StudentProfilePage() {
                 const data = await res.json();
                 setStudent(data);
             } else {
-                if (role === "FACULTY") {
-                    router.push("/faculty/mid-exam");
-                } else {
-                    router.push("/admin/students");
-                }
+                router.push("/admin/students");
             }
         } catch (error) {
             console.error(error);

@@ -148,8 +148,8 @@ export async function GET(request: Request) {
         if (queryDeptId) {
             where.departmentId = queryDeptId;
         } else {
-            if (isGlobalAdmin || isBSH) {
-                // Admin and BSH HOD see all if no filter
+            if (isGlobalAdmin || isBSH || userRole === "FACULTY") {
+                // Admin, BSH HOD, and Faculty see all if no filter
             } else {
                 if (userDeptId) {
                     where.departmentId = userDeptId;
