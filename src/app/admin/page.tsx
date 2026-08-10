@@ -21,7 +21,9 @@ import {
     FaFileAlt,
     FaHistory,
     FaChartLine,
-    FaBirthdayCake
+    FaBirthdayCake,
+    FaDatabase,
+    FaSync
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -32,11 +34,25 @@ export default function AdminDashboardPage() {
     const router = useRouter();
 
     const [backupStatus, setBackupStatus] = useState<any>(null);
+    const [backingUp, setBackingUp] = useState(false);
     const [pendingRequests, setPendingRequests] = useState<number>(0);
     const [dismissBanner, setDismissBanner] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [liveLogs, setLiveLogs] = useState<any[]>([]);
     const [logsLoading, setLogsLoading] = useState(true);
+
+    const handleManualBackup = async () => {
+        try {
+            setBackingUp(true);
+            const res = await fetch("/api/system/trigger-backup", { method: "POST" });
+            const data = await res.json();
+            if (data.backupStatus) setBackupStatus(data.backupStatus);
+        } catch (err) {
+            console.error("Manual backup error:", err);
+        } finally {
+            setBackingUp(false);
+        }
+    };
 
     const [birthdayType, setBirthdayType] = useState<"upcoming" | "thisMonth" | "month">("upcoming");
     const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
@@ -328,6 +344,13 @@ export default function AdminDashboardPage() {
             description: "Track all critical actions performed by users.",
             href: "/admin/logs",
             color: "bg-slate-50 text-slate-600"
+        },
+        {
+            title: "System Backup & Sync",
+            icon: <FaDatabase className="h-6 w-6" />,
+            description: "Trigger manual database & photo backups to Google Drive.",
+            href: "/admin/system/backup",
+            color: "bg-blue-50 text-blue-600"
         }
     ];
 
@@ -369,13 +392,24 @@ export default function AdminDashboardPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => setDismissBanner(true)}
-                                        className="rounded-lg p-2 hover:bg-black/5 transition-colors absolute sm:static top-2 right-2 sm:top-auto sm:right-auto"
-                                        title="Dismiss"
-                                    >
-                                        ✕
-                                    </button>
+                                    <div className="flex items-center gap-2 absolute sm:static top-2 right-2 sm:top-auto sm:right-auto">
+                                        <button
+                                            onClick={handleManualBackup}
+                                            disabled={backingUp}
+                                            className="flex items-center gap-1.5 rounded-lg bg-white/90 border border-slate-200/60 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm hover:bg-white active:scale-95 transition-all disabled:opacity-50"
+                                            title="Run Full System Backup Now"
+                                        >
+                                            <FaSync className={backingUp ? "animate-spin" : ""} size={12} />
+                                            {backingUp ? "Backing up..." : "Backup Now"}
+                                        </button>
+                                        <button
+                                            onClick={() => setDismissBanner(true)}
+                                            className="rounded-lg p-2 hover:bg-black/5 transition-colors"
+                                            title="Dismiss"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}
