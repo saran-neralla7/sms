@@ -374,10 +374,10 @@ export default function HistoryPage() {
                 if (record.subject.isElective) {
                     return `elective_${dateStr}_${record.subject.id}_${posterId}`;
                 } else {
-                    return `regular_${dateStr}_Yr${record.year}_Sem${record.semester}_${record.subject.id}_${record.sectionId}_${record.departmentId}_${posterId}`;
+                    return `regular_${dateStr}_Yr${record.year}_Sem${record.semester}_${record.subject.id}_${record.departmentId}_${posterId}`;
                 }
             } else {
-                return `sms_${dateStr}_Yr${record.year}_Sem${record.semester}_${record.sectionId}_${record.departmentId}_${posterId}`;
+                return `sms_${dateStr}_Yr${record.year}_Sem${record.semester}_${record.departmentId}_${posterId}`;
             }
         };
         
@@ -742,7 +742,7 @@ export default function HistoryPage() {
                                 displayRows.map((group) => {
                                     const recordDate = new Date(group.date);
                                     const deptNames = group.departments.join(', ') || "Unknown Dept";
-                                    const secNames = group.sections.join(', ') || "N/A";
+                                    const secNames = [...group.sections].sort().join(', ') || "N/A";
                                     
                                     return (
                                         <tr key={group.key} className={`group hover:bg-slate-50/80 transition-colors ${group.records.length > 1 ? "bg-indigo-50/10" : ""}`}>
