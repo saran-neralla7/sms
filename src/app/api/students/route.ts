@@ -39,15 +39,31 @@ export async function GET(request: Request) {
     const showLeftCollege = searchParams.get("showLeftCollege") === "true";
     const showDetained = searchParams.get("showDetained") === "true";
 
-    // Check if subject is elective
-    let isElective = false;
+    // Check if subject has student-level enrollments (e.g. PE or OE)
+    let isSubjectEnrolled = false;
+    let isOpenElective = false;
+
     if (subjectId) {
         const subjectInfo = await prisma.subject.findUnique({
             where: { id: subjectId },
-            select: { isElective: true, type: true }
+            select: {
+                isElective: true,
+                type: true,
+                electiveSlotRelation: { select: { name: true } },
+                _count: { select: { students: true } }
+            }
         });
-        if (subjectInfo && (subjectInfo.isElective || (subjectInfo.type && subjectInfo.type.toUpperCase().includes("ELECTIVE")))) {
-            isElective = true;
+
+        if (subjectInfo) {
+            if (subjectInfo._count.students > 0) {
+                isSubjectEnrolled = true;
+            }
+            if (
+                subjectInfo.type === "OPEN_ELECTIVE" ||
+                (subjectInfo.electiveSlotRelation?.name && subjectInfo.electiveSlotRelation.name.startsWith("OE"))
+            ) {
+                isOpenElective = true;
+            }
         }
     }
 
@@ -99,7 +115,7 @@ export async function GET(request: Request) {
         if (semester) where.semester = semester;
     }
 
-    if (!isElective) {
+    if (!isOpenElective) {
         if (sectionIds) {
             where.sectionId = { in: sectionIds.split(",") };
         } else if (sectionId) {
@@ -112,7 +128,7 @@ export async function GET(request: Request) {
         where.batchId = batchId;
     }
 
-    if (isElective && subjectId) {
+    if (isSubjectEnrolled && subjectId) {
         where.subjects = {
             some: {
                 id: subjectId
@@ -142,7 +158,7 @@ export async function GET(request: Request) {
         where.year = "1";
     }
 
-    if (!isElective) {
+    if (!isOpenElective) {
         const queryDeptId = searchParams.get("departmentId");
 
         if (queryDeptId) {
@@ -198,7 +214,7 @@ export async function GET(request: Request) {
         let facultyMappedBatch: string | null = null;
         let facultyHasBatchConstraint = false;
 
-        if (isElective && subjectId) {
+        if ((isOpenElective || isSubjectEnrolled) && subjectId) {
             const { getElectiveBatches } = require("@/lib/elective-batches");
             const electiveBatches = getElectiveBatches();
             responseStudents = students.map((s: any) => {

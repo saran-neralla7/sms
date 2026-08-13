@@ -222,7 +222,16 @@ export default function AttendancePage() {
             if (selectedDept && year && semester) {
                 fetch(`/api/subjects?departmentId=${selectedDept}&year=${year}&semester=${semester}&excludeElectives=true`)
                     .then(res => res.json())
-                    .then(data => setSubjects(data))
+                    .then(data => {
+                        const filtered = Array.isArray(data) ? data.filter((s: any) => {
+                            const isPE = s.type === "PROFESSIONAL_ELECTIVE" || s.electiveSlotRelation?.name?.startsWith("PE");
+                            if (isPE) {
+                                return (s._count?.students || 0) > 0;
+                            }
+                            return true;
+                        }) : [];
+                        setSubjects(filtered);
+                    })
                     .catch(err => console.error(err));
             } else {
                 setSubjects([]);

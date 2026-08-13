@@ -26,20 +26,29 @@ export async function GET(request: Request) {
 
         if (onlyElectives) {
             where.isElective = true;
+            where.NOT = {
+                OR: [
+                    { type: "PROFESSIONAL_ELECTIVE" },
+                    { electiveSlotRelation: { name: { startsWith: "PE" } } }
+                ]
+            };
         } else if (departmentId) {
-            if (includeElectives) {
-                where.OR = [
-                    { departmentId: departmentId },
-                    { isElective: true }
-                ];
-            } else {
-                where.departmentId = departmentId;
-                if (excludeElectives) {
-                    where.isElective = false;
-                }
+            where.departmentId = departmentId;
+            if (excludeElectives) {
+                where.NOT = {
+                    OR: [
+                        { type: "OPEN_ELECTIVE" },
+                        { electiveSlotRelation: { name: { startsWith: "OE" } } }
+                    ]
+                };
             }
         } else if (excludeElectives) {
-            where.isElective = false;
+            where.NOT = {
+                OR: [
+                    { type: "OPEN_ELECTIVE" },
+                    { electiveSlotRelation: { name: { startsWith: "OE" } } }
+                ]
+            };
         }
     }
 
@@ -96,7 +105,7 @@ export async function GET(request: Request) {
         const subjects = await prisma.subject.findMany({
             where,
             orderBy: { name: 'asc' },
-            include: { department: true, regulation: true, electiveSlotRelation: true }
+            include: { department: true, regulation: true, electiveSlotRelation: true, _count: { select: { students: true } } }
         });
         return NextResponse.json(subjects);
     } catch (error) {
