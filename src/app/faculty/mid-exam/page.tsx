@@ -45,6 +45,7 @@ interface Paper {
   totalMarks: number;
   subjectId: string;
   sectionId: string;
+  createdById?: string;
   subject: { id: string; name: string; code: string; type: string; department?: { code: string } };
   section?: { id: string; name: string };
   publishRecord: { isLocked: boolean; isPublished: boolean } | null;
@@ -2567,10 +2568,22 @@ export default function FacultyMidExamPage() {
        subject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OPEN"));
   }
 
-  const getPaperForMapping = (mapping: Mapping, examType: string) =>
-    papers.find(p => p.subjectId === mapping.subject.id && 
-      (isOpenElective(mapping.subject) ? true : p.sectionId === mapping.section.id) && 
-      p.examType === examType);
+  const getPaperForMapping = (mapping: Mapping, examType: string) => {
+    const currentUserId = session?.user?.id;
+    // First check if current faculty has created a paper for this subject & examType
+    const myPaper = papers.find(p => p.subjectId === mapping.subject.id &&
+      p.examType === examType &&
+      p.createdById === currentUserId
+    );
+    if (myPaper) return myPaper;
+
+    // For non-electives or section-specific, find by sectionId
+    if (!isOpenElective(mapping.subject)) {
+      return papers.find(p => p.subjectId === mapping.subject.id && p.sectionId === mapping.section.id && p.examType === examType);
+    }
+
+    return null;
+  };
 
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
 
@@ -4415,7 +4428,7 @@ export default function FacultyMidExamPage() {
               <option value="">Select subject...</option>
               {mappings.filter(m => m.subject.type?.toUpperCase() !== "LAB").map(m => (
                 <option key={m.id} value={m.id}>
-                  {m.subject.code} - {m.subject.name} (Section {m.section.name})
+                  {m.subject.code} - {m.subject.name} {isOpenElective(m.subject) ? "(Open Elective)" : `(Section ${m.section.name})`}
                 </option>
               ))}
             </select>
@@ -4592,7 +4605,7 @@ export default function FacultyMidExamPage() {
                       <option value="">Select a master paper...</option>
                       {eligibleMasters.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.subject.code} - {p.subject.name} (Sec {p.section?.name}, {p.totalMarks}m)
+                          {p.subject.code} - {p.subject.name} ({isOpenElective(p.subject) ? "Open Elective" : `Sec ${p.section?.name}`}, {p.totalMarks}m)
                         </option>
                       ))}
                     </select>

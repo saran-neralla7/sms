@@ -88,19 +88,15 @@ export async function GET(req: NextRequest) {
       orderBy: [{ examType: "asc" }, { createdAt: "desc" }]
     });
 
-    // Resolve faculty names from mappings
+    // Resolve faculty names directly from createdById
     const papersWithFaculty = await Promise.all(papers.map(async (paper) => {
-      const mapping = await prisma.facultySubjectMapping.findFirst({
-        where: {
-          academicYearId: paper.academicYearId,
-          subjectId: paper.subjectId,
-          sectionId: paper.sectionId,
-        },
+      const creatorUser = await prisma.user.findUnique({
+        where: { id: paper.createdById },
         include: { faculty: { select: { empName: true } } }
       });
       const paperObj = {
         ...paper,
-        facultyName: mapping?.faculty?.empName || "Not Assigned",
+        facultyName: creatorUser?.faculty?.empName || creatorUser?.username || "Faculty",
       };
       if (paper.masterPaperId && paper.masterPaper) {
         paperObj.questions = paper.masterPaper.questions;
@@ -135,11 +131,20 @@ export async function POST(req: NextRequest) {
     if (!subject) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
     const resolvedDeptId = subject.departmentId;
 
-    // Check if paper already exists for this combination
+    // Check if paper already exists for this creator & combination
     const existing = await prisma.midExamPaper.findUnique({
-      where: { academicYearId_departmentId_year_semester_sectionId_subjectId_examType: {
-        academicYearId, departmentId: resolvedDeptId, year, semester, sectionId, subjectId, examType
-      }}
+      where: {
+        unique_paper_per_creator: {
+          academicYearId,
+          departmentId: resolvedDeptId,
+          year,
+          semester,
+          sectionId,
+          subjectId,
+          examType,
+          createdById: session.user.id
+        }
+      }
     });
     if (existing) {
       return NextResponse.json({ error: "A paper already exists for this combination", paperId: existing.id }, { status: 409 });
