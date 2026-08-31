@@ -83,6 +83,20 @@ export const authOptions: NextAuthOptions = {
         },
         async session({ session, token }) {
             if (session?.user) {
+                // If actual logged-in account is a STUDENT, check if student logins are disabled by Admin
+                if (token?.role === "STUDENT") {
+                    try {
+                        const disableSetting = await prisma.systemSetting.findUnique({
+                            where: { key: "DISABLE_STUDENT_LOGIN" }
+                        });
+                        if (disableSetting && disableSetting.value === "true") {
+                            return null as any;
+                        }
+                    } catch (e) {
+                        console.error("Error checking DISABLE_STUDENT_LOGIN in session callback:", e);
+                    }
+                }
+
                 (session.user as any).role = token.role;
                 (session.user as any).id = token.id;
                 (session.user as any).departmentId = token.departmentId;

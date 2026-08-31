@@ -155,6 +155,13 @@ export default function DashboardPage() {
         color: "bg-teal-50 text-teal-600"
       },
       {
+        title: "Feedback Analytics",
+        icon: <FaPoll className="h-6 w-6" />,
+        description: "View college-wide and department faculty feedback reports across academic years.",
+        href: "/admin/feedback/analysis",
+        color: "bg-fuchsia-50 text-fuchsia-600"
+      },
+      {
         title: role === "ADMIN" ? "Leaves Administration" : "Leaves Approval",
         icon: <FaCalendarAlt className="h-6 w-6" />,
         description: role === "ADMIN"
@@ -188,7 +195,7 @@ export default function DashboardPage() {
     const isBSH = role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
     if (role === "HOD") {
       if (isBSH) {
-        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine", "Attendance Analytics", "Syllabus Analytics"].includes(m.title));
+        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine", "Attendance Analytics", "Syllabus Analytics", "Feedback Analytics"].includes(m.title));
       } else {
         modules = modules.filter(m => m.title !== "Administration" && m.title !== "Fees");
       }
