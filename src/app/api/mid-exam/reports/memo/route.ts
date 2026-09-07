@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks, scaleMidMarks } from "@/lib/mid-exam-calc";
 import { getStudentsForClass } from "@/lib/student-utils";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 /**
  * GET — generate Internal Marks Memo data for PDF rendering on client
  * Returns structured data; PDF is generated client-side with jsPDF

@@ -45,17 +45,13 @@ export async function GET(request: Request) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
 
-        // Fetch students in section
-        const rawStudents = await prisma.student.findMany({
-            where: {
-                departmentId,
-                year,
-                semester,
-                sectionId,
-                isLeftCollege: false,
-                isDetained: false
-            },
-            select: { id: true, rollNumber: true, name: true, mobile: true, studentContactNumber: true, fatherName: true, motherName: true, address: true }
+        const currentAY = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+        const rawStudents = await getStudentsForClass({
+            academicYearId: currentAY?.id || "",
+            departmentId,
+            year,
+            semester,
+            sectionId
         });
 
         // Fetch attendance history for the section and date range

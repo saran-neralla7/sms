@@ -9,6 +9,18 @@ interface GetStudentsParams {
   subjectId?: string;
 }
 
+export function getAdmissionStartYear(student: any): number | null {
+  if (student.originalBatch?.startYear) return student.originalBatch.startYear;
+  if (student.rollNumber) {
+    const match = student.rollNumber.match(/^5(\d{2})/);
+    if (match) {
+      const yr = parseInt(match[1]);
+      if (!isNaN(yr)) return 2000 + yr;
+    }
+  }
+  return student.batch?.startYear || null;
+}
+
 /**
  * Robustly retrieves students for a given class context, taking into account
  * past academic years (where students have since been promoted) and detentions/transfers.
@@ -80,14 +92,16 @@ export async function getStudentsForClass({
             ...(sectionCondition ? { sectionId: sectionCondition } : {}),
             subjectId: subjectId || undefined,
           },
-          student: studentFilter
+          student: studentFilter,
+          isDraft: false,
         },
         select: { studentId: true }
       }),
       prisma.assignmentMark.findMany({
         where: {
           ...marksConditions,
-          student: studentFilter
+          student: studentFilter,
+          isDraft: false,
         },
         select: { studentId: true }
       }),
@@ -188,9 +202,55 @@ export async function getStudentsForClass({
     where: {
       OR: orConditions,
     },
-    include,
+    include: {
+      ...(include || {}),
+      batch: true,
+      originalBatch: true
+    },
     orderBy: { rollNumber: "asc" }
   });
 
-  return students;
+  // Post-filter to handle academic-year specific detention status strictly
+  const filteredStudents = students.filter(s => {
+    const studentObj = s as any;
+    if (studentObj.isLeftCollege) return false;
+
+    const admStartYear = getAdmissionStartYear(studentObj);
+    const startYear = admStartYear || studentObj.batch?.startYear;
+    if (!startYear || !targetAY) return true;
+
+    const targetStart = parseInt(targetAY.name.split("-")[0]);
+    if (isNaN(targetStart)) return true;
+
+    // Check detention timing for targetAY
+    if (studentObj.isDetained) {
+      const detYearNum = parseInt(studentObj.detainedYear || "0");
+      const detStartYear = startYear + (detYearNum > 0 ? detYearNum - 1 : 0);
+
+      if (detYearNum > 0 && detStartYear > 0) {
+        if (targetStart < detStartYear) {
+          // Detained in a FUTURE academic year -> Student WAS ACTIVE in targetAY!
+          return true;
+        } else {
+          // Detained in or before targetAY -> Student WAS DETAINED in targetAY!
+          return false;
+        }
+      } else {
+        // Currently detained and target is current AY (or no specific detainedYear set) -> exclude
+        if (yearDiff === 0) return false;
+      }
+    }
+
+    // If student is originally from an EARLIER batch than target class cohort (targetBatchStartYear),
+    // and has NO marks entered for this academic year, exclude as inactive/detained from previous batch.
+    if (targetBatchStartYear !== null && admStartYear && admStartYear < targetBatchStartYear) {
+      if (!historicalStudentIds.includes(studentObj.id)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  return filteredStudents;
 }

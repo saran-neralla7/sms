@@ -62,6 +62,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Faculty Short Name is required" }, { status: 400 });
         }
 
+        const email = typeof body.email === "string" ? body.email.trim() : "";
+        if (!email) {
+            return NextResponse.json({ error: "Faculty Email Address is required" }, { status: 400 });
+        }
+
         // Check if empCode exists
         const existing = await prisma.faculty.findUnique({
             where: { empCode: body.empCode }

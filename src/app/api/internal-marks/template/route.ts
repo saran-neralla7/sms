@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
+import { getStudentsForClass } from "@/lib/student-utils";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -33,16 +34,14 @@ export async function GET(request: Request) {
     }
 
     try {
+
         // Fetch Students
-        const students = await prisma.student.findMany({
-            where: {
-                departmentId,
-                year,
-                semester,
-                sectionId
-            },
-            orderBy: { rollNumber: "asc" },
-            select: { rollNumber: true, name: true, id: true }
+        const students = await getStudentsForClass({
+            academicYearId,
+            departmentId,
+            year,
+            semester,
+            sectionId
         });
 
         if (students.length === 0) {

@@ -69,6 +69,11 @@ export async function PUT(
             return NextResponse.json({ error: "Faculty Short Name is required" }, { status: 400 });
         }
 
+        const email = typeof body.email === "string" ? body.email.trim() : "";
+        if (!email) {
+            return NextResponse.json({ error: "Faculty Email Address is required" }, { status: 400 });
+        }
+
         const existing = await prisma.faculty.findUnique({
             where: { id },
             include: { user: true }

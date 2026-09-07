@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getStudentsForClass } from "@/lib/student-utils";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -115,6 +118,9 @@ export async function GET(request: Request) {
 
         if (isElective && subjectId) {
             historyWhere.subjectId = subjectId;
+            if (userRole === "FACULTY") {
+                historyWhere.downloadedBy = user.id;
+            }
         } else {
             historyWhere.sectionId = sectionId;
             historyWhere.departmentId = finalDepartmentId || undefined;
@@ -167,6 +173,37 @@ export async function GET(request: Request) {
 
         if (labBatchId) {
             classStudents = classStudents.filter(s => s.labBatchId === labBatchId);
+        }
+
+        // Filter Open Elective students by mapped faculty batch if applicable
+        let electiveBatchFilter: string | null = searchParams.get("batch") || searchParams.get("electiveBatch");
+        if (isElective && subjectId && userRole === "FACULTY") {
+            const resolvedFacultyId = userFacultyId || (await prisma.faculty.findFirst({
+                where: { user: { id: user.id } },
+                select: { id: true }
+            }))?.id;
+
+            if (resolvedFacultyId && academicYearId) {
+                const mapping = await prisma.facultySubjectMapping.findFirst({
+                    where: {
+                        facultyId: resolvedFacultyId,
+                        subjectId: subjectId,
+                        academicYearId: academicYearId
+                    }
+                });
+                if (mapping?.batch) {
+                    electiveBatchFilter = mapping.batch;
+                }
+            }
+        }
+
+        if (isElective && subjectId && electiveBatchFilter) {
+            const { getElectiveBatches } = require("@/lib/elective-batches");
+            const electiveBatches = getElectiveBatches();
+            classStudents = classStudents.filter((s: any) => {
+                const key = `${s.id}_${subjectId}`;
+                return electiveBatches[key] === electiveBatchFilter;
+            });
         }
 
         // --- MODE 1: GOVT SCHOLARSHIP DAY-WISE MAJORITY RULE REPORT ---
@@ -467,30 +504,7 @@ export async function GET(request: Request) {
             });
 
             // Fetch students with their elective subject mappings
-            const targetStudents = await prisma.student.findMany({
-                where: {
-                    ...(finalDepartmentId ? { departmentId: finalDepartmentId } : {}),
-                    year,
-                    semester,
-                    ...(sectionId && !isElective ? { sectionId } : {}),
-                    isLeftCollege: false,
-                    isDetained: false
-                },
-                select: {
-                    id: true,
-                    rollNumber: true,
-                    name: true,
-                    dateOfReporting: true,
-                    isLateralEntry: true,
-                    subjects: {
-                        where: { electiveSlotId: { not: null } },
-                        select: { id: true, electiveSlotId: true }
-                    }
-                },
-                orderBy: { rollNumber: "asc" }
-            });
-
-            const activeStudents = targetStudents.length > 0 ? targetStudents : classStudents;
+            const activeStudents = classStudents;
 
             // Collect all OE subject IDs from the elective slots
             const oeSubjectIds = new Set(oeSubjects.map(s => s.id));

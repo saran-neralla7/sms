@@ -88,17 +88,24 @@ export async function GET(request: Request) {
             if (facProfile) {
                 const mappings = await prisma.facultySubjectMapping.findMany({
                     where: { facultyId: facProfile.id },
-                    select: { subjectId: true, sectionId: true }
+                    include: {
+                        subject: {
+                            select: { id: true, isElective: true, type: true }
+                        }
+                    }
                 });
 
-                const mappedConditions = mappings.map(m => ({
-                    subjectId: m.subjectId,
-                    sectionId: m.sectionId
-                }));
+                // Only include shared section conditions for non-elective core subjects
+                const nonElectiveMappedConditions = mappings
+                    .filter(m => !m.subject?.isElective && m.subject?.type !== "OPEN_ELECTIVE")
+                    .map(m => ({
+                        subjectId: m.subjectId,
+                        sectionId: m.sectionId
+                    }));
 
                 whereClause.OR = [
                     { downloadedBy: userId },
-                    ...(mappedConditions.length > 0 ? mappedConditions : [])
+                    ...(nonElectiveMappedConditions.length > 0 ? nonElectiveMappedConditions : [])
                 ];
             } else {
                 whereClause.downloadedBy = userId;

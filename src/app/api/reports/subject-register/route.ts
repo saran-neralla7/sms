@@ -71,46 +71,21 @@ export async function GET(request: Request) {
         // Fetch students
         let students: any[] = [];
         if (isOpenElective && subjectId) {
-            students = await prisma.student.findMany({
-                where: {
-                    subjects: { some: { id: subjectId } },
-                    year: year,
-                    semester: semester,
-                    isLeftCollege: false
-                },
-                orderBy: { rollNumber: "asc" }
+            students = await getStudentsForClass({
+                academicYearId,
+                year,
+                semester,
+                subjectId
             });
-
-            if (students.length === 0) {
-                students = await getStudentsForClass({
-                    academicYearId,
-                    year,
-                    semester,
-                    subjectId
-                });
-            }
         } else {
-            students = await prisma.student.findMany({
-                where: {
-                    sectionId: sectionId!,
-                    departmentId: finalDepartmentId || undefined,
-                    year: year,
-                    semester: semester,
-                    isLeftCollege: false
-                },
-                orderBy: { rollNumber: "asc" }
+            students = await getStudentsForClass({
+                academicYearId,
+                departmentId: finalDepartmentId || undefined,
+                year,
+                semester,
+                sectionId: sectionId || undefined,
+                subjectId: subjectId || undefined
             });
-
-            if (students.length === 0) {
-                students = await getStudentsForClass({
-                    academicYearId,
-                    departmentId: finalDepartmentId || undefined,
-                    year,
-                    semester,
-                    sectionId: sectionId || undefined,
-                    subjectId: subjectId || undefined
-                });
-            }
         }
 
         // Filter by Lab Batch if provided
@@ -119,6 +94,37 @@ export async function GET(request: Request) {
                 s.labBatchId === labBatchId ||
                 (s.labBatches && Array.isArray(s.labBatches) && s.labBatches.some((b: any) => b.id === labBatchId))
             );
+        }
+
+        // Open Elective Faculty Batch Filtering
+        let electiveBatchFilter: string | null = searchParams.get("batch") || searchParams.get("electiveBatch");
+        if (isOpenElective && subjectId && userRole === "FACULTY") {
+            const userFacultyId = user.facultyId || (await prisma.faculty.findFirst({
+                where: { user: { id: user.id } },
+                select: { id: true }
+            }))?.id;
+
+            if (userFacultyId && academicYearId) {
+                const mapping = await prisma.facultySubjectMapping.findFirst({
+                    where: {
+                        facultyId: userFacultyId,
+                        subjectId: subjectId,
+                        academicYearId: academicYearId
+                    }
+                });
+                if (mapping?.batch) {
+                    electiveBatchFilter = mapping.batch;
+                }
+            }
+        }
+
+        if (isOpenElective && subjectId && electiveBatchFilter) {
+            const { getElectiveBatches } = require("@/lib/elective-batches");
+            const electiveBatches = getElectiveBatches();
+            students = students.filter((s: any) => {
+                const key = `${s.id}_${subjectId}`;
+                return electiveBatches[key] === electiveBatchFilter;
+            });
         }
 
         // Where clause for attendance history
@@ -134,6 +140,10 @@ export async function GET(request: Request) {
 
         if (subjectId) {
             whereClause.subjectId = subjectId;
+        }
+
+        if (isOpenElective && userRole === "FACULTY") {
+            whereClause.downloadedBy = user.id;
         }
 
         if (!isOpenElective) {

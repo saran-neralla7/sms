@@ -215,6 +215,13 @@ export default function FacultyPage() {
                             continue;
                         }
 
+                        const email = String(row['Email'] || "").trim();
+                        if (!email) {
+                            failCount++;
+                            if (importErrors.length < 20) importErrors.push(`Emp ${empCode}: Email Address is required`);
+                            continue;
+                        }
+
                         const payload = {
                             empCode,
                             empName: String(row['Emp Name'] || row['EmpName'] || ""),
@@ -225,7 +232,7 @@ export default function FacultyPage() {
                             departmentId: deptId,
                             designation: String(row['Designation'] || ""),
                             mobile: String(row['Mobile'] || ""),
-                            email: String(row['Email'] || ""),
+                            email: email,
                             bloodGroup: String(row['Blood Group'] || row['BloodGroup'] || ""),
                             basicSalary: String(row['Basic Salary'] || row['BasicSalary'] || ""),
                             fatherName: String(row['Father Name'] || row['FatherName'] || ""),
@@ -627,7 +634,7 @@ export default function FacultyPage() {
                         <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-purple-600">Personal & Contact</h3>
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <Input label="Mobile *" value={formData.mobile} onChange={v => setFormData({ ...formData, mobile: v })} required />
-                            <Input label="Email" type="email" value={formData.email} onChange={v => setFormData({ ...formData, email: v })} />
+                            <Input label="Email *" type="email" value={formData.email} onChange={v => setFormData({ ...formData, email: v })} required />
                             <Input label="Blood Group" value={formData.bloodGroup} onChange={v => setFormData({ ...formData, bloodGroup: v })} />
 
                             <Input label="Date of Birth *" type="date" value={formData.dob} onChange={v => setFormData({ ...formData, dob: v })} required />

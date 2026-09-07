@@ -54,18 +54,15 @@ export async function GET(request: Request) {
         });
 
         const comparativeSections: any[] = [];
+        const currentAY = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
 
         for (const sec of deptSections) {
-            const rawStudents = await prisma.student.findMany({
-                where: {
-                    departmentId,
-                    year,
-                    semester,
-                    sectionId: sec.id,
-                    isLeftCollege: false,
-                    isDetained: false
-                },
-                select: { id: true, rollNumber: true, name: true }
+            const rawStudents = await getStudentsForClass({
+                academicYearId: currentAY?.id || "",
+                departmentId,
+                year,
+                semester,
+                sectionId: sec.id
             });
             if (rawStudents.length === 0) continue;
 

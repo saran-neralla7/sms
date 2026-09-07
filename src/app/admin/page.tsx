@@ -22,6 +22,7 @@ import {
     FaHistory,
     FaChartLine,
     FaBirthdayCake,
+    FaAward,
     FaDatabase,
     FaSync
 } from "react-icons/fa";
@@ -59,6 +60,11 @@ export default function AdminDashboardPage() {
     const [birthdayTab, setBirthdayTab] = useState<"faculty" | "student">("faculty");
     const [birthdaysData, setBirthdaysData] = useState<{ upcoming: any[], thisMonth: any[], birthdays?: any[] }>({ upcoming: [], thisMonth: [] });
     const [birthdaysLoading, setBirthdaysLoading] = useState(true);
+
+    const [anniversaryType, setAnniversaryType] = useState<"upcoming" | "thisMonth" | "month">("upcoming");
+    const [anniversarySelectedMonth, setAnniversarySelectedMonth] = useState<number>(new Date().getMonth() + 1);
+    const [anniversariesData, setAnniversariesData] = useState<{ upcoming: any[], thisMonth: any[], anniversaries?: any[] }>({ upcoming: [], thisMonth: [] });
+    const [anniversariesLoading, setAnniversariesLoading] = useState(true);
 
     useEffect(() => {
         if (status !== "authenticated" || !session?.user || !["ADMIN", "DIRECTOR"].includes((session.user as any).role)) return;
@@ -110,6 +116,35 @@ export default function AdminDashboardPage() {
 
         fetchBirthdays();
     }, [status, session, birthdayType, selectedMonth]);
+
+    useEffect(() => {
+        if (status !== "authenticated" || !session?.user || !["ADMIN", "DIRECTOR"].includes((session.user as any).role)) return;
+
+        const fetchAnniversaries = async () => {
+            try {
+                setAnniversariesLoading(true);
+                let url = "/api/admin/work-anniversaries";
+                if (anniversaryType === "month") {
+                    url += `?month=${anniversarySelectedMonth}`;
+                }
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (anniversaryType === "month") {
+                        setAnniversariesData(prev => ({ ...prev, anniversaries: data.anniversaries }));
+                    } else {
+                        setAnniversariesData(data);
+                    }
+                }
+            } catch (err) {
+                console.error("Work anniversaries fetch error:", err);
+            } finally {
+                setAnniversariesLoading(false);
+            }
+        };
+
+        fetchAnniversaries();
+    }, [status, session, anniversaryType, anniversarySelectedMonth]);
 
     useEffect(() => {
         setMounted(true);
@@ -636,6 +671,179 @@ export default function AdminDashboardPage() {
                                                     </span>
                                                     <span className="block text-[10px] text-slate-400 mt-0.5">
                                                         {isToday ? "Happy Birthday!" : b.daysUntil === 1 ? "Tomorrow" : `In ${b.daysUntil} days`}
+                                                    </span>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </motion.div>
+
+                {/* Work Anniversary Celebrations Section */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.18 }}
+                    className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 pb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                                <FaAward className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-lg font-bold text-slate-900">Work Anniversary Celebrations</h3>
+                                    <button
+                                        onClick={() => router.push("/admin/work-anniversaries")}
+                                        className="text-xs font-semibold text-purple-600 hover:text-purple-700 ml-2"
+                                    >
+                                        View All Anniversaries →
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">Celebrate faculty service milestones and joining dates</p>
+                            </div>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Filter Buttons */}
+                            <div className="flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+                                <button
+                                    onClick={() => setAnniversaryType("upcoming")}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                                        anniversaryType === "upcoming"
+                                            ? "bg-white text-slate-800 shadow-sm"
+                                            : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                >
+                                    Upcoming
+                                </button>
+                                <button
+                                    onClick={() => setAnniversaryType("thisMonth")}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                                        anniversaryType === "thisMonth"
+                                            ? "bg-white text-slate-800 shadow-sm"
+                                            : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                >
+                                    This Month
+                                </button>
+                                <button
+                                    onClick={() => setAnniversaryType("month")}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                                        anniversaryType === "month"
+                                            ? "bg-white text-slate-800 shadow-sm"
+                                            : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                >
+                                    By Month
+                                </button>
+                            </div>
+
+                            {/* Month Select Dropdown */}
+                            {anniversaryType === "month" && (
+                                <select
+                                    value={anniversarySelectedMonth}
+                                    onChange={(e) => setAnniversarySelectedMonth(parseInt(e.target.value, 10))}
+                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-purple-500"
+                                >
+                                    {Array.from({ length: 12 }, (_, i) => (
+                                        <option key={i + 1} value={i + 1}>
+                                            {new Date(2000, i, 1).toLocaleString("en-US", { month: "long" })}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Content Row */}
+                    <div className="w-full">
+                        {anniversariesLoading ? (
+                            <div className="py-12 text-center text-sm text-slate-500">Loading work anniversaries...</div>
+                        ) : (() => {
+                            const activeAnniversariesList = (
+                                anniversaryType === "upcoming"
+                                    ? anniversariesData.upcoming
+                                    : anniversaryType === "thisMonth"
+                                    ? anniversariesData.thisMonth
+                                    : anniversariesData.anniversaries || []
+                            );
+
+                            if (activeAnniversariesList.length === 0) {
+                                return (
+                                    <div className="py-12 text-center text-sm text-slate-500 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                                        No faculty work anniversaries found {
+                                            anniversaryType === "upcoming"
+                                                ? "coming up"
+                                                : anniversaryType === "thisMonth"
+                                                ? "in this month"
+                                                : `in ${new Date(2000, anniversarySelectedMonth - 1, 1).toLocaleString("en-US", { month: "long" })}`
+                                        }.
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                                    {activeAnniversariesList.map((a: any) => {
+                                        const isToday = a.daysUntil === 0 || a.daysUntil === 365 || (a.joinMonth === (new Date().getMonth() + 1) && a.joinDay === new Date().getDate());
+                                        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=f3e8ff&color=7e22ce`;
+                                        const photoSrc = a.photoUrl ? a.photoUrl : fallbackAvatar;
+                                        const yearText = a.completedYears === 1 ? "1 Year" : `${a.completedYears} Years`;
+
+                                        return (
+                                            <motion.div
+                                                key={a.id}
+                                                whileHover={{ y: -4, scale: 1.02 }}
+                                                className={`relative flex flex-col items-center justify-between rounded-xl border p-4 bg-white min-w-[200px] max-w-[200px] shadow-sm select-none shrink-0 transition-all ${
+                                                    isToday ? 'border-purple-400 ring-2 ring-purple-400/20 bg-purple-50/20' : 'border-slate-200 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                {isToday && (
+                                                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm z-10 animate-bounce">
+                                                        Today 🎖️
+                                                    </div>
+                                                )}
+
+                                                <div className="relative flex h-16 w-16 items-center justify-center rounded-full overflow-hidden border border-slate-100 bg-slate-50 mb-3 shrink-0">
+                                                    <img
+                                                        src={photoSrc}
+                                                        alt={a.name}
+                                                        className="h-full w-full object-cover"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLImageElement).src = fallbackAvatar;
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                <div className="text-center w-full">
+                                                    <p className="font-bold text-sm text-slate-800 line-clamp-1" title={a.name}>
+                                                        {a.name}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 font-medium mt-0.5 line-clamp-1">
+                                                        {a.designation}
+                                                    </p>
+                                                    <div className="flex items-center justify-center gap-1 mt-1">
+                                                        <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+                                                            {a.deptCode}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100/70 border border-amber-300 px-1.5 py-0.5 rounded-full">
+                                                            🌟 {yearText}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-3 pt-2 border-t border-slate-100 w-full text-center">
+                                                    <span className="text-xs font-bold text-slate-700">
+                                                        {new Date(a.joinDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </span>
+                                                    <span className="block text-[10px] text-slate-400 mt-0.5">
+                                                        {isToday ? "Happy Work Anniversary!" : a.daysUntil === 1 ? "Tomorrow" : `In ${a.daysUntil} days`}
                                                     </span>
                                                 </div>
                                             </motion.div>
