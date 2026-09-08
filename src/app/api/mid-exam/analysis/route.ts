@@ -459,6 +459,74 @@ export async function GET(req: NextRequest) {
         });
       }
 
+      // Compute subquestion-wise difficulty & discrimination index analytics (Feature 5)
+      const subQuestionAnalysis: any[] = [];
+      if (paper.questions && paper.questions.length > 0) {
+        // Rank students who attended this paper by total score
+        const paperStudentScores = students
+          .map(s => {
+            const res = totalsMap?.[s.id];
+            return { studentId: s.id, total: res?.total ?? 0, isAbsent: res?.isAbsent ?? true };
+          })
+          .filter(s => !s.isAbsent)
+          .sort((a, b) => b.total - a.total);
+
+        const totalAttended = paperStudentScores.length;
+        const groupSize = Math.max(1, Math.floor(totalAttended * 0.27));
+        const topGroupIds = new Set(paperStudentScores.slice(0, groupSize).map(s => s.studentId));
+        const bottomGroupIds = new Set(paperStudentScores.slice(-groupSize).map(s => s.studentId));
+
+        paper.questions.forEach((q: any) => {
+          (q.subQuestions || []).forEach((sq: any) => {
+            const sqEntries = marksEntries.filter(e => e.paperId === paper.id && e.subQuestionId === sq.id && !e.isAbsent);
+            const totalMarksObtained = sqEntries.reduce((sum, e) => sum + (e.marksObtained || 0), 0);
+            const count = sqEntries.length;
+            const avgMarks = count > 0 ? parseFloat((totalMarksObtained / count).toFixed(2)) : 0;
+            
+            const maxM = sq.maxMarks || 1;
+            const difficultyIndex = parseFloat(((avgMarks / maxM) * 100).toFixed(1));
+
+            // High vs Low group average for discrimination index
+            const topEntries = sqEntries.filter(e => topGroupIds.has(e.studentId));
+            const bottomEntries = sqEntries.filter(e => bottomGroupIds.has(e.studentId));
+
+            const avgTop = topEntries.length > 0
+              ? topEntries.reduce((sum, e) => sum + (e.marksObtained || 0), 0) / topEntries.length
+              : 0;
+            const avgBottom = bottomEntries.length > 0
+              ? bottomEntries.reduce((sum, e) => sum + (e.marksObtained || 0), 0) / bottomEntries.length
+              : 0;
+
+            const discriminationIndex = parseFloat(((avgTop - avgBottom) / maxM).toFixed(2));
+
+            let diffRating = "Ideal / Moderate";
+            if (difficultyIndex > 80) diffRating = "Too Easy";
+            else if (difficultyIndex < 30) diffRating = "Very Difficult";
+
+            let discRating = "Good";
+            if (discriminationIndex >= 0.40) discRating = "Excellent";
+            else if (discriminationIndex < 0.20) discRating = "Poor";
+
+            let recommendation = "Well-balanced question.";
+            if (diffRating === "Too Easy") recommendation = "Consider increasing cognitive depth in future exams.";
+            else if (diffRating === "Very Difficult" && discRating === "Poor") recommendation = "Review question phrasing; might be ambiguous or overly complex.";
+            else if (discRating === "Poor") recommendation = "Does not effectively distinguish high vs low performers.";
+
+            subQuestionAnalysis.push({
+              subQuestionId: sq.id,
+              label: `Q${q.questionNo}${sq.subLabel || ""}`,
+              maxMarks: maxM,
+              avgMarks,
+              difficultyIndex,
+              difficultyRating: diffRating,
+              discriminationIndex,
+              discriminationRating: discRating,
+              recommendation
+            });
+          });
+        });
+      }
+
       return {
         sNo: idx + 1,
         subjectId: paper.subjectId,
@@ -472,6 +540,7 @@ export async function GET(req: NextRequest) {
         difficultyIndex,
         insight,
         remarks,
+        subQuestionAnalysis,
         performance: {
           top,
           middle,

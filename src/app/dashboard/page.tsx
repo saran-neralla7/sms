@@ -28,6 +28,9 @@ export default function DashboardPage() {
   const [dismissBanner, setDismissBanner] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const [execData, setExecData] = useState<any | null>(null);
+  const isExecutiveRole = ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role);
+
   useEffect(() => {
     setMounted(true);
     if (status === "authenticated" && isAdmin) {
@@ -38,7 +41,15 @@ export default function DashboardPage() {
         })
         .catch(console.error);
     }
-  }, [status, isAdmin]);
+    if (status === "authenticated" && isExecutiveRole) {
+      fetch("/api/admin/executive-dashboard")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.error) setExecData(data);
+        })
+        .catch(console.error);
+    }
+  }, [status, isAdmin, isExecutiveRole]);
 
   if (status === "loading") {
     return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
@@ -177,10 +188,17 @@ export default function DashboardPage() {
         color: "bg-indigo-50 text-indigo-600"
       },
       {
+        title: "System Audit Logs",
+        icon: <FaClipboardList className="h-6 w-6" />,
+        description: "Inspect system audit trails, logins, mark modifications, and data change history.",
+        href: "/admin/logs",
+        color: "bg-amber-50 text-amber-600"
+      },
+      {
         title: "Administration",
         icon: <FaCogs className="h-6 w-6" />,
         description: "System configuration, user management, and settings.",
-        href: "/admin", // Points to the new Admin Dashboard
+        href: "/admin",
         color: "bg-slate-50 text-slate-600"
       },
       {
@@ -288,7 +306,7 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-10 text-center sm:text-left"
+          className="mb-8 text-center sm:text-left"
         >
           <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
             Student Management System
@@ -297,6 +315,61 @@ export default function DashboardPage() {
             Welcome back, <span className="font-semibold text-blue-600">{session?.user?.username}</span>. What would you like to manage today?
           </p>
         </motion.div>
+
+        {/* Executive Institutional Dashboard (Feature 19 - Light Theme) */}
+        {mounted && isExecutiveRole && execData && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-10 rounded-2xl bg-white border border-slate-200 p-6 shadow-sm"
+          >
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <span className="inline-block rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200">
+                  Executive Command Center
+                </span>
+                <h2 className="mt-1 text-xl font-bold text-slate-900">Institutional Real-Time Overview</h2>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-500">
+                <span className="flex items-center gap-1.5 font-medium"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" /> Live Operations</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Today's Attendance Card */}
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 transition-all hover:border-slate-300">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Today's Attendance</p>
+                <p className="mt-1 text-2xl font-extrabold text-slate-900">{execData.overview?.overallAttendance}%</p>
+                <p className="mt-1 text-[11px] font-medium text-slate-500">{execData.overview?.totalStudents} Active Students</p>
+              </div>
+
+              {/* MID Pass Rate Card (Only shown if MID marks are frozen) */}
+              {execData.midExams?.hasFrozenMidPapers && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 transition-all hover:border-emerald-200">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">MID Pass Rate (≥12m)</p>
+                  <p className="mt-1 text-2xl font-extrabold text-emerald-700">{execData.midExams?.passRate}%</p>
+                  <p className="mt-1 text-[11px] font-medium text-emerald-600">{execData.midExams?.frozenPapers} / {execData.midExams?.totalPapers} Papers Frozen</p>
+                </div>
+              )}
+
+              {/* Faculty Leaves Today Card */}
+              <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4 transition-all hover:border-amber-200">
+                <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">Faculty Leaves Today</p>
+                <p className="mt-1 text-2xl font-extrabold text-amber-700">{execData.leaves?.leavesToday} On Leave</p>
+                <p className="mt-1 text-[11px] font-medium text-amber-600">{execData.leaves?.pendingLeaves} Pending Approval</p>
+              </div>
+
+              {/* Exam Fee Applications Card (Only shown if active exam applications exist) */}
+              {execData.examFees?.hasActiveExamApplications && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 transition-all hover:border-blue-200">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-800">Exam Fee Applications</p>
+                  <p className="mt-1 text-2xl font-extrabold text-blue-700">{execData.examFees?.verifiedFeeApps} Verified</p>
+                  <p className="mt-1 text-[11px] font-medium text-blue-600">{execData.examFees?.pendingFeeApps} Pending Verification</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Grid */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

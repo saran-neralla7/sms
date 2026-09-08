@@ -2570,19 +2570,32 @@ export default function FacultyMidExamPage() {
 
   const getPaperForMapping = (mapping: Mapping, examType: string) => {
     const currentUserId = session?.user?.id;
-    // First check if current faculty has created a paper for this subject & examType
-    const myPaper = papers.find(p => p.subjectId === mapping.subject.id &&
+
+    if (isOpenElective(mapping.subject)) {
+      const myPaper = papers.find(p =>
+        p.subjectId === mapping.subject.id &&
+        p.examType === examType &&
+        p.createdById === currentUserId
+      );
+      if (myPaper) return myPaper;
+
+      return papers.find(p => p.subjectId === mapping.subject.id && p.examType === examType) || null;
+    }
+
+    // For section-specific subjects, ensure paper matches the mapping's sectionId
+    const mySectionPaper = papers.find(p =>
+      p.subjectId === mapping.subject.id &&
+      p.sectionId === mapping.section.id &&
       p.examType === examType &&
       p.createdById === currentUserId
     );
-    if (myPaper) return myPaper;
+    if (mySectionPaper) return mySectionPaper;
 
-    // For non-electives or section-specific, find by sectionId
-    if (!isOpenElective(mapping.subject)) {
-      return papers.find(p => p.subjectId === mapping.subject.id && p.sectionId === mapping.section.id && p.examType === examType);
-    }
-
-    return null;
+    return papers.find(p =>
+      p.subjectId === mapping.subject.id &&
+      p.sectionId === mapping.section.id &&
+      p.examType === examType
+    ) || null;
   };
 
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
@@ -4372,6 +4385,77 @@ export default function FacultyMidExamPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Question-Wise Difficulty & Discrimination Index Analytics (Feature 5) */}
+                    {analysisData.subjectAnalysis.some((s: any) => s.subQuestionAnalysis && s.subQuestionAnalysis.length > 0) && (
+                      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                          <div>
+                            <h4 className="text-md font-bold text-slate-900">Question-Wise Difficulty & Discrimination Index Analytics</h4>
+                            <p className="text-xs text-slate-500">Evaluates question quality and distinction between Top 27% ($H$) vs Bottom 27% ($L$) performers.</p>
+                          </div>
+                          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">Feature 5 Diagnostic</span>
+                        </div>
+
+                        {analysisData.subjectAnalysis.map((sub: any) => {
+                          if (!sub.subQuestionAnalysis || sub.subQuestionAnalysis.length === 0) return null;
+                          return (
+                            <div key={sub.subjectId || sub.subjectCode} className="space-y-2 pt-2">
+                              <h5 className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-blue-600" />
+                                {sub.subjectName} ({sub.subjectCode})
+                              </h5>
+                              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                <table className="w-full text-center text-xs">
+                                  <thead>
+                                    <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                      <th className="px-3 py-2 text-left">Subquestion</th>
+                                      <th className="px-3 py-2">Max Marks</th>
+                                      <th className="px-3 py-2">Avg Marks</th>
+                                      <th className="px-3 py-2">Difficulty P (%)</th>
+                                      <th className="px-3 py-2">Difficulty Rating</th>
+                                      <th className="px-3 py-2">Discrimination Index (D)</th>
+                                      <th className="px-3 py-2">Discrimination Rating</th>
+                                      <th className="px-3 py-2 text-left">Recommendation</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 text-slate-600">
+                                    {sub.subQuestionAnalysis.map((sq: any) => (
+                                      <tr key={sq.subQuestionId} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 font-bold text-slate-900 text-left">{sq.label}</td>
+                                        <td className="px-3 py-2">{sq.maxMarks}</td>
+                                        <td className="px-3 py-2 font-medium">{sq.avgMarks}</td>
+                                        <td className="px-3 py-2 font-semibold">{sq.difficultyIndex}%</td>
+                                        <td className="px-3 py-2">
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                            sq.difficultyRating === "Too Easy" ? "bg-amber-100 text-amber-800" :
+                                            sq.difficultyRating === "Very Difficult" ? "bg-red-100 text-red-800" :
+                                            "bg-emerald-100 text-emerald-800"
+                                          }`}>
+                                            {sq.difficultyRating}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 font-semibold">{sq.discriminationIndex}</td>
+                                        <td className="px-3 py-2">
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                            sq.discriminationRating === "Excellent" ? "bg-emerald-100 text-emerald-800" :
+                                            sq.discriminationRating === "Good" ? "bg-blue-100 text-blue-800" :
+                                            "bg-red-100 text-red-800"
+                                          }`}>
+                                            {sq.discriminationRating}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-left text-slate-500 text-[11px]">{sq.recommendation}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </>
                 )}
 
