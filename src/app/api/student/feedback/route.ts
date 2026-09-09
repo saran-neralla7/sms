@@ -12,10 +12,12 @@ export async function GET() {
 
         const student = await prisma.student.findUnique({
             where: { rollNumber: session.user.username as string },
-            include: { section: true, batch: true }
+            include: { section: true, batch: true, subjects: { select: { id: true } } }
         });
 
         if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+
+        const registeredSubjectIds = (student.subjects || []).map((s: any) => s.id);
 
         const now = new Date();
 
@@ -87,21 +89,98 @@ export async function GET() {
             let mappings: any[] = [];
             
             if (form.template?.type === "FACULTY_MAPPED") {
-                // Fetch mapped faculty for the student's EXACT section, year, semester, academic year
-                mappings = await prisma.facultySubjectMapping.findMany({
+                // 1. Fetch Core (Non-Elective) Subjects for Student's EXACT Department, Section, Year & Semester
+                const coreMappings = await prisma.facultySubjectMapping.findMany({
                     where: {
                         sectionId: student.sectionId,
                         academicYearId: activeAcademicYear.id,
                         subject: {
-                            departmentId: student.departmentId,
+                            departmentId: student.departmentId, // MUST match student's department! (Fixes ECE subjects showing in CSE)
                             year: String(student.year),
-                            semester: String(student.semester)
+                            semester: String(student.semester),
+                            isElective: false
                         }
                     },
                     include: {
                         faculty: { select: { id: true, empName: true, photoUrl: true, department: { select: { code: true } } } },
-                        subject: { select: { id: true, name: true, code: true } }
+                        subject: { select: { id: true, name: true, code: true, isElective: true } }
                     }
+                });
+
+                // 2. Fetch Elective (Open Elective / Professional Elective) Subjects ONLY for Registered Elective IDs
+                let electiveMappings: any[] = [];
+                if (registeredSubjectIds.length > 0) {
+                    const rawElectiveMappings = await prisma.facultySubjectMapping.findMany({
+                        where: {
+                            academicYearId: activeAcademicYear.id,
+                            subjectId: { in: registeredSubjectIds }, // MUST match student's registered electives! (Fixes IAI showing for BEE student)
+                            sectionId: student.sectionId
+                        },
+                        include: {
+                            faculty: { select: { id: true, empName: true, photoUrl: true, department: { select: { code: true } } } },
+                            subject: { select: { id: true, name: true, code: true, isElective: true } }
+                        }
+                    });
+
+                    // Group raw elective mappings by subjectId to handle multi-faculty / batch splitting
+                    const electiveBySubject = new Map<string, any[]>();
+                    for (const m of rawElectiveMappings) {
+                        if (m.faculty && m.subject) {
+                            if (!electiveBySubject.has(m.subjectId)) {
+                                electiveBySubject.set(m.subjectId, []);
+                            }
+                            electiveBySubject.get(m.subjectId)!.push(m);
+                        }
+                    }
+
+                    // Get section student list for index-based batch matching if needed
+                    const sectionStudents = await prisma.student.findMany({
+                        where: { sectionId: student.sectionId, isLeftCollege: false },
+                        select: { id: true },
+                        orderBy: { rollNumber: "asc" }
+                    });
+                    const studentIdx = Math.max(0, sectionStudents.findIndex(s => s.id === student.id));
+
+                    // For each registered elective, pick the EXACT faculty assigned to this student
+                    for (const [_, facList] of electiveBySubject.entries()) {
+                        if (facList.length === 1) {
+                            electiveMappings.push(facList[0]);
+                        } else if (facList.length > 1) {
+                            // Check if there is a batch match with student's labBatch / batchString
+                            const studentBatchName = ((student as any).labBatch?.name || (student as any).batchString || "").toLowerCase();
+                            const matchedByBatch = facList.find(m => m.batch && studentBatchName.includes(m.batch.toLowerCase()));
+                            if (matchedByBatch) {
+                                electiveMappings.push(matchedByBatch);
+                            } else {
+                                // If batch is null or unassigned, split students evenly among the mapped faculty
+                                const chunkIndex = Math.floor((studentIdx / Math.max(1, sectionStudents.length)) * facList.length);
+                                const assignedFaculty = facList[Math.min(chunkIndex, facList.length - 1)];
+                                electiveMappings.push(assignedFaculty);
+                            }
+                        }
+                    }
+                }
+
+                // Combine Core + Elective mappings
+                const allMappings = [...coreMappings, ...electiveMappings];
+
+                // Final deduplication by facultyId + subjectId
+                const uniqueMap = new Map();
+                for (const m of allMappings) {
+                    if (m.faculty && m.subject) {
+                        const key = `${m.facultyId}_${m.subjectId}`;
+                        if (!uniqueMap.has(key)) {
+                            uniqueMap.set(key, m);
+                        }
+                    }
+                }
+                mappings = Array.from(uniqueMap.values());
+
+                // Sort subjects by subject code in alphanumeric ascending order (e.g. CS3101, CS3102, CS3103...)
+                mappings.sort((a: any, b: any) => {
+                    const codeA = (a.subject?.code || "").trim();
+                    const codeB = (b.subject?.code || "").trim();
+                    return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
                 });
             }
 

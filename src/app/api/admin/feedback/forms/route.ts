@@ -4,17 +4,31 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { isBSHHod } from "@/lib/permissions";
 
-export async function GET() {
+import { cookies } from "next/headers";
+
+export async function GET(req: Request) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user || !["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"].includes(session.user.role)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const url = new URL(req.url);
+        const searchAyId = url.searchParams.get("academicYearId");
+
+        const cookieStore = await cookies();
+        const cookieAyId = cookieStore.get("academic-year-id")?.value;
+
         const isBSH = isBSHHod(session.user);
         const where: any = {};
         if (isBSH) {
             where.targetYear = 1;
+        }
+
+        // Apply academic year filter if query param or cookie is present (and not "ALL")
+        const targetAyId = searchAyId !== null ? searchAyId : cookieAyId;
+        if (targetAyId && targetAyId !== "ALL") {
+            where.academicYearId = targetAyId;
         }
 
         const forms = await prisma.feedbackForm.findMany({

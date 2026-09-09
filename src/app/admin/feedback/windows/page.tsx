@@ -52,8 +52,11 @@ export default function FeedbackWindowsPage() {
             if (ayRes.ok) {
                 const ayData = await ayRes.json();
                 setAcademicYears(ayData);
-                const currentAy = ayData.find((a: any) => a.isCurrent);
-                if (currentAy) setAcademicYearId(currentAy.id);
+                const cookieAyId = typeof document !== 'undefined'
+                    ? document.cookie.split('; ').find(row => row.startsWith('academic-year-id='))?.split('=')[1]
+                    : null;
+                const selectedAy = ayData.find((a: any) => a.id === cookieAyId) || ayData.find((a: any) => a.isCurrent) || ayData[0];
+                if (selectedAy) setAcademicYearId(selectedAy.id);
             }
             if (templatesRes.ok) {
                 const tempData = await templatesRes.json();
