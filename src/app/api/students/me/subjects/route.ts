@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBatchForStudentSubject } from "@/lib/elective-batches";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -81,16 +82,34 @@ export async function GET(request: Request) {
         // For each subject, look up the faculty subject mapping for the student's section
         const subjectsWithFaculty = await Promise.all(
             subjects.map(async (subject) => {
-                let mapping = await prisma.facultySubjectMapping.findFirst({
-                    where: {
-                        subjectId: subject.id,
-                        sectionId: student.sectionId,
-                        academicYearId: targetYear.id
-                    },
-                    include: {
-                        faculty: true
+                let mapping = null;
+
+                if (subject.isElective) {
+                    const allocatedOeBatch = getBatchForStudentSubject(student.id, subject.id);
+                    if (allocatedOeBatch) {
+                        mapping = await prisma.facultySubjectMapping.findFirst({
+                            where: {
+                                subjectId: subject.id,
+                                academicYearId: targetYear.id,
+                                batch: { equals: allocatedOeBatch, mode: "insensitive" }
+                            },
+                            include: { faculty: true }
+                        });
                     }
-                });
+                }
+
+                if (!mapping) {
+                    mapping = await prisma.facultySubjectMapping.findFirst({
+                        where: {
+                            subjectId: subject.id,
+                            sectionId: student.sectionId,
+                            academicYearId: targetYear.id
+                        },
+                        include: {
+                            faculty: true
+                        }
+                    });
+                }
 
                 if (!mapping && subject.isElective) {
                     mapping = await prisma.facultySubjectMapping.findFirst({

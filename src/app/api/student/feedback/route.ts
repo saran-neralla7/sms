@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { getBatchForStudentSubject } from "@/lib/elective-batches";
 
 export async function GET() {
     try {
@@ -12,7 +13,7 @@ export async function GET() {
 
         const student = await prisma.student.findUnique({
             where: { rollNumber: session.user.username as string },
-            include: { section: true, batch: true, subjects: { select: { id: true } } }
+            include: { section: true, batch: true, labBatch: true, subjects: { select: { id: true } } }
         });
 
         if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
@@ -142,15 +143,25 @@ export async function GET() {
                     const studentIdx = Math.max(0, sectionStudents.findIndex(s => s.id === student.id));
 
                     // For each registered elective, pick the EXACT faculty assigned to this student
-                    for (const [_, facList] of electiveBySubject.entries()) {
+                    for (const [subjId, facList] of electiveBySubject.entries()) {
                         if (facList.length === 1) {
                             electiveMappings.push(facList[0]);
                         } else if (facList.length > 1) {
-                            // Check if there is a batch match with student's labBatch / batchString
-                            const studentBatchName = ((student as any).labBatch?.name || (student as any).batchString || "").toLowerCase();
-                            const matchedByBatch = facList.find(m => m.batch && studentBatchName.includes(m.batch.toLowerCase()));
-                            if (matchedByBatch) {
-                                electiveMappings.push(matchedByBatch);
+                            // 1. Check OE batch assignment from elective-batches.json (Admin OE Batch Allocation)
+                            const allocatedOeBatch = getBatchForStudentSubject(student.id, subjId);
+                            let matchedFaculty = null;
+                            if (allocatedOeBatch) {
+                                matchedFaculty = facList.find(m => m.batch && m.batch.trim().toLowerCase() === allocatedOeBatch.trim().toLowerCase());
+                            }
+
+                            // 2. Fallback to student's labBatch or batchString if not found in OE batch allocation
+                            if (!matchedFaculty) {
+                                const studentBatchName = ((student as any).labBatch?.name || (student as any).batchString || "").toLowerCase();
+                                matchedFaculty = facList.find(m => m.batch && studentBatchName.includes(m.batch.toLowerCase()));
+                            }
+
+                            if (matchedFaculty) {
+                                electiveMappings.push(matchedFaculty);
                             } else {
                                 // If batch is null or unassigned, split students evenly among the mapped faculty
                                 const chunkIndex = Math.floor((studentIdx / Math.max(1, sectionStudents.length)) * facList.length);
