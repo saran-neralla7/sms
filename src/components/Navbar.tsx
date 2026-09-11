@@ -114,7 +114,13 @@ export default function Navbar({ years = [], currentYearId }: Props) {
                             </button>
 
                             <button
-                                onClick={() => signOut({ callbackUrl: "/" })}
+                                onClick={() => {
+                                    if (typeof window !== "undefined") {
+                                        sessionStorage.removeItem("gvpihlr_announcement_shown");
+                                        sessionStorage.removeItem("sms_just_logged_in");
+                                    }
+                                    signOut({ callbackUrl: "/" });
+                                }}
                                 className="flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 hover:text-red-700"
                             >
                                 <FaSignOutAlt />

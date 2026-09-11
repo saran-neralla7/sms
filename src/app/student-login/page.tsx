@@ -19,6 +19,9 @@ function StudentLoginContent() {
 
     // Auto-show disabled popup when redirected from the student layout
     useEffect(() => {
+        if (typeof window !== "undefined") {
+            sessionStorage.removeItem("gvpihlr_announcement_shown");
+        }
         if (searchParams?.get("disabled") === "1") {
             setShowDisabledPopup(true);
         }
@@ -50,7 +53,14 @@ function StudentLoginContent() {
             }
             setIsLoading(false);
         } else {
-            // Success - Next.js Middleware will handle role-based redirection 
+            // Success - Mark login to trigger university announcement popup
+            if (typeof window !== "undefined") {
+                sessionStorage.setItem("sms_just_logged_in", "true");
+                sessionStorage.removeItem("gvpihlr_announcement_shown");
+                window.dispatchEvent(new Event("sms_user_logged_in"));
+            }
+
+            // Next.js Middleware will handle role-based redirection 
             // but we'll manually push to student dashboard for better UX
             router.push("/student/dashboard");
         }

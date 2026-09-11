@@ -42,6 +42,43 @@ export default function AdminDashboardPage() {
     const [liveLogs, setLiveLogs] = useState<any[]>([]);
     const [logsLoading, setLogsLoading] = useState(true);
 
+    const [popupEnabled, setPopupEnabled] = useState(true);
+    const [togglingPopup, setTogglingPopup] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        fetch("/api/system/announcement-settings")
+            .then(res => res.json())
+            .then(data => {
+                if (typeof data.enabled === "boolean") setPopupEnabled(data.enabled);
+            })
+            .catch(console.error);
+    }, []);
+
+    const handleTogglePopup = async () => {
+        try {
+            setTogglingPopup(true);
+            const next = !popupEnabled;
+            const res = await fetch("/api/system/announcement-settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled: next })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setPopupEnabled(data.enabled);
+            }
+        } catch (err) {
+            console.error("Failed to toggle popup:", err);
+        } finally {
+            setTogglingPopup(false);
+        }
+    };
+
+    const handlePreviewPopup = () => {
+        window.dispatchEvent(new CustomEvent("preview_gvpihlr_popup"));
+    };
+
     const handleManualBackup = async () => {
         try {
             setBackingUp(true);
@@ -451,19 +488,54 @@ export default function AdminDashboardPage() {
                     </AnimatePresence>
                 )}
 
-                {/* Header */}
+                {/* Header with University Celebration Popup Control */}
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl bg-white p-5 sm:p-6 border border-slate-200/90 shadow-sm"
                 >
                     <div>
-                        <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
+                        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
                             Administration
                         </h1>
-                        <p className="mt-2 text-lg text-slate-600">
+                        <p className="mt-1 text-sm sm:text-base text-slate-600">
                             Configure system settings and manage academic structures.
                         </p>
+                    </div>
+
+                    {/* Announcement Popup Quick Toggle */}
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="flex items-center gap-2.5">
+                            <span className="text-2xl">🎓</span>
+                            <div>
+                                <div className="text-xs font-bold text-slate-800">
+                                    GVPIHLR Celebration Popup
+                                </div>
+                                <div className="text-[11px] font-medium text-slate-500">
+                                    {popupEnabled ? "Active on every user login" : "Turned off"}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleTogglePopup}
+                                disabled={togglingPopup}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${popupEnabled ? "bg-amber-500" : "bg-slate-300"}`}
+                                title={popupEnabled ? "Click to disable popup" : "Click to enable popup"}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${popupEnabled ? "translate-x-6" : "translate-x-1"}`}
+                                />
+                            </button>
+
+                            <button
+                                onClick={handlePreviewPopup}
+                                className="px-3 py-1.5 text-xs font-extrabold rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 active:scale-95 transition-all shadow-sm"
+                            >
+                                Preview Popup 🎉
+                            </button>
+                        </div>
                     </div>
                 </motion.div>
 

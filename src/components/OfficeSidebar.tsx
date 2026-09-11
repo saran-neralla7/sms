@@ -72,7 +72,13 @@ export default function OfficeSidebar() {
 
                 <div className="mt-auto p-4 border-t border-slate-800">
                     <button
-                        onClick={() => signOut({ callbackUrl: "/login" })}
+                        onClick={() => {
+                            if (typeof window !== "undefined") {
+                                sessionStorage.removeItem("gvpihlr_announcement_shown");
+                                sessionStorage.removeItem("sms_just_logged_in");
+                            }
+                            signOut({ callbackUrl: "/login" });
+                        }}
                         className="flex w-full items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all font-medium"
                     >
                         <FaSignOutAlt />

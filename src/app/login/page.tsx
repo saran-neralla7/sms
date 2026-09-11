@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaEye, FaEyeSlash, FaTimes, FaPaperPlane, FaExclamationTriangle } from "react-icons/fa";
@@ -14,6 +14,12 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [showDisabledPopup, setShowDisabledPopup] = useState(false);
     const router = useRouter();
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            sessionStorage.removeItem("gvpihlr_announcement_shown");
+        }
+    }, []);
 
     // Forgot Password State
     const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -41,7 +47,13 @@ export default function LoginPage() {
                 setError("Invalid username or password");
             }
         } else {
-            // ... (existing redirect logic)
+            // Success - Mark login to trigger university announcement popup
+            if (typeof window !== "undefined") {
+                sessionStorage.setItem("sms_just_logged_in", "true");
+                sessionStorage.removeItem("gvpihlr_announcement_shown");
+                window.dispatchEvent(new Event("sms_user_logged_in"));
+            }
+
             // Fetch session to determine role
             try {
                 // Add timestamp to prevent caching

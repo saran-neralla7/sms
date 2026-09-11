@@ -26,6 +26,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 import ImpersonationBanner from "@/components/ImpersonationBanner";
+import UniversityAnnouncementModal from "@/components/UniversityAnnouncementModal";
 
 export default async function RootLayout({
   children,
@@ -52,6 +53,7 @@ export default async function RootLayout({
       <body className={`${inter.className} relative min-h-screen flex flex-col`} suppressHydrationWarning>
         <Providers>
           <ImpersonationBanner />
+          <UniversityAnnouncementModal />
           <div className="relative z-10 flex flex-col flex-grow pt-16">
             <Navbar years={years} currentYearId={currentYearId} />
             <main className="flex-grow">{children}</main>
