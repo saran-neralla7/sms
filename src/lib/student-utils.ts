@@ -243,8 +243,11 @@ export async function getStudentsForClass({
 
     // If student is originally from an EARLIER batch than target class cohort (targetBatchStartYear),
     // and has NO marks entered for this academic year, exclude as inactive/detained from previous batch.
+    // However, if the student has actively joined the target cohort (batch matches targetBatchStartYear,
+    // active & not detained in the current academic year), keep them.
     if (targetBatchStartYear !== null && admStartYear && admStartYear < targetBatchStartYear) {
-      if (!historicalStudentIds.includes(studentObj.id)) {
+      const isCurrentlyInCohort = yearDiff === 0 && !studentObj.isDetained && !studentObj.isAlumni && studentObj.batch?.startYear === targetBatchStartYear;
+      if (!isCurrentlyInCohort && !historicalStudentIds.includes(studentObj.id)) {
         return false;
       }
     }
