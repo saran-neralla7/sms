@@ -25,6 +25,7 @@ model Department {
   feedbackForms FeedbackForm[]
   CourseFile    CourseFile[]
   programSurveys ProgramSurvey[]
+  assignments   Assignment[]
 }
 
 model Section {
@@ -41,6 +42,7 @@ model Section {
   midExamPapers         MidExamPaper[]
   FeedbackResponse      FeedbackResponse[]
   CourseFile            CourseFile[]
+  assignments           Assignment[]
 }
 
 model User {
@@ -215,6 +217,7 @@ model Subject {
   coPoMappings          SubjectCoPoMapping[]
   coPsoMappings         SubjectCoPsoMapping[]
   CourseFile            CourseFile[]
+  assignments           Assignment[]
 }
 
 model Period {
@@ -307,6 +310,7 @@ model AcademicYear {
   programSurveys        ProgramSurvey[]
   holidays              AcademicHoliday[]
   timelines             AcademicSemesterTimeline[]
+  assignments           Assignment[]
 }
 
 model Batch {
@@ -737,9 +741,38 @@ model MidExamMarksEntry {
   @@index([paperId, studentId])
 }
 
+// Multi-Assignment Model
+model Assignment {
+  id             String    @id @default(uuid())
+  title          String    // e.g. "Assignment 1"
+  description    String?   @db.Text
+  questions      Json?     // [{ qNo: 1, text: "Explain Compiler Design Architecture" }]
+  totalMarks     Float     @default(10) // Total marks for the assignment
+  dueDate        DateTime? // Deadline date for submissions
+  academicYearId String
+  departmentId   String
+  year           String
+  semester       String
+  sectionId      String
+  subjectId      String
+  createdById    String
+  isFrozen       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  academicYear AcademicYear     @relation(fields: [academicYearId], references: [id])
+  department   Department       @relation(fields: [departmentId], references: [id])
+  subject      Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  section      Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  marks        AssignmentMark[]
+
+  @@index([academicYearId, departmentId, year, semester, sectionId, subjectId])
+}
+
 // Individual assignment marks per student per subject per academic class
 model AssignmentMark {
-  id             String   @id @default(uuid())
+  id             String      @id @default(uuid())
+  assignmentId   String?     // Links to Assignment. Nullable for legacy data
   academicYearId String
   departmentId   String
   year           String
@@ -747,18 +780,20 @@ model AssignmentMark {
   sectionId      String
   subjectId      String
   studentId      String
-  marksObtained  Float
-  maxMarks       Float    @default(10)
+  marksObtained  Float?
+  maxMarks       Float       @default(10)
+  status         String      @default("NOT_SUBMITTED") // SUBMITTED | NOT_SUBMITTED
   enteredById    String
-  isDraft        Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isDraft        Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
+  assignment   Assignment?  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
 
-  @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, studentId])
+  @@unique([academicYearId, departmentId, year, semester, sectionId, subjectId, studentId, assignmentId])
   @@index([academicYearId, departmentId, year, semester, sectionId])
 }
 

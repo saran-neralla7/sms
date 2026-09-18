@@ -298,6 +298,135 @@ export default function MarksGridPage() {
     );
   };
 
+  const handlePaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+    startRowIndex: number,
+    startSqIndex: number
+  ) => {
+    if (!canEdit) return;
+
+    const clipboardData = e.clipboardData.getData("text");
+    if (!clipboardData) return;
+
+    // Check if clipboard data contains tabular data (tabs or newlines)
+    const isMultiCell =
+      clipboardData.includes("\t") ||
+      clipboardData.includes("\n") ||
+      clipboardData.includes("\r");
+
+    if (!isMultiCell) {
+      // If it's a single plain value, allow default single-cell paste
+      return;
+    }
+
+    e.preventDefault();
+
+    // Split lines into rows
+    const rawLines = clipboardData
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n");
+
+    // Remove trailing empty line if present (common when copying from Excel)
+    if (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === "") {
+      rawLines.pop();
+    }
+
+    if (rawLines.length === 0) return;
+
+    // Split each line into cells by tab character
+    const matrix = rawLines.map(line => line.split("\t"));
+
+    let pastedCellCount = 0;
+    let pastedStudentCount = 0;
+    let hasOverMax = false;
+
+    setRows(prevRows => {
+      const studentUpdates: Record<
+        string,
+        { marks: Record<string, number | null>; isAbsent: boolean }
+      > = {};
+
+      matrix.forEach((cells, rOffset) => {
+        const targetFilteredRowIdx = startRowIndex + rOffset;
+        if (targetFilteredRowIdx >= filteredRows.length) return;
+
+        const targetStudent = filteredRows[targetFilteredRowIdx];
+        if (!targetStudent || targetStudent.isAbsent) return;
+
+        const existingStudent = prevRows.find(r => r.studentId === targetStudent.studentId);
+        if (!existingStudent) return;
+
+        const studentMarks = studentUpdates[targetStudent.studentId]
+          ? studentUpdates[targetStudent.studentId].marks
+          : { ...existingStudent.marks };
+
+        let modifiedThisStudent = false;
+
+        cells.forEach((cellRaw, cOffset) => {
+          const targetSqIdx = startSqIndex + cOffset;
+          if (targetSqIdx >= subQuestions.length) return;
+
+          const sq = subQuestions[targetSqIdx];
+          if (!sq) return;
+
+          const trimmed = cellRaw.trim();
+          let parsedVal: number | null = null;
+
+          if (trimmed === "" || trimmed === "-" || trimmed.toLowerCase() === "null") {
+            parsedVal = null;
+          } else {
+            const num = parseFloat(trimmed);
+            if (!isNaN(num)) {
+              parsedVal = Math.max(0, num);
+              if (parsedVal > sq.maxMarks) {
+                hasOverMax = true;
+              }
+            }
+          }
+
+          studentMarks[sq.id] = parsedVal;
+          modifiedThisStudent = true;
+          pastedCellCount++;
+        });
+
+        if (modifiedThisStudent) {
+          studentUpdates[targetStudent.studentId] = {
+            marks: studentMarks,
+            isAbsent: existingStudent.isAbsent,
+          };
+          pastedStudentCount++;
+        }
+      });
+
+      return prevRows.map(row => {
+        if (studentUpdates[row.studentId]) {
+          const { marks: newMarks, isAbsent } = studentUpdates[row.studentId];
+          return {
+            ...row,
+            marks: newMarks,
+            calculatedTotal: calculateRowTotal(isAbsent, newMarks, subQuestions),
+          };
+        }
+        return row;
+      });
+    });
+
+    if (pastedCellCount > 0) {
+      if (hasOverMax) {
+        showToast(
+          `Pasted ${pastedCellCount} mark(s) across ${pastedStudentCount} student(s). Warning: Some marks exceed max marks (highlighted in red).`,
+          "error"
+        );
+      } else {
+        showToast(
+          `Pasted ${pastedCellCount} mark(s) across ${pastedStudentCount} student(s) successfully!`,
+          "success"
+        );
+      }
+    }
+  };
+
   const handleAbsentToggle = (studentId: string) => {
     setRows(prev =>
       prev.map(row => {
@@ -634,8 +763,11 @@ export default function MarksGridPage() {
         <div className="mb-6 flex gap-3 rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100 shadow-sm">
           <FaInfoCircle className="mt-0.5 text-blue-500 flex-shrink-0" />
           <div className="text-sm text-blue-800">
-            <p className="font-semibold">Slick Navigation Enabled</p>
-            <p>Use keyboard arrow keys <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">←</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">→</kbd> or <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Tab</kbd> to navigate horizontally, <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Enter</kbd> to go to the first cell of the next row, and <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↑</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↓</kbd> to navigate vertically between students.</p>
+            <p className="font-semibold">Slick Navigation & Excel Paste Enabled</p>
+            <p>
+              Use keyboard arrow keys <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">←</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">→</kbd> or <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Tab</kbd> to navigate horizontally, <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Enter</kbd> to go to the first cell of the next row, and <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↑</kbd> <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">↓</kbd> to navigate vertically.
+              {" "}<strong>Copy from Excel:</strong> You can copy a block or column of marks from Excel/Sheets and press <kbd className="bg-white px-1 py-0.5 rounded border shadow-sm">Ctrl+V</kbd> in any starting cell to fill multiple cells automatically.
+            </p>
           </div>
         </div>
 
@@ -755,6 +887,7 @@ export default function MarksGridPage() {
                             value={marksVal === null ? "" : marksVal}
                             onChange={e => handleMarksChange(row.studentId, sq.id, e.target.value)}
                             onKeyDown={e => handleKeyDown(e, rowIndex, sqIndex)}
+                            onPaste={e => handlePaste(e, rowIndex, sqIndex)}
                             disabled={row.isAbsent || !canEdit}
                             className={`w-full max-w-[48px] h-7 mx-auto block rounded-lg border px-1 py-0.5 text-center text-xs font-bold focus:outline-none focus:ring-1 transition-all ${
                               row.isAbsent

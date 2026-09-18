@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { FaUserTie, FaCheckSquare, FaUserGraduate, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen, FaChartPie } from "react-icons/fa";
+import { FaUserTie, FaCheckSquare, FaUserGraduate, FaChartBar, FaHistory, FaClipboardList, FaFileAlt, FaCalendarAlt, FaBookOpen, FaChartPie, FaTasks } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
 import BirthdayBanner from "@/components/BirthdayBanner";
@@ -98,6 +98,16 @@ export default function FacultyIndexPage() {
                             description="Generate cumulative attendance reports."
                             href="/reports"
                             colorClass="bg-blue-50 text-blue-600"
+                        />
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+                        <DashboardCard
+                            title="Subject Assignments"
+                            icon={<FaTasks className="h-6 w-6" />}
+                            description="Create assignments, set submission deadlines, post questions, and evaluate student submissions."
+                            href="/faculty/mid-exam/assignment"
+                            colorClass="bg-purple-50 text-purple-600"
                         />
                     </motion.div>
 

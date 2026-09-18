@@ -24,7 +24,8 @@ import {
     FaBirthdayCake,
     FaAward,
     FaDatabase,
-    FaSync
+    FaSync,
+    FaTasks
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -381,6 +382,13 @@ export default function AdminDashboardPage() {
             description: "Bulk upload internal marks via Excel templates.",
             href: "/admin/internal-marks",
             color: "bg-red-50 text-red-600"
+        },
+        {
+            title: "Subject Assignments",
+            icon: <FaTasks className="h-6 w-6" />,
+            description: "Monitor assignment submissions, deadlines, questions & class performance.",
+            href: "/admin/assignments",
+            color: "bg-purple-50 text-purple-600"
         },
         {
             title: "MID Exam Engine",

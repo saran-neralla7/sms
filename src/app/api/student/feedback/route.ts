@@ -13,7 +13,7 @@ export async function GET() {
 
         const student = await prisma.student.findUnique({
             where: { rollNumber: session.user.username as string },
-            include: { section: true, batch: true, labBatch: true, subjects: { select: { id: true } } }
+            include: { section: true, batch: true, labBatch: true, department: true, subjects: { select: { id: true } } }
         });
 
         if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
@@ -186,6 +186,14 @@ export async function GET() {
                     }
                 }
                 mappings = Array.from(uniqueMap.values());
+
+                // Exclude faculty not intended for Section A feedback (e.g. lab assistants or other section faculty)
+                if (student.department?.code === "CSE" && String(student.year) === "3" && student.section?.name === "A") {
+                    mappings = mappings.filter((m: any) => {
+                        const name = (m.faculty?.empName || "").toLowerCase();
+                        return !name.includes("arun") && !name.includes("pratibha");
+                    });
+                }
 
                 // Sort subjects by subject code in alphanumeric ascending order (e.g. CS3101, CS3102, CS3103...)
                 mappings.sort((a: any, b: any) => {

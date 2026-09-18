@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
                         year: true,
                         semester: true,
                         departmentId: true,
+                        department: { select: { id: true, code: true, name: true } },
                         isElective: true,
                         electiveSlotId: true,
                         electiveSlotRelation: {

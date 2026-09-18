@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FaSignOutAlt, FaUserGraduate, FaBars, FaTimes, FaCog, FaFlask, FaBookOpen, FaFileAlt, FaCalendarAlt, FaChalkboard } from "react-icons/fa";
+import { FaSignOutAlt, FaUserGraduate, FaBars, FaTimes, FaCog, FaFlask, FaBookOpen, FaFileAlt, FaCalendarAlt, FaChalkboard, FaTasks } from "react-icons/fa";
 import { useState, useEffect } from "react";
 
 export default function StudentSidebar() {
@@ -14,6 +14,7 @@ export default function StudentSidebar() {
 
     const navLinks = [
         { href: "/student/dashboard", label: "My Profile", icon: <FaUserGraduate /> },
+        { href: "/student/assignments", label: "My Assignments", icon: <FaTasks /> },
         { href: "/student/timetable", label: "Class Timetable", icon: <FaCalendarAlt /> },
         { href: "/student/subjects", label: "Academics & Calendar", icon: <FaChalkboard /> },
         { href: "/student/mid-marks", label: "My Mid Marks", icon: <FaBookOpen /> },

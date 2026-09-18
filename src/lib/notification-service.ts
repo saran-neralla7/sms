@@ -253,3 +253,73 @@ export async function checkAndTriggerFacultyBirthdayNotifications() {
         console.error("Error creating faculty birthday notifications:", error);
     }
 }
+
+export async function createAssignmentNotification(params: {
+    title: string;
+    dueDate?: Date | string | null;
+    departmentId: string;
+    year: string;
+    semester: string;
+    sectionId: string;
+    subjectId: string;
+}) {
+    try {
+        const { title, dueDate, departmentId, year, semester, sectionId, subjectId } = params;
+
+        // Fetch subject details
+        const subject = await prisma.subject.findUnique({
+            where: { id: subjectId },
+            select: { name: true, shortName: true, code: true }
+        });
+        const subjectLabel = subject?.shortName || subject?.code || subject?.name || "Subject";
+
+        // Query active students in this class
+        const students = await prisma.student.findMany({
+            where: {
+                sectionId,
+                year,
+                semester,
+                isLeftCollege: false,
+                isDetained: false
+            },
+            select: { rollNumber: true }
+        });
+
+        if (students.length === 0) return;
+
+        const rollNumbers = students.map(s => s.rollNumber).filter(Boolean);
+
+        const studentUsers = await prisma.user.findMany({
+            where: {
+                role: "STUDENT",
+                username: { in: rollNumbers }
+            },
+            select: { id: true }
+        });
+
+        if (studentUsers.length === 0) return;
+
+        let dueDateText = "";
+        if (dueDate) {
+            const d = new Date(dueDate);
+            dueDateText = ` Due date: ${d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}.`;
+        }
+
+        const notifTitle = `New Assignment: ${subjectLabel} - ${title}`;
+        const notifMessage = `A new assignment "${title}" for ${subject?.name || subjectLabel} has been posted.${dueDateText}`;
+
+        const notifications = studentUsers.map(u => ({
+            userId: u.id,
+            title: notifTitle,
+            message: notifMessage,
+            type: "ASSIGNMENT_POSTED",
+            link: "/student/assignments"
+        }));
+
+        await prisma.notification.createMany({
+            data: notifications
+        });
+    } catch (error) {
+        console.error("Error creating assignment notifications:", error);
+    }
+}
