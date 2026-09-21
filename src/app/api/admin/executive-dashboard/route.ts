@@ -80,17 +80,96 @@ export async function GET(req: NextRequest) {
     const hasActiveExamApplications = pendingFeeApps > 0 || activeUnexpiredSettingsCount > 0;
     const hasFrozenMidPapers = recentPublishedMidCount > 0;
 
-    // 5. Department-wise student distribution
+    // 5. Dynamic Real-time Attendance Calculation
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+    let attendanceRecords = await prisma.attendanceHistory.findMany({
+      where: {
+        date: { gte: startOfDay, lte: endOfDay },
+        status: "Completed"
+      },
+      select: {
+        departmentId: true,
+        details: true
+      }
+    });
+
+    // Fallback to latest recorded attendance date if no classes marked yet today (e.g. morning/holiday)
+    if (attendanceRecords.length === 0) {
+      const latest = await prisma.attendanceHistory.findFirst({
+        where: { status: "Completed" },
+        orderBy: { date: "desc" },
+        select: { date: true }
+      });
+      if (latest?.date) {
+        const d = new Date(latest.date);
+        const lStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+        const lEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+        attendanceRecords = await prisma.attendanceHistory.findMany({
+          where: {
+            date: { gte: lStart, lte: lEnd },
+            status: "Completed"
+          },
+          select: {
+            departmentId: true,
+            details: true
+          }
+        });
+      }
+    }
+
+    let totalPresents = 0;
+    let totalAbsents = 0;
+    const deptCounts: Record<string, { present: number; absent: number }> = {};
+
+    for (const record of attendanceRecords) {
+      let list: any[] = [];
+      try {
+        list = JSON.parse(record.details || "[]");
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(list)) continue;
+
+      const deptId = record.departmentId;
+      if (deptId && !deptCounts[deptId]) {
+        deptCounts[deptId] = { present: 0, absent: 0 };
+      }
+
+      for (const item of list) {
+        const st = String(item.Status || item.status || "").trim().toLowerCase();
+        if (st === "present") {
+          totalPresents++;
+          if (deptId) deptCounts[deptId].present++;
+        } else if (st === "absent") {
+          totalAbsents++;
+          if (deptId) deptCounts[deptId].absent++;
+        }
+      }
+    }
+
+    const totalMarked = totalPresents + totalAbsents;
+    const overallAttendance = totalMarked > 0 ? parseFloat(((totalPresents / totalMarked) * 100).toFixed(1)) : 0;
+
+    // 6. Department-wise student distribution & real attendance
     const deptStats = await Promise.all(
       departments.map(async (dept) => {
         const studentCount = await prisma.student.count({
           where: { departmentId: dept.id, isLeftCollege: false, isAlumni: false }
         });
+        const dCounts = deptCounts[dept.id];
+        let deptPct = 0;
+        if (dCounts && (dCounts.present + dCounts.absent) > 0) {
+          deptPct = parseFloat(((dCounts.present / (dCounts.present + dCounts.absent)) * 100).toFixed(1));
+        } else {
+          deptPct = overallAttendance;
+        }
         return {
           code: dept.code,
           name: dept.name,
           studentCount,
-          attendancePct: Math.floor(80 + Math.random() * 15)
+          attendancePct: deptPct
         };
       })
     );
@@ -99,7 +178,7 @@ export async function GET(req: NextRequest) {
       overview: {
         totalStudents,
         totalFaculty,
-        overallAttendance: 87.4,
+        overallAttendance,
         passRate,
       },
       midExams: {
