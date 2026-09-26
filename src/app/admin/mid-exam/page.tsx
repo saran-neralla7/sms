@@ -3308,6 +3308,22 @@ export default function AdminMidExamDashboard() {
                 className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
               />
             </div>
+
+            {isAdmin && (
+              <div className="flex flex-col justify-end">
+                <span className="text-[10px] font-bold text-blue-600 uppercase mb-1">Status Report</span>
+                <Link
+                  href="/admin/mid-exam/posting-status"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:from-blue-700 hover:to-indigo-700 transition shadow-blue-200"
+                  title="Open live section-wise marks posting status report"
+                >
+                  <FaClipboardList />
+                  <span>Posting Status</span>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 

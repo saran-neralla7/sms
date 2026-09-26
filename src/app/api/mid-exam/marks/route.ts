@@ -114,8 +114,65 @@ export async function GET(req: NextRequest) {
 
     const allBatches = getElectiveBatches();
 
+    // Determine if this paper is designated for a specific batch (e.g., Open Elective with multiple faculty/batches)
+    let paperBatch: string | null = null;
+    if (isOE && paper.createdById) {
+      const creatorUser = await prisma.user.findUnique({
+        where: { id: paper.createdById },
+        include: { faculty: true }
+      });
+      if (creatorUser?.faculty?.id) {
+        const creatorMappings = await prisma.facultySubjectMapping.findMany({
+          where: {
+            facultyId: creatorUser.faculty.id,
+            subjectId: paper.subjectId,
+            academicYearId: paper.academicYearId,
+            batch: { not: null }
+          }
+        });
+        const uniqueCreatorBatches = [...new Set(creatorMappings.map(m => m.batch).filter(Boolean))];
+        if (uniqueCreatorBatches.length === 1) {
+          paperBatch = uniqueCreatorBatches[0];
+        }
+      }
+    }
+
+    // Also check if the currently logged-in faculty has a specific batch mapped for this subject
+    const userRole = (session.user as any).role;
+    let facultyMappedBatch: string | null = null;
+    if (userRole === "FACULTY" && isOE) {
+      const loggedUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { faculty: true }
+      });
+      if (loggedUser?.faculty?.id) {
+        const loggedMappings = await prisma.facultySubjectMapping.findMany({
+          where: {
+            facultyId: loggedUser.faculty.id,
+            subjectId: paper.subjectId,
+            academicYearId: paper.academicYearId,
+            batch: { not: null }
+          }
+        });
+        const uniqueLoggedBatches = [...new Set(loggedMappings.map(m => m.batch).filter(Boolean))];
+        if (uniqueLoggedBatches.length === 1) {
+          facultyMappedBatch = uniqueLoggedBatches[0];
+        }
+      }
+    }
+
+    const effectiveTargetBatch = paperBatch || facultyMappedBatch;
+
+    // Filter students: if the paper or faculty is mapped to a specific batch, only include students of that batch
+    const eligibleStudents = effectiveTargetBatch
+      ? students.filter(student => {
+          const batchKey = `${student.id}_${paper.subjectId}`;
+          return allBatches[batchKey] === effectiveTargetBatch;
+        })
+      : students;
+
     // Build grid rows
-    const rows = students.map(student => {
+    const rows = eligibleStudents.map(student => {
       const studentData = studentMarksMap[student.id] || { marks: {}, isAbsent: false, isDraft: true };
       const batchKey = `${student.id}_${paper.subjectId}`;
       const batchName = allBatches[batchKey] || null;

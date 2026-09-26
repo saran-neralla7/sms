@@ -280,10 +280,13 @@ export default function StudentsPage() {
 
     useEffect(() => {
         fetchDepartments();
-        fetchSections(); // Initial fetch
         fetchRegulations();
         fetchBatches();
     }, []);
+
+    useEffect(() => {
+        fetchSections();
+    }, [filterDepartmentId]);
 
     useEffect(() => {
         fetchStudents();
@@ -994,22 +997,18 @@ export default function StudentsPage() {
                 </button>
             </div>
 
-            <div className={`mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) ? "sm:grid-cols-4" : "sm:grid-cols-3"
-                }`}>
-                {/* Admin Only Department Filter */}
-                {/* Global Admin Department Filter */}
-                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role?.toUpperCase()) && (
-                    <select
-                        value={filterDepartmentId}
-                        onChange={(e) => updateFilters("dept", e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                    >
-                        <option value="">All Departments</option>
-                        {departments.map((d: any) => (
-                            <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                    </select>
-                )}
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                {/* Department Filter */}
+                <select
+                    value={filterDepartmentId}
+                    onChange={(e) => updateFilters("dept", e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                >
+                    <option value="">All Departments</option>
+                    {departments.map((d: any) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                </select>
 
                 <select 
                     value={year} 

@@ -81,6 +81,16 @@ export default function FacultyIndexPage() {
                         />
                     </motion.div>
 
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.13 }}>
+                        <DashboardCard
+                            title="My Mentees"
+                            icon={<FaUserGraduate className="h-6 w-6" />}
+                            description="Track assigned student attendance health, mid marks, and paperless counseling diary."
+                            href="/faculty/mentees"
+                            colorClass="bg-indigo-50 text-indigo-600"
+                        />
+                    </motion.div>
+
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
                         <DashboardCard
                             title="Attendance History"

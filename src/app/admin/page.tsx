@@ -25,7 +25,9 @@ import {
     FaAward,
     FaDatabase,
     FaSync,
-    FaTasks
+    FaTasks,
+    FaHeadset,
+    FaUserTie
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -38,6 +40,7 @@ export default function AdminDashboardPage() {
     const [backupStatus, setBackupStatus] = useState<any>(null);
     const [backingUp, setBackingUp] = useState(false);
     const [pendingRequests, setPendingRequests] = useState<number>(0);
+    const [openTickets, setOpenTickets] = useState<number>(0);
     const [dismissBanner, setDismissBanner] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [liveLogs, setLiveLogs] = useState<any[]>([]);
@@ -200,6 +203,15 @@ export default function AdminDashboardPage() {
                     if (data.count !== undefined) setPendingRequests(data.count);
                 })
                 .catch(console.error);
+
+            fetch("/api/helpdesk/stats")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.stats) {
+                        setOpenTickets(data.stats.actionRequired || 0);
+                    }
+                })
+                .catch(console.error);
         }
     }, [status, session]);
 
@@ -249,6 +261,27 @@ export default function AdminDashboardPage() {
                     </span>
                 </div>
             ) : undefined
+        },
+        {
+            title: "GVP Sahayak (Helpdesk)",
+            icon: <FaHeadset className="h-6 w-6" />,
+            description: "Faculty query resolution, marks unlock & support chat.",
+            href: "/admin/helpdesk",
+            color: "bg-indigo-50 text-indigo-600",
+            badge: openTickets > 0 ? (
+                <div className="absolute right-4 top-4">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white shadow-sm ring-2 ring-white animate-pulse">
+                        {openTickets > 99 ? "99+" : openTickets}
+                    </span>
+                </div>
+            ) : undefined
+        },
+        {
+            title: "Mentor Allocation",
+            icon: <FaUserTie className="h-6 w-6" />,
+            description: "Assign faculty mentors to student batches & proctoring.",
+            href: "/admin/mentors",
+            color: "bg-teal-50 text-teal-600"
         },
         {
             title: "Users",

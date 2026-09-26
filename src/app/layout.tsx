@@ -27,6 +27,7 @@ import { prisma } from "@/lib/prisma";
 
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 import UniversityAnnouncementModal from "@/components/UniversityAnnouncementModal";
+import GvpSahayakWidget from "@/components/GvpSahayakWidget";
 
 export default async function RootLayout({
   children,
@@ -54,6 +55,7 @@ export default async function RootLayout({
         <Providers>
           <ImpersonationBanner />
           <UniversityAnnouncementModal />
+          <GvpSahayakWidget />
           <div className="relative z-10 flex flex-col flex-grow pt-16">
             <Navbar years={years} currentYearId={currentYearId} />
             <main className="flex-grow">{children}</main>

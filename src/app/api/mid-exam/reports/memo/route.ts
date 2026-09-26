@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTotal, calculateInternalMarks, scaleMidMarks } from "@/lib/mid-exam-calc";
 import { getStudentsForClass } from "@/lib/student-utils";
+import { getElectiveBatches } from "@/lib/elective-batches";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -201,6 +202,30 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    // Pre-calculate batch assignment for OE papers
+    const allBatches = getElectiveBatches();
+    const paperBatchMap: Record<string, string | null> = {};
+    if (isOE) {
+      for (const p of papers) {
+        if (p.createdById) {
+          const u = await prisma.user.findUnique({
+            where: { id: p.createdById },
+            include: { faculty: true }
+          });
+          if (u?.faculty?.id) {
+            const m = await prisma.facultySubjectMapping.findFirst({
+              where: {
+                facultyId: u.faculty.id,
+                subjectId: p.subjectId,
+                batch: { not: null }
+              }
+            });
+            paperBatchMap[p.id] = m?.batch || null;
+          }
+        }
+      }
+    }
+
     // Build data grid
     const rows = students.map(student => {
       const subjectData: Record<string, any> = {};
@@ -223,12 +248,16 @@ export async function GET(req: NextRequest) {
           mid1Max = labMark?.maxMarks ?? 50;
           isMid1Absent = labMark?.isAbsent ?? false;
         } else {
-          // For theory: MID_I and MID_II papers (ensure we match the student's section!)
+          // For theory: MID_I and MID_II papers (ensure we match the student's section or elective batch!)
+          const studentBatch = allBatches[`${student.id}_${subject.id}`];
+
           const mid1Paper = isOE 
-            ? papers.find(p => p.subjectId === subject.id && p.examType === "MID_I")
+            ? (papers.find(p => p.subjectId === subject.id && p.examType === "MID_I" && studentBatch && paperBatchMap[p.id] === studentBatch)
+               || papers.find(p => p.subjectId === subject.id && p.examType === "MID_I"))
             : papers.find(p => p.subjectId === subject.id && p.examType === "MID_I" && p.sectionId === student.sectionId);
           const mid2Paper = isOE 
-            ? papers.find(p => p.subjectId === subject.id && p.examType === "MID_II")
+            ? (papers.find(p => p.subjectId === subject.id && p.examType === "MID_II" && studentBatch && paperBatchMap[p.id] === studentBatch)
+               || papers.find(p => p.subjectId === subject.id && p.examType === "MID_II"))
             : papers.find(p => p.subjectId === subject.id && p.examType === "MID_II" && p.sectionId === student.sectionId);
 
           const getPaperTotal = (paper: any, examType: "MID_I" | "MID_II") => {
