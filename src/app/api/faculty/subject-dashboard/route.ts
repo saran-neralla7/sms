@@ -186,6 +186,7 @@ export async function GET(req: NextRequest) {
             sections,
             activeSectionId,
             academicYearId,
+            facultyId,
             students: enrichedStudents,
             courseFile,
             diaries,

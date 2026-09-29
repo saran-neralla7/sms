@@ -327,53 +327,11 @@ export default function FacultySubjectDashboard() {
         return matrix;
     };
 
-    const saveCourseFileChanges = async (updates: { syllabus?: any; coPoMapping?: any; lecturePlan?: any }) => {
+    const saveCourseFileChanges = async (updates: { lecturePlan?: any }) => {
         if (!dashboardData) return;
         setSaving(true);
         try {
             const subId = dashboardData.subject.id;
-            const updatedSyllabus = updates.syllabus !== undefined ? updates.syllabus : syllabusUnits;
-            const updatedCoPo = updates.coPoMapping !== undefined ? updates.coPoMapping : { coPo: coPoMatrix, coPso: coPsoMatrix };
-
-            // Save CO-PO & CO-PSO mappings directly to SubjectCoPoMapping & SubjectCoPsoMapping tables if coPoMapping is updated
-            if (updates.coPoMapping !== undefined) {
-                try {
-                    const poList: any[] = [];
-                    Object.entries(updatedCoPo.coPo || {}).forEach(([coKey, poObj]: [string, any]) => {
-                        Object.entries(poObj || {}).forEach(([poKey, val]: [string, any]) => {
-                            poList.push({
-                                co: coKey,
-                                po: poKey,
-                                weight: val === "-" || val === "" || val === null ? null : parseInt(String(val))
-                            });
-                        });
-                    });
-                    await fetch("/api/mid-exam/co-po-mapping", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ subjectId: subId, mappings: poList })
-                    });
-
-                    const psoList: any[] = [];
-                    Object.entries(updatedCoPo.coPso || {}).forEach(([coKey, psoObj]: [string, any]) => {
-                        Object.entries(psoObj || {}).forEach(([psoKey, val]: [string, any]) => {
-                            psoList.push({
-                                co: coKey,
-                                pso: psoKey,
-                                weight: val === "-" || val === "" || val === null ? null : parseInt(String(val))
-                            });
-                        });
-                    });
-                    await fetch("/api/mid-exam/co-pso-mapping", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ subjectId: subId, mappings: psoList })
-                    });
-                } catch (e) {
-                    console.error("Error saving CO-PO/PSO mappings to DB:", e);
-                }
-            }
-
             const rawPlanToSave = updates.lecturePlan !== undefined ? updates.lecturePlan : lecturePlan;
             const formattedPlan = formatFlatPlanToUnitGrouped(rawPlanToSave);
 
@@ -384,8 +342,7 @@ export default function FacultySubjectDashboard() {
                 semester: dashboardData.subject.semester,
                 sectionId: activeSectionId,
                 subjectId: subId,
-                syllabus: JSON.stringify(updatedSyllabus),
-                coPoMapping: JSON.stringify(updatedCoPo),
+                facultyId: dashboardData.facultyId || (session?.user as any)?.facultyId || session?.user?.id,
                 lecturePlan: JSON.stringify(formattedPlan)
             };
 
@@ -396,13 +353,13 @@ export default function FacultySubjectDashboard() {
             });
 
             if (res.ok) {
-                alert("Subject dashboard details updated successfully!");
+                alert("Lecture plan saved successfully!");
             } else {
-                alert("Failed to save changes.");
+                alert("Failed to save lecture plan.");
             }
         } catch (e) {
             console.error(e);
-            alert("Error saving course details");
+            alert("Error saving lecture plan");
         } finally {
             setSaving(false);
         }
@@ -497,6 +454,110 @@ export default function FacultySubjectDashboard() {
         s.rollNumber.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Parse official syllabus from Subject model
+    const officialSyllabus = (() => {
+        const raw = subject?.syllabus;
+        if (!raw) return null;
+        if (typeof raw === "string") {
+            try { return JSON.parse(raw); } catch (_) { return null; }
+        }
+        return raw;
+    })();
+
+    const hasOfficialSyllabus = Boolean(
+        officialSyllabus && (
+            (Array.isArray(officialSyllabus.units) && officialSyllabus.units.length > 0) ||
+            (Array.isArray(officialSyllabus.outcomes) && officialSyllabus.outcomes.length > 0)
+        )
+    );
+
+    const currentReturnUrl = typeof window !== "undefined"
+        ? window.location.pathname + window.location.search
+        : `/faculty/subject-dashboard?subjectId=${subjectId}`;
+
+    // Extract CO-PO and CO-PSO mappings
+    const dbCoPoMappings = dashboardData?.coPoMappings || [];
+    const dbCoPsoMappings = dashboardData?.coPsoMappings || [];
+    const hasDbCoPo = dbCoPoMappings.length > 0;
+    const hasDbCoPso = dbCoPsoMappings.length > 0;
+
+    // Course Outcomes list
+    const coList: string[] = Array.isArray(officialSyllabus?.outcomes) && officialSyllabus.outcomes.length > 0
+        ? officialSyllabus.outcomes.map((o: any) => o.code || o.id || o)
+        : ["CO1", "CO2", "CO3", "CO4", "CO5"];
+
+    // Build CO-PO matrix map
+    const coPoDisplayMap: Record<string, Record<string, number | null>> = {};
+    coList.forEach((co) => {
+        coPoDisplayMap[co] = {};
+        for (let i = 1; i <= 12; i++) {
+            coPoDisplayMap[co][`PO${i}`] = null;
+        }
+    });
+    dbCoPoMappings.forEach((m: any) => {
+        if (!coPoDisplayMap[m.co]) coPoDisplayMap[m.co] = {};
+        coPoDisplayMap[m.co][m.po] = m.weight;
+    });
+
+    // Column averages for PO1..PO12
+    const poColumnAverages: Record<string, string> = {};
+    for (let i = 1; i <= 12; i++) {
+        const poKey = `PO${i}`;
+        let sum = 0;
+        let count = 0;
+        coList.forEach((co) => {
+            const val = coPoDisplayMap[co]?.[poKey];
+            if (val !== null && val !== undefined) {
+                sum += val;
+                count++;
+            }
+        });
+        poColumnAverages[poKey] = count > 0 ? (sum / count).toFixed(2) : "-";
+    }
+
+    // Build CO-PSO matrix map
+    const psoKeysFromDb: string[] = Array.from(new Set<string>(dbCoPsoMappings.map((m: any) => String(m.pso)))).sort();
+    const psoListToUse: string[] = psoKeysFromDb.length > 0 ? psoKeysFromDb : ["PSO1", "PSO2", "PSO3", "PSO4"];
+    const coPsoDisplayMap: Record<string, Record<string, number | null>> = {};
+    coList.forEach((co: string) => {
+        coPsoDisplayMap[co] = {};
+        psoListToUse.forEach((pso: string) => {
+            coPsoDisplayMap[co][pso] = null;
+        });
+    });
+    dbCoPsoMappings.forEach((m: any) => {
+        if (!coPsoDisplayMap[m.co]) coPsoDisplayMap[m.co] = {};
+        coPsoDisplayMap[m.co][m.pso] = m.weight;
+    });
+
+    // Column averages for PSO
+    const psoColumnAverages: Record<string, string> = {};
+    psoListToUse.forEach((psoKey: string) => {
+        let sum = 0;
+        let count = 0;
+        coList.forEach((co) => {
+            const val = coPsoDisplayMap[co]?.[psoKey];
+            if (val !== null && val !== undefined) {
+                sum += val;
+                count++;
+            }
+        });
+        psoColumnAverages[psoKey] = count > 0 ? (sum / count).toFixed(2) : "-";
+    });
+
+    const renderWeightPill = (val: number | null | undefined) => {
+        if (val === 3) {
+            return <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">3</span>;
+        }
+        if (val === 2) {
+            return <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">2</span>;
+        }
+        if (val === 1) {
+            return <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">1</span>;
+        }
+        return <span className="text-slate-300 font-bold">-</span>;
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
             <div className="mx-auto max-w-7xl space-y-6">
@@ -589,7 +650,7 @@ export default function FacultySubjectDashboard() {
                             activeTab === "syllabus" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
                         }`}
                     >
-                        <FaBookOpen /> Syllabus (5 Units)
+                        <FaBookOpen /> Syllabus {hasOfficialSyllabus && officialSyllabus.units?.length ? `(${officialSyllabus.units.length} Units)` : ""}
                     </button>
                     <button
                         onClick={() => setActiveTab("copo")}
@@ -695,171 +756,358 @@ export default function FacultySubjectDashboard() {
 
                 {/* TAB 2: SYLLABUS */}
                 {activeTab === "syllabus" && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                        <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                        {/* Top Action Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <div>
-                                <h3 className="font-bold text-slate-800 text-sm">Course Syllabus Units</h3>
-                                <p className="text-xs text-slate-500">Edit unit titles, topic details, and assigned Course Outcomes (COs).</p>
+                                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                                    <FaBookOpen className="text-blue-600" /> Course Syllabus & Learning Outcomes
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Official syllabus for {subject.name} ({subject.code})
+                                </p>
                             </div>
                             <button
-                                onClick={() => saveCourseFileChanges({ syllabus: syllabusUnits })}
-                                disabled={saving}
-                                className="flex items-center gap-1.5 bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                                onClick={() => router.push(`/faculty/mid-exam/syllabus?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer self-start sm:self-auto"
                             >
-                                <FaSave /> {saving ? "Saving..." : "Save Syllabus"}
+                                <FaEdit /> {hasOfficialSyllabus ? "Edit / Manage Syllabus" : "Create Syllabus"}
                             </button>
                         </div>
 
-                        <div className="space-y-4">
-                            {syllabusUnits.map((unitItem: any, uIdx: number) => (
-                                <div key={uIdx} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-100">
-                                                {unitItem.unit}
-                                            </span>
-                                            <input
-                                                type="text"
-                                                value={unitItem.title}
-                                                onChange={(e) => {
-                                                    const copy = [...syllabusUnits];
-                                                    copy[uIdx].title = e.target.value;
-                                                    setSyllabusUnits(copy);
-                                                }}
-                                                placeholder="Unit Title..."
-                                                className="font-bold text-slate-800 text-sm border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none px-1 py-0.5 flex-1"
-                                            />
-                                        </div>
-                                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded">
-                                            {unitItem.co || `CO${uIdx + 1}`}
+                        {!hasOfficialSyllabus ? (
+                            /* Empty State */
+                            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm space-y-4">
+                                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto text-2xl border border-blue-100">
+                                    <FaBookOpen />
+                                </div>
+                                <div className="max-w-md mx-auto space-y-1">
+                                    <h4 className="text-base font-bold text-slate-800">No Syllabus Configured Yet</h4>
+                                    <p className="text-xs text-slate-500 leading-relaxed">
+                                        This subject does not have an official syllabus configured. You can define Course Objectives, specify CO1–CO5 outcomes, and add unit topics in the Syllabus Editor.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => router.push(`/faculty/mid-exam/syllabus?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer"
+                                >
+                                    <FaPlus /> Create Syllabus
+                                </button>
+                            </div>
+                        ) : (
+                            /* Populated Syllabus View */
+                            <div className="space-y-6">
+                                {/* Metadata Cards Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Credits (L-T-P-C)</span>
+                                        <span className="font-mono text-base font-extrabold text-blue-600 mt-1 block">
+                                            {officialSyllabus.credits?.L ?? 3} - {officialSyllabus.credits?.T ?? 0} - {officialSyllabus.credits?.P ?? 0} - {officialSyllabus.credits?.C ?? 3}
                                         </span>
                                     </div>
-                                    <div>
-                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                                            Unit Topics & Content Details
-                                        </label>
-                                        <textarea
-                                            value={unitItem.topics}
-                                            onChange={(e) => {
-                                                const copy = [...syllabusUnits];
-                                                copy[uIdx].topics = e.target.value;
-                                                setSyllabusUnits(copy);
-                                            }}
-                                            rows={3}
-                                            className="w-full text-xs p-3 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
-                                        />
+                                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Contact Hours</span>
+                                        <span className="text-base font-extrabold text-slate-800 mt-1 block">
+                                            {officialSyllabus.contactHours || 42} hrs
+                                        </span>
+                                    </div>
+                                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Marks</span>
+                                        <span className="text-base font-extrabold text-slate-800 mt-1 block">
+                                            {officialSyllabus.totalMarks || 100} Marks
+                                        </span>
+                                    </div>
+                                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Prerequisites</span>
+                                        <span className="text-xs font-semibold text-slate-700 mt-1 block truncate">
+                                            {officialSyllabus.prerequisites || "None"}
+                                        </span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+
+                                {/* Course Objectives */}
+                                {Array.isArray(officialSyllabus.objectives) && officialSyllabus.objectives.length > 0 && (
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-blue-600"></span> Course Objectives
+                                        </h4>
+                                        <ul className="space-y-1.5 pl-2">
+                                            {officialSyllabus.objectives.map((obj: string, oIdx: number) => (
+                                                <li key={oIdx} className="text-xs text-slate-700 flex items-start gap-2">
+                                                    <span className="text-slate-400 font-bold shrink-0">{oIdx + 1}.</span>
+                                                    <span>{obj}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {/* Course Outcomes (COs) */}
+                                {Array.isArray(officialSyllabus.outcomes) && officialSyllabus.outcomes.length > 0 && (
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-indigo-600"></span> Course Outcomes (COs)
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {officialSyllabus.outcomes.map((co: any, cIdx: number) => (
+                                                <div key={cIdx} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-start gap-3">
+                                                    <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg shrink-0 border border-indigo-200">
+                                                        {co.code || `CO${cIdx + 1}`}
+                                                    </span>
+                                                    <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                                                        {co.description || co}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Unit Breakdown */}
+                                {Array.isArray(officialSyllabus.units) && officialSyllabus.units.length > 0 && (
+                                    <div className="space-y-4">
+                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-600"></span> Unit-Wise Syllabus ({officialSyllabus.units.length} Units)
+                                        </h4>
+                                        {officialSyllabus.units.map((unit: any, uIdx: number) => (
+                                            <div key={uIdx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                                            {unit.name || unit.unit || `UNIT-${uIdx + 1}`}
+                                                        </span>
+                                                        <h5 className="font-bold text-slate-900 text-sm">
+                                                            {unit.title || "Untitled Unit"}
+                                                        </h5>
+                                                    </div>
+                                                    {Array.isArray(unit.mappedCOs) && unit.mappedCOs.length > 0 && (
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Mapped:</span>
+                                                            {unit.mappedCOs.map((mCo: string, mIdx: number) => (
+                                                                <span key={mIdx} className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                                                                    {mCo}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div
+                                                    className="text-xs text-slate-700 leading-relaxed prose prose-sm max-w-none"
+                                                    dangerouslySetInnerHTML={{ __html: unit.content || unit.topics || "<p class='text-slate-400 italic'>No content details provided.</p>" }}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Textbooks & Reference Books */}
+                                {((Array.isArray(officialSyllabus.textbooks) && officialSyllabus.textbooks.length > 0) ||
+                                  (Array.isArray(officialSyllabus.referenceBooks) && officialSyllabus.referenceBooks.length > 0)) && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {Array.isArray(officialSyllabus.textbooks) && officialSyllabus.textbooks.length > 0 && (
+                                            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
+                                                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider text-slate-500">
+                                                    Textbooks
+                                                </h4>
+                                                <ul className="space-y-1.5 pl-2">
+                                                    {officialSyllabus.textbooks.map((tb: string, tbIdx: number) => (
+                                                        <li key={tbIdx} className="text-xs text-slate-700 flex items-start gap-2">
+                                                            <span className="text-slate-400 font-bold shrink-0">{tbIdx + 1}.</span>
+                                                            <span>{tb}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {Array.isArray(officialSyllabus.referenceBooks) && officialSyllabus.referenceBooks.length > 0 && (
+                                            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
+                                                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider text-slate-500">
+                                                    Reference Books
+                                                </h4>
+                                                <ul className="space-y-1.5 pl-2">
+                                                    {officialSyllabus.referenceBooks.map((rb: string, rbIdx: number) => (
+                                                        <li key={rbIdx} className="text-xs text-slate-700 flex items-start gap-2">
+                                                            <span className="text-slate-400 font-bold shrink-0">{rbIdx + 1}.</span>
+                                                            <span>{rb}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </motion.div>
                 )}
 
                 {/* TAB 3: CO-PO & PSO MAPPINGS */}
                 {activeTab === "copo" && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                        <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        {/* Top Action Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <div>
-                                <h3 className="font-bold text-slate-800 text-sm">Course Outcome Mapping Matrices</h3>
-                                <p className="text-xs text-slate-500">Mapping scale: 3 (High), 2 (Medium), 1 (Low), - (No Correlation).</p>
+                                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                                    <FaTasks className="text-blue-600" /> Course Outcome Correlation Matrices
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Scale: <span className="font-bold text-blue-700">3 (High)</span>, <span className="font-bold text-amber-700">2 (Medium)</span>, <span className="font-bold text-purple-700">1 (Low)</span>, <span className="text-slate-400 font-bold">- (None)</span>
+                                </p>
                             </div>
-                            <button
-                                onClick={() => saveCourseFileChanges({ coPoMapping: { coPo: coPoMatrix, coPso: coPsoMatrix } })}
-                                disabled={saving}
-                                className="flex items-center gap-1.5 bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm hover:bg-blue-700 disabled:opacity-50"
-                            >
-                                <FaSave /> {saving ? "Saving..." : "Save Mappings"}
-                            </button>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                    onClick={() => router.push(`/faculty/mid-exam/co-po-mapping?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer"
+                                >
+                                    <FaEdit /> {hasDbCoPo ? "Edit CO-PO Matrix" : "Configure CO-PO"}
+                                </button>
+                                <button
+                                    onClick={() => router.push(`/faculty/mid-exam/co-pso-mapping?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                    className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer"
+                                >
+                                    <FaEdit /> {hasDbCoPso ? "Edit CO-PSO Matrix" : "Configure CO-PSO"}
+                                </button>
+                            </div>
                         </div>
 
-                        {/* CO-PO Matrix */}
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 overflow-x-auto">
-                            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider text-slate-500">CO - PO Correlation Matrix</h4>
-                            <table className="w-full text-center text-xs border-collapse min-w-[700px]">
-                                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                                    <tr>
-                                        <th className="p-2 border-r border-slate-200">Course Outcome</th>
-                                        {Array.from({ length: 12 }).map((_, i) => (
-                                            <th key={i} className="p-2 border-r border-slate-100 last:border-r-0">PO{i + 1}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {["CO1", "CO2", "CO3", "CO4", "CO5"].map((co) => (
-                                        <tr key={co} className="border-b border-slate-100">
-                                            <td className="p-2 font-bold text-slate-700 bg-slate-50 border-r border-slate-200">{co}</td>
-                                            {Array.from({ length: 12 }).map((_, i) => {
-                                                const poKey = `PO${i + 1}`;
-                                                const val = coPoMatrix[co]?.[poKey] !== undefined && coPoMatrix[co]?.[poKey] !== null ? String(coPoMatrix[co][poKey]) : "-";
-                                                return (
-                                                    <td key={poKey} className="p-1 border-r border-slate-100 last:border-r-0">
-                                                        <select
-                                                            value={val}
-                                                            onChange={(e) => {
-                                                                const copy = { ...coPoMatrix };
-                                                                if (!copy[co]) copy[co] = {};
-                                                                copy[co][poKey] = e.target.value;
-                                                                setCoPoMatrix(copy);
-                                                            }}
-                                                            className="w-full text-center font-bold text-xs p-1 rounded bg-slate-50 border border-slate-200 outline-none"
-                                                        >
-                                                            <option value="3">3</option>
-                                                            <option value="2">2</option>
-                                                            <option value="1">1</option>
-                                                            <option value="-">-</option>
-                                                        </select>
+                        {!hasDbCoPo && !hasDbCoPso ? (
+                            /* Empty State */
+                            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm space-y-4">
+                                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto text-2xl border border-blue-100">
+                                    <FaTasks />
+                                </div>
+                                <div className="max-w-md mx-auto space-y-1">
+                                    <h4 className="text-base font-bold text-slate-800">No Correlation Mappings Configured</h4>
+                                    <p className="text-xs text-slate-500 leading-relaxed">
+                                        Define the correlation matrix between Course Outcomes (COs) and Program Outcomes (POs) or Program Specific Outcomes (PSOs).
+                                    </p>
+                                </div>
+                                <div className="flex justify-center gap-3">
+                                    <button
+                                        onClick={() => router.push(`/faculty/mid-exam/co-po-mapping?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer"
+                                    >
+                                        <FaPlus /> Configure CO-PO Mappings
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {/* CO-PO Matrix */}
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 overflow-hidden">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider text-slate-500">
+                                            CO - PO Correlation Matrix (POs 1–12)
+                                        </h4>
+                                        <button
+                                            onClick={() => router.push(`/faculty/mid-exam/co-po-mapping?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                            className="text-blue-600 hover:text-blue-800 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                        >
+                                            <FaEdit /> Edit Matrix
+                                        </button>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-center text-xs border-collapse min-w-[700px]">
+                                            <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-2.5 border-r border-slate-200 text-left">Course Outcome</th>
+                                                    {Array.from({ length: 12 }).map((_, i) => (
+                                                        <th key={i} className="p-2.5 border-r border-slate-100 last:border-r-0">PO{i + 1}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {coList.map((co) => (
+                                                    <tr key={co} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                        <td className="p-2.5 font-bold text-slate-700 bg-slate-50/50 border-r border-slate-200 text-left">
+                                                            {co}
+                                                        </td>
+                                                        {Array.from({ length: 12 }).map((_, i) => {
+                                                            const poKey = `PO${i + 1}`;
+                                                            const val = coPoDisplayMap[co]?.[poKey];
+                                                            return (
+                                                                <td key={poKey} className="p-2 border-r border-slate-100 last:border-r-0">
+                                                                    {renderWeightPill(val)}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                                {/* Column Averages Row */}
+                                                <tr className="bg-blue-50/60 font-bold border-t-2 border-blue-200 text-blue-900">
+                                                    <td className="p-2.5 border-r border-blue-200 text-left font-extrabold">
+                                                        Average
                                                     </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                                    {Array.from({ length: 12 }).map((_, i) => {
+                                                        const poKey = `PO${i + 1}`;
+                                                        return (
+                                                            <td key={poKey} className="p-2 border-r border-blue-100 last:border-r-0 font-mono text-[11px]">
+                                                                {poColumnAverages[poKey]}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
 
-                        {/* CO-PSO Matrix */}
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 overflow-x-auto">
-                            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider text-slate-500">CO - PSO Correlation Matrix</h4>
-                            <table className="w-full text-center text-xs border-collapse max-w-md">
-                                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                                    <tr>
-                                        <th className="p-2 border-r border-slate-200">Course Outcome</th>
-                                        {["PSO1", "PSO2", "PSO3", "PSO4"].map((psoKey) => (
-                                            <th key={psoKey} className="p-2 border-r border-slate-100 last:border-r-0">{psoKey}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {["CO1", "CO2", "CO3", "CO4", "CO5"].map((co) => (
-                                        <tr key={co} className="border-b border-slate-100">
-                                            <td className="p-2 font-bold text-slate-700 bg-slate-50 border-r border-slate-200">{co}</td>
-                                            {["PSO1", "PSO2", "PSO3", "PSO4"].map((psoKey) => {
-                                                const val = coPsoMatrix[co]?.[psoKey] !== undefined && coPsoMatrix[co]?.[psoKey] !== null ? String(coPsoMatrix[co][psoKey]) : "-";
-                                                return (
-                                                    <td key={psoKey} className="p-1 border-r border-slate-100 last:border-r-0">
-                                                        <select
-                                                            value={val}
-                                                            onChange={(e) => {
-                                                                const copy = { ...coPsoMatrix };
-                                                                if (!copy[co]) copy[co] = {};
-                                                                copy[co][psoKey] = e.target.value;
-                                                                setCoPsoMatrix(copy);
-                                                            }}
-                                                            className="w-full text-center font-bold text-xs p-1 rounded bg-slate-50 border border-slate-200 outline-none"
-                                                        >
-                                                            <option value="3">3</option>
-                                                            <option value="2">2</option>
-                                                            <option value="1">1</option>
-                                                            <option value="-">-</option>
-                                                        </select>
+                                {/* CO-PSO Matrix */}
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 overflow-hidden">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider text-slate-500">
+                                            CO - PSO Correlation Matrix
+                                        </h4>
+                                        <button
+                                            onClick={() => router.push(`/faculty/mid-exam/co-pso-mapping?subjectId=${subjectId}&returnUrl=${encodeURIComponent(currentReturnUrl)}`)}
+                                            className="text-blue-600 hover:text-blue-800 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                        >
+                                            <FaEdit /> Edit Matrix
+                                        </button>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-center text-xs border-collapse max-w-lg">
+                                            <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-2.5 border-r border-slate-200 text-left">Course Outcome</th>
+                                                    {psoListToUse.map((psoKey) => (
+                                                        <th key={psoKey} className="p-2.5 border-r border-slate-100 last:border-r-0">{psoKey}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {coList.map((co) => (
+                                                    <tr key={co} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                        <td className="p-2.5 font-bold text-slate-700 bg-slate-50/50 border-r border-slate-200 text-left">
+                                                            {co}
+                                                        </td>
+                                                        {psoListToUse.map((psoKey) => {
+                                                            const val = coPsoDisplayMap[co]?.[psoKey];
+                                                            return (
+                                                                <td key={psoKey} className="p-2 border-r border-slate-100 last:border-r-0">
+                                                                    {renderWeightPill(val)}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                                {/* PSO Column Averages */}
+                                                <tr className="bg-blue-50/60 font-bold border-t-2 border-blue-200 text-blue-900">
+                                                    <td className="p-2.5 border-r border-blue-200 text-left font-extrabold">
+                                                        Average
                                                     </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                                    {psoListToUse.map((psoKey) => (
+                                                        <td key={psoKey} className="p-2 border-r border-blue-100 last:border-r-0 font-mono text-[11px]">
+                                                            {psoColumnAverages[psoKey]}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </motion.div>
                 )}
 

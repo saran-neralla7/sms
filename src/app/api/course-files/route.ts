@@ -399,6 +399,10 @@ export async function POST(req: NextRequest) {
       tentativeCompletionDate
     } = body;
 
+    if (!facultyId && session.user) {
+      facultyId = (session.user as any).facultyId || session.user.id;
+    }
+
     if (!academicYearId || !departmentId || !year || !semester || !sectionId || !subjectId || !facultyId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }

@@ -276,8 +276,15 @@ function CoPoMappingContent() {
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-4">
               <button
-                onClick={() => router.back()}
-                className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 transition-colors"
+                onClick={() => {
+                  const returnUrl = searchParams?.get("returnUrl");
+                  if (returnUrl) {
+                    router.push(returnUrl);
+                  } else {
+                    router.back();
+                  }
+                }}
+                className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
               >
                 <FaArrowLeft /> Back
               </button>
