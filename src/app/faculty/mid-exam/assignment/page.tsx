@@ -265,6 +265,60 @@ function AssignmentMarksContent() {
     }
   };
 
+  const createNewAssignmentAndOpenBuilder = async () => {
+    if (!effectiveSubjectId || !effectiveSectionId || !effectiveAyId || !effectiveDepartmentId || !effectiveYear || !effectiveSemester) {
+      showToast("Class details not ready yet. Please wait.", "error");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch("/api/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `Assignment ${assignments.length + 1}`,
+          description: "",
+          questions: [
+            {
+              qNo: 1,
+              subQuestions: [
+                { subLabel: "a", questionText: "", marks: 5, coMapping: "CO1", btLevel: "L2" },
+                { subLabel: "b", questionText: "", marks: 5, coMapping: "CO2", btLevel: "L3" }
+              ]
+            }
+          ],
+          totalMarks: 10,
+          dueDate: null,
+          academicYearId: effectiveAyId,
+          departmentId: effectiveDepartmentId,
+          year: effectiveYear,
+          semester: effectiveSemester,
+          sectionId: effectiveSectionId,
+          subjectId: effectiveSubjectId,
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const newAssignmentId = json.assignment?.id;
+        if (newAssignmentId) {
+          router.push(`/faculty/mid-exam/assignment/${newAssignmentId}`);
+        } else {
+          await loadData();
+        }
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to create assignment", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Error creating assignment", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openCreateModal = () => {
     setModalMode("create");
     setEditingId(null);
@@ -273,6 +327,28 @@ function AssignmentMarksContent() {
     setFormTotalMarks(10);
     setFormDueDate("");
     setFormQuestions([{ qNo: 1, text: "", marks: 5 }]);
+    setCloneSectionIds([]);
+    setShowModal(true);
+  };
+
+  const openEditModal = (a: any) => {
+    setModalMode("edit");
+    setEditingId(a.id);
+    setFormTitle(a.title || "");
+    setFormDescription(a.description || "");
+    setFormTotalMarks(a.totalMarks || 10);
+    setFormDueDate(a.dueDate ? a.dueDate.split("T")[0] : "");
+    if (Array.isArray(a.questions) && a.questions.length > 0) {
+      setFormQuestions(
+        a.questions.map((q: any, i: number) => ({
+          qNo: q.qNo || i + 1,
+          text: q.text || (q.subQuestions && q.subQuestions[0]?.questionText) || "",
+          marks: q.marks || 5
+        }))
+      );
+    } else {
+      setFormQuestions([{ qNo: 1, text: "", marks: 5 }]);
+    }
     setCloneSectionIds([]);
     setShowModal(true);
   };
@@ -313,6 +389,27 @@ function AssignmentMarksContent() {
         } else {
           const err = await res.json();
           showToast(err.error || "Failed to create", "error");
+        }
+      } else if (modalMode === "edit" && editingId) {
+        const res = await fetch(`/api/assignments/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: formTitle,
+            description: formDescription,
+            totalMarks: formTotalMarks,
+            dueDate: formDueDate || null,
+            questions: formQuestions.filter(q => q.text.trim().length > 0)
+          })
+        });
+
+        if (res.ok) {
+          showToast("Assignment updated successfully!", "success");
+          setShowModal(false);
+          await loadData();
+        } else {
+          const err = await res.json();
+          showToast(err.error || "Failed to update", "error");
         }
       }
     } catch (err) {
@@ -355,10 +452,18 @@ function AssignmentMarksContent() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={openCreateModal}
+                onClick={createNewAssignmentAndOpenBuilder}
                 className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-purple-700 shadow-sm transition-all"
+                title="Open Dedicated Assignment Builder with formulas & print support"
               >
-                <FaPlus size={10} /> Post Assignment
+                <FaPlus size={10} /> Create Assignment (Dedicated Page)
+              </button>
+              <button
+                onClick={openCreateModal}
+                className="flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100 shadow-sm transition-all"
+                title="Quick post modal"
+              >
+                <FaEdit size={10} /> Quick Modal
               </button>
               <button
                 onClick={() => handleSave(true)}
@@ -481,11 +586,27 @@ function AssignmentMarksContent() {
                     <p className="text-xs text-slate-600 mt-1">{currentA.description}</p>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="flex flex-col items-end gap-2 text-right">
                   <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
                     <FaCalendarAlt className="text-purple-600" />
                     Due Date: {currentA.dueDate ? new Date(currentA.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "No deadline"}
                   </span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={() => router.push(`/faculty/mid-exam/assignment/${currentA.id}`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-sm hover:bg-purple-700 transition-colors"
+                      title="Edit questions, formulas and print draft"
+                    >
+                      <FaEdit size={11} /> Open Builder & Print Draft
+                    </button>
+                    <button
+                      onClick={() => openEditModal(currentA)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors"
+                      title="Quick edit title or due date"
+                    >
+                      Quick Edit
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

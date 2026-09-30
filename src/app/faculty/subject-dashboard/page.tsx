@@ -13,6 +13,20 @@ import LogoSpinner from "@/components/LogoSpinner";
 import StudentProfileModal from "@/components/StudentProfileModal";
 import { formatISTDate } from "@/lib/dateUtils";
 
+const cleanHtmlText = (text: string | null | undefined): string => {
+    if (!text) return "";
+    return text
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+};
+
 export default function FacultySubjectDashboard() {
     const { data: session, status } = useSession();
     const router = useRouter();
@@ -483,7 +497,7 @@ export default function FacultySubjectDashboard() {
 
     // Course Outcomes list
     const coList: string[] = Array.isArray(officialSyllabus?.outcomes) && officialSyllabus.outcomes.length > 0
-        ? officialSyllabus.outcomes.map((o: any) => o.code || o.id || o)
+        ? officialSyllabus.outcomes.map((o: any) => cleanHtmlText(o.code || o.id || o))
         : ["CO1", "CO2", "CO3", "CO4", "CO5"];
 
     // Build CO-PO matrix map
@@ -819,8 +833,8 @@ export default function FacultySubjectDashboard() {
                                     </div>
                                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                                         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Prerequisites</span>
-                                        <span className="text-xs font-semibold text-slate-700 mt-1 block truncate">
-                                            {officialSyllabus.prerequisites || "None"}
+                                        <span className="text-xs font-semibold text-slate-700 mt-1 block truncate" title={cleanHtmlText(officialSyllabus.prerequisites)}>
+                                            {cleanHtmlText(officialSyllabus.prerequisites) || "None"}
                                         </span>
                                     </div>
                                 </div>
@@ -835,7 +849,7 @@ export default function FacultySubjectDashboard() {
                                             {officialSyllabus.objectives.map((obj: string, oIdx: number) => (
                                                 <li key={oIdx} className="text-xs text-slate-700 flex items-start gap-2">
                                                     <span className="text-slate-400 font-bold shrink-0">{oIdx + 1}.</span>
-                                                    <span>{obj}</span>
+                                                    <span>{cleanHtmlText(obj)}</span>
                                                 </li>
                                             ))}
                                         </ul>
@@ -852,10 +866,10 @@ export default function FacultySubjectDashboard() {
                                             {officialSyllabus.outcomes.map((co: any, cIdx: number) => (
                                                 <div key={cIdx} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-start gap-3">
                                                     <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg shrink-0 border border-indigo-200">
-                                                        {co.code || `CO${cIdx + 1}`}
+                                                        {cleanHtmlText(co.code || `CO${cIdx + 1}`)}
                                                     </span>
                                                     <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                                                        {co.description || co}
+                                                        {cleanHtmlText(co.description || co)}
                                                     </p>
                                                 </div>
                                             ))}
@@ -874,10 +888,10 @@ export default function FacultySubjectDashboard() {
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                                                     <div className="flex items-center gap-2.5">
                                                         <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                                                            {unit.name || unit.unit || `UNIT-${uIdx + 1}`}
+                                                            {cleanHtmlText(unit.name || unit.unit || `UNIT-${uIdx + 1}`)}
                                                         </span>
                                                         <h5 className="font-bold text-slate-900 text-sm">
-                                                            {unit.title || "Untitled Unit"}
+                                                            {cleanHtmlText(unit.title || "Untitled Unit")}
                                                         </h5>
                                                     </div>
                                                     {Array.isArray(unit.mappedCOs) && unit.mappedCOs.length > 0 && (
@@ -885,7 +899,7 @@ export default function FacultySubjectDashboard() {
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Mapped:</span>
                                                             {unit.mappedCOs.map((mCo: string, mIdx: number) => (
                                                                 <span key={mIdx} className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                                                                    {mCo}
+                                                                    {cleanHtmlText(mCo)}
                                                                 </span>
                                                             ))}
                                                         </div>
@@ -913,7 +927,7 @@ export default function FacultySubjectDashboard() {
                                                     {officialSyllabus.textbooks.map((tb: string, tbIdx: number) => (
                                                         <li key={tbIdx} className="text-xs text-slate-700 flex items-start gap-2">
                                                             <span className="text-slate-400 font-bold shrink-0">{tbIdx + 1}.</span>
-                                                            <span>{tb}</span>
+                                                            <span>{cleanHtmlText(tb)}</span>
                                                         </li>
                                                     ))}
                                                 </ul>
@@ -928,7 +942,7 @@ export default function FacultySubjectDashboard() {
                                                     {officialSyllabus.referenceBooks.map((rb: string, rbIdx: number) => (
                                                         <li key={rbIdx} className="text-xs text-slate-700 flex items-start gap-2">
                                                             <span className="text-slate-400 font-bold shrink-0">{rbIdx + 1}.</span>
-                                                            <span>{rb}</span>
+                                                            <span>{cleanHtmlText(rb)}</span>
                                                         </li>
                                                     ))}
                                                 </ul>

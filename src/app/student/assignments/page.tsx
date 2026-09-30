@@ -13,6 +13,7 @@ import {
   FaInfoCircle
 } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
+import MathRenderer from "@/components/MathRenderer";
 
 export default function StudentAssignmentsPage() {
   const [loading, setLoading] = useState(true);
@@ -233,27 +234,70 @@ export default function StudentAssignmentsPage() {
 
                   {Array.isArray(selectedAssignment.questions) &&
                   selectedAssignment.questions.length > 0 ? (
-                    <div className="space-y-3">
-                      {selectedAssignment.questions.map((q: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                        >
-                          <div className="flex items-start gap-3">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-xs font-bold text-purple-700">
-                              Q{q.qNo || idx + 1}
-                            </span>
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-slate-800">{q.text}</p>
-                              {q.marks && (
-                                <span className="mt-1 inline-block text-xs font-bold text-slate-400">
-                                  [{q.marks} Marks]
+                    <div className="space-y-4">
+                      {selectedAssignment.questions.map((q: any, idx: number) => {
+                        const hasSubQuestions = Array.isArray(q.subQuestions) && q.subQuestions.length > 0;
+                        return (
+                          <div
+                            key={idx}
+                            className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-3"
+                          >
+                            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-600 text-xs font-bold text-white font-mono">
+                                Q{q.qNo || idx + 1}
+                              </span>
+                              <span className="text-xs font-bold text-slate-800">
+                                Question {q.qNo || idx + 1}
+                              </span>
+                              {q.marks && !hasSubQuestions && (
+                                <span className="ml-auto text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
+                                  {q.marks} Marks
                                 </span>
                               )}
                             </div>
+
+                            {hasSubQuestions ? (
+                              <div className="space-y-2.5 pl-2">
+                                {q.subQuestions.map((sq: any, sIdx: number) => (
+                                  <div
+                                    key={sIdx}
+                                    className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                                  >
+                                    <div className="flex items-start gap-2.5 flex-1">
+                                      <span className="font-mono text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded shrink-0 mt-0.5">
+                                        ({sq.subLabel || String.fromCharCode(97 + sIdx)})
+                                      </span>
+                                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed font-serif flex-1">
+                                        <MathRenderer text={sq.questionText || sq.text || ""} />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                                      {sq.coMapping && (
+                                        <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
+                                          {sq.coMapping}
+                                        </span>
+                                      )}
+                                      {sq.btLevel && (
+                                        <span className="text-[10px] font-mono font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-100">
+                                          {sq.btLevel}
+                                        </span>
+                                      )}
+                                      <span className="text-xs font-extrabold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                        {sq.marks}M
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-xs sm:text-sm text-slate-800 leading-relaxed font-serif pl-2">
+                                <MathRenderer text={q.text || ""} />
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">
