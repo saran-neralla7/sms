@@ -80,14 +80,16 @@ export async function GET(req: NextRequest) {
     const hasActiveExamApplications = pendingFeeApps > 0 || activeUnexpiredSettingsCount > 0;
     const hasFrozenMidPapers = recentPublishedMidCount > 0;
 
-    // 5. Dynamic Real-time Attendance Calculation
+    // 5. Dynamic Real-time Attendance Calculation (Strictly Faculty Academic Attendance, excluding SMS_USER)
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
-    let attendanceRecords = await prisma.attendanceHistory.findMany({
+    const attendanceRecords = await prisma.attendanceHistory.findMany({
       where: {
         date: { gte: startOfDay, lte: endOfDay },
-        status: "Completed"
+        status: "Completed",
+        type: "ACADEMIC",
+        user: { role: { in: ["FACULTY", "HOD"] } }
       },
       select: {
         departmentId: true,
@@ -95,29 +97,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Fallback to latest recorded attendance date if no classes marked yet today (e.g. morning/holiday)
-    if (attendanceRecords.length === 0) {
-      const latest = await prisma.attendanceHistory.findFirst({
-        where: { status: "Completed" },
-        orderBy: { date: "desc" },
-        select: { date: true }
-      });
-      if (latest?.date) {
-        const d = new Date(latest.date);
-        const lStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
-        const lEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-        attendanceRecords = await prisma.attendanceHistory.findMany({
-          where: {
-            date: { gte: lStart, lte: lEnd },
-            status: "Completed"
-          },
-          select: {
-            departmentId: true,
-            details: true
-          }
-        });
-      }
-    }
+    const hasClassesToday = attendanceRecords.length > 0;
 
     let totalPresents = 0;
     let totalAbsents = 0;
@@ -150,7 +130,9 @@ export async function GET(req: NextRequest) {
     }
 
     const totalMarked = totalPresents + totalAbsents;
-    const overallAttendance = totalMarked > 0 ? parseFloat(((totalPresents / totalMarked) * 100).toFixed(1)) : 0;
+    const overallAttendance = (hasClassesToday && totalMarked > 0)
+      ? parseFloat(((totalPresents / totalMarked) * 100).toFixed(1))
+      : 0;
 
     // 6. Department-wise student distribution & real attendance
     const deptStats = await Promise.all(
@@ -162,8 +144,10 @@ export async function GET(req: NextRequest) {
         let deptPct = 0;
         if (dCounts && (dCounts.present + dCounts.absent) > 0) {
           deptPct = parseFloat(((dCounts.present / (dCounts.present + dCounts.absent)) * 100).toFixed(1));
-        } else {
+        } else if (hasClassesToday) {
           deptPct = overallAttendance;
+        } else {
+          deptPct = 0;
         }
         return {
           code: dept.code,
@@ -179,6 +163,8 @@ export async function GET(req: NextRequest) {
         totalStudents,
         totalFaculty,
         overallAttendance,
+        hasClassesToday,
+        classesCountToday: attendanceRecords.length,
         passRate,
       },
       midExams: {

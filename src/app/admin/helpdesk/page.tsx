@@ -20,9 +20,11 @@ import {
   FaPhone,
   FaCheck,
   FaTimes,
-  FaCommentDots
+  FaCommentDots,
+  FaUserSecret
 } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
+import ImpersonationStartModal from "@/components/ImpersonationStartModal";
 
 interface Message {
   id: string;
@@ -96,6 +98,9 @@ export default function AdminHelpdeskPage() {
   const [resolvingModal, setResolvingModal] = useState(false);
   const [resolutionRemarks, setResolutionRemarks] = useState("");
   const [submittingResolution, setSubmittingResolution] = useState(false);
+
+  // Impersonation Modal
+  const [isImpersonateModalOpen, setIsImpersonateModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -622,6 +627,19 @@ export default function AdminHelpdeskPage() {
                           <span>{activeTicket.user.faculty.email}</span>
                         </a>
                       )}
+
+                      {/* Impersonate Faculty Shortcut */}
+                      {activeTicket.user && (
+                        <button
+                          type="button"
+                          onClick={() => setIsImpersonateModalOpen(true)}
+                          className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition shadow-2xs cursor-pointer ml-1"
+                          title="Impersonate this faculty to view or resolve issues directly from their portal"
+                        >
+                          <FaUserSecret size={12} className="text-indigo-600" />
+                          <span>Impersonate</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -766,6 +784,19 @@ export default function AdminHelpdeskPage() {
           </div>
         </div>
       )}
+
+      {/* Impersonate Faculty Modal */}
+      <ImpersonationStartModal
+        isOpen={isImpersonateModalOpen}
+        targetUser={activeTicket?.user ? {
+          id: activeTicket.user.id,
+          username: activeTicket.user.username,
+          name: activeTicket.user.faculty?.empName || activeTicket.user.username,
+          role: activeTicket.user.role
+        } : null}
+        onClose={() => setIsImpersonateModalOpen(false)}
+        onSuccess={() => setIsImpersonateModalOpen(false)}
+      />
     </div>
   );
 }

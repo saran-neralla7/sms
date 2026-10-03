@@ -339,8 +339,16 @@ export default function DashboardPage() {
               {/* Today's Attendance Card */}
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 transition-all hover:border-slate-300">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Today's Attendance</p>
-                <p className="mt-1 text-2xl font-extrabold text-slate-900">{execData.overview?.overallAttendance}%</p>
-                <p className="mt-1 text-[11px] font-medium text-slate-500">{execData.overview?.totalStudents} Active Students</p>
+                <p className="mt-1 text-2xl font-extrabold text-slate-900">
+                  {execData.overview?.hasClassesToday
+                    ? `${execData.overview?.overallAttendance}%`
+                    : "No Classes"}
+                </p>
+                <p className="mt-1 text-[11px] font-medium text-slate-500">
+                  {execData.overview?.hasClassesToday
+                    ? `${execData.overview?.totalStudents} Active Students`
+                    : "No faculty attendance posted today"}
+                </p>
               </div>
 
               {/* MID Pass Rate Card (Only shown if MID marks are frozen) */}
