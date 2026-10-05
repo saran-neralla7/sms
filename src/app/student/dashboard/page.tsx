@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { Student } from "@/types";
 import { motion } from "framer-motion";
-import { FaCalendarAlt, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaLayerGroup, FaAward, FaEnvelope, FaExclamationTriangle } from "react-icons/fa";
+import { FaCalendarAlt, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaLayerGroup, FaAward, FaEnvelope, FaExclamationTriangle, FaEdit, FaCamera, FaLock } from "react-icons/fa";
 import Image from "next/image";
 import AttendanceGraph from "@/components/AttendanceGraph";
+import StudentSelfEditModal from "@/components/StudentSelfEditModal";
 import { formatISTDate } from "@/lib/dateUtils";
 import { useRouter } from "next/navigation";
 
@@ -18,6 +19,7 @@ export default function StudentDashboardPage() {
     const [results, setResults] = useState<any[]>([]);
     const [statsLoading, setStatsLoading] = useState(false);
     const [resultsLoading, setResultsLoading] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
     useEffect(() => {
         fetchStudentMe();
@@ -138,6 +140,15 @@ export default function StudentDashboardPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-2 lg:flex-col lg:items-stretch">
+                            {((student as any)?.editPermissions?.allowProfileEdit || (student as any)?.editPermissions?.allowPhotoEdit) && (
+                                <button
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 bg-red-600 text-white shadow-lg shadow-red-200 hover:bg-red-700 animate-pulse"
+                                >
+                                    <FaEdit />
+                                    <span>Edit Profile & Photo</span>
+                                </button>
+                            )}
                             <TabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")} label="Overview" />
                             <TabButton active={activeTab === "attendance"} onClick={() => setActiveTab("attendance")} label="Attendance" />
                             <TabButton active={activeTab === "results"} onClick={() => setActiveTab("results")} label="Results" />
@@ -156,7 +167,31 @@ export default function StudentDashboardPage() {
             {/* Content Tabs */}
             <div className="min-h-[500px]">
                 {activeTab === "overview" && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                        {((student as any)?.editPermissions?.allowProfileEdit || (student as any)?.editPermissions?.allowPhotoEdit) && (
+                            <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="space-y-1 text-center sm:text-left">
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase tracking-wider">
+                                        <FaEdit size={11} /> Self-Editing Enabled
+                                    </div>
+                                    <h3 className="text-base font-bold text-slate-900">
+                                        You are permitted to update your profile details and upload your picture
+                                    </h3>
+                                    <p className="text-xs text-slate-600">
+                                        Institutional records such as roll number, section, regulation, and parent mobile number remain strictly protected.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-md shadow-red-200 transition-all hover:scale-105"
+                                >
+                                    <FaEdit />
+                                    Update Profile Now
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                         {/* Personal Details */}
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
                             <h3 className="mb-4 text-lg font-bold text-slate-900">Personal Details</h3>
@@ -228,6 +263,7 @@ export default function StudentDashboardPage() {
                                 </div>
                             </div>
                         )}
+                        </div>
                     </motion.div>
                 )}
 
@@ -486,6 +522,18 @@ export default function StudentDashboardPage() {
                     </motion.div>
                 )}
             </div>
+
+            {/* Student Self-Edit Modal */}
+            {student && (
+                <StudentSelfEditModal
+                    isOpen={isEditModalOpen}
+                    onClose={() => setIsEditModalOpen(false)}
+                    student={student}
+                    onSuccess={() => {
+                        fetchStudentMe();
+                    }}
+                />
+            )}
         </div>
     );
 }

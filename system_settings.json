@@ -1,3 +1,479 @@
 {
-  "hideBulkDownload": true
+  "hideBulkDownload": true,
+  "studentEditPermissions": {
+    "globalProfileEdit": false,
+    "globalPhotoEdit": false,
+    "allowedStudentRolls": [
+      "5251401049",
+      "5251401050",
+      "5251401051",
+      "5251401052",
+      "5251401053",
+      "5251401054",
+      "5251401055",
+      "5251401056",
+      "5251401057",
+      "5251401058",
+      "5251401059",
+      "5251401060",
+      "5251401061",
+      "5251411171",
+      "5251411172",
+      "5251411173",
+      "5251411174",
+      "5251411175",
+      "5251411176",
+      "5251411177",
+      "5251411178",
+      "5251411179",
+      "5251411180",
+      "5251411181",
+      "5251411182",
+      "5251411183",
+      "5251411184",
+      "5251411185",
+      "5251411186",
+      "5251411187",
+      "5251411188",
+      "5251411189",
+      "5251411190",
+      "5251411191",
+      "5251411192",
+      "5251411193",
+      "5251412123",
+      "5251412124",
+      "5251412125",
+      "5251412126",
+      "5251412127",
+      "5251412128",
+      "5251412129",
+      "5251412130",
+      "5251412131",
+      "5251412132",
+      "5251412133",
+      "5251412134",
+      "5251412135",
+      "5251412136",
+      "5251412137",
+      "5251421128",
+      "5251421129",
+      "5251421130",
+      "5251421131",
+      "5251421132",
+      "5251421133",
+      "5251421134",
+      "5251421135",
+      "5251421136",
+      "5251421137",
+      "5251421138",
+      "5251421139",
+      "5251421140",
+      "5251421141",
+      "5251421142",
+      "5251431063",
+      "5251431064",
+      "5251431065",
+      "5251431066",
+      "5251431067",
+      "5251431068",
+      "5251431069",
+      "5251431070",
+      "5251431071",
+      "5251431072",
+      "5251431073",
+      "5251431074"
+    ],
+    "rules": {
+      "5251401049": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401050": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401051": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401052": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401053": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401054": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401055": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401056": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401057": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401058": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401059": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401060": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251401061": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411171": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411172": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411173": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411174": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411175": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411176": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411177": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411178": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411179": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411180": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411181": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411182": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411183": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411184": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411185": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411186": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411187": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411188": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411189": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411190": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411191": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411192": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251411193": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412123": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412124": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412125": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412126": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412127": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412128": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412129": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412130": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412131": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412132": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412133": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412134": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412135": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412136": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251412137": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421128": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421129": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421130": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421131": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421132": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421133": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421134": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421135": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421136": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421137": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421138": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421139": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421140": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421141": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251421142": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431063": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431064": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431065": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431066": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431067": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431068": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431069": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431070": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431071": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431072": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431073": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      },
+      "5251431074": {
+        "allowProfileEdit": true,
+        "allowPhotoEdit": true,
+        "grantedAt": "2026-10-05T09:21:35.564Z"
+      }
+    }
+  }
 }

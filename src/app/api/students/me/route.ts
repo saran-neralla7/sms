@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getStudentEffectivePermissions } from "@/lib/student-permissions";
 
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions);
@@ -47,7 +48,12 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Student profile not found" }, { status: 404 });
         }
 
-        return NextResponse.json(student);
+        const editPermissions = await getStudentEffectivePermissions(student.rollNumber);
+
+        return NextResponse.json({
+            ...student,
+            editPermissions
+        });
 
     } catch (error) {
         console.error("Fetch Student Profile Error:", error);

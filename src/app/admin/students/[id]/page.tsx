@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Student } from "@/types";
 import { motion } from "framer-motion";
-import { FaArrowLeft, FaAward, FaCalendarAlt, FaEnvelope, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaEdit, FaLayerGroup } from "react-icons/fa";
+import { FaArrowLeft, FaAward, FaCalendarAlt, FaEnvelope, FaIdCard, FaMapMarkerAlt, FaPhone, FaUser, FaUserGraduate, FaEdit, FaLayerGroup, FaUserShield, FaLock } from "react-icons/fa";
 import Image from "next/image";
 import EditStudentModal from "@/components/EditStudentModal";
 import Modal from "@/components/Modal";
@@ -31,6 +31,43 @@ export default function StudentProfilePage() {
     const [filters, setFilters] = useState({ year: "", semester: "" });
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+
+    // Student Self-Edit Permissions State
+    const [isPermModalOpen, setIsPermModalOpen] = useState(false);
+    const [permAllowProfile, setPermAllowProfile] = useState(true);
+    const [permAllowPhoto, setPermAllowPhoto] = useState(true);
+    const [permAction, setPermAction] = useState<"grant" | "revoke">("grant");
+    const [permSaving, setPermSaving] = useState(false);
+
+    const handleSavePermissions = async () => {
+        if (!student?.rollNumber) return;
+        setPermSaving(true);
+        try {
+            const res = await fetch("/api/admin/student-permissions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    rolls: [student.rollNumber],
+                    action: permAction === "revoke" ? "remove" : "set",
+                    allowProfileEdit: permAction === "revoke" ? false : permAllowProfile,
+                    allowPhotoEdit: permAction === "revoke" ? false : permAllowPhoto
+                })
+            });
+
+            if (res.ok) {
+                alert(`Successfully ${permAction === "revoke" ? "revoked" : "updated"} self-edit permissions for ${student.rollNumber}!`);
+                setIsPermModalOpen(false);
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to update permissions");
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert("Network error updating permissions");
+        } finally {
+            setPermSaving(false);
+        }
+    };
 
     // SMS Logs Modal State
     const [isSmsLogModalOpen, setIsSmsLogModalOpen] = useState(false);
@@ -307,6 +344,21 @@ export default function StudentProfilePage() {
                                     >
                                         <FaEdit className="text-blue-500" />
                                         Edit Profile
+                                    </button>
+                                )}
+                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role) && (
+                                    <button
+                                        onClick={() => {
+                                            setPermAllowProfile(true);
+                                            setPermAllowPhoto(true);
+                                            setPermAction("grant");
+                                            setIsPermModalOpen(true);
+                                        }}
+                                        className="ml-2 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors"
+                                        title="Configure Student Self-Edit Permissions"
+                                    >
+                                        <FaUserShield className="text-indigo-600" />
+                                        Self-Edit Access
                                     </button>
                                 )}
                                 <button
@@ -1076,6 +1128,110 @@ export default function StudentProfilePage() {
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            {/* Student Self-Edit Permissions Modal */}
+            <Modal
+                isOpen={isPermModalOpen}
+                onClose={() => setIsPermModalOpen(false)}
+                title="Manage Student Self-Edit Permissions"
+                maxWidth="max-w-md"
+            >
+                <div className="space-y-5">
+                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Target Student</p>
+                        <p className="text-sm font-bold text-slate-900">
+                            {student?.name} (<span className="font-mono text-indigo-600">{student?.rollNumber}</span>)
+                        </p>
+                    </div>
+
+                    <div className="space-y-3">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                            Permission Action
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPermAction("grant")}
+                                className={`p-3 rounded-xl border text-sm font-bold transition-all ${
+                                    permAction === "grant"
+                                        ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                            >
+                                Grant Edit Access
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPermAction("revoke")}
+                                className={`p-3 rounded-xl border text-sm font-bold transition-all ${
+                                    permAction === "revoke"
+                                        ? "border-red-600 bg-red-50 text-red-700"
+                                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                            >
+                                Lock / Revoke Access
+                            </button>
+                        </div>
+                    </div>
+
+                    {permAction === "grant" && (
+                        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs font-bold text-slate-800 uppercase tracking-wide">Configure Allowed Actions</p>
+
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={permAllowProfile}
+                                    onChange={(e) => setPermAllowProfile(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-semibold text-slate-800 block">Allow Profile Details Edit</span>
+                                    <span className="text-xs text-slate-500 block">Permits updating personal contact info, DOB, parents, caste, etc.</span>
+                                </div>
+                            </label>
+
+                            <label className="flex items-center gap-3 cursor-pointer pt-2 border-t border-slate-100">
+                                <input
+                                    type="checkbox"
+                                    checked={permAllowPhoto}
+                                    onChange={(e) => setPermAllowPhoto(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-semibold text-slate-800 block">Allow Student Photo Upload</span>
+                                    <span className="text-xs text-slate-500 block">Photo will automatically be renamed to student roll number.</span>
+                                </div>
+                            </label>
+                        </div>
+                    )}
+
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                        <FaLock className="shrink-0 mt-0.5" />
+                        <span><strong>Strict Note:</strong> Roll number, section, department, year, regulation, and parent mobile number are permanently locked and cannot be edited by students.</span>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                        <button
+                            type="button"
+                            onClick={() => setIsPermModalOpen(false)}
+                            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSavePermissions}
+                            disabled={permSaving}
+                            className={`px-5 py-2 text-sm font-bold text-white rounded-lg shadow disabled:opacity-50 ${
+                                permAction === "revoke" ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"
+                            }`}
+                        >
+                            {permSaving ? "Saving..." : permAction === "revoke" ? "Revoke Permissions" : "Apply Permissions"}
+                        </button>
+                    </div>
+                </div>
             </Modal>
         </div >
     );

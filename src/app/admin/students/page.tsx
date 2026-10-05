@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Student } from "@/types";
 import Modal from "@/components/Modal";
 import * as XLSX from "xlsx";
-import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup, FaSearch, FaUser } from "react-icons/fa";
+import { FaDownload, FaEdit, FaFileImport, FaPlus, FaTrash, FaUserGraduate, FaCamera, FaTimes, FaPhone, FaBuilding, FaLayerGroup, FaSearch, FaUser, FaUserShield, FaCheckSquare, FaSquare, FaLock } from "react-icons/fa";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { useSession } from "next-auth/react";
 
@@ -57,6 +57,64 @@ export default function StudentsPage() {
     // Bulk Selection State
     const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
     const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
+    // Student Self-Edit Permissions State
+    const [isPermModalOpen, setIsPermModalOpen] = useState(false);
+    const [permTargetRolls, setPermTargetRolls] = useState<string[]>([]);
+    const [permAllowProfile, setPermAllowProfile] = useState(true);
+    const [permAllowPhoto, setPermAllowPhoto] = useState(true);
+    const [permSaving, setPermSaving] = useState(false);
+    const [permAction, setPermAction] = useState<"grant" | "revoke">("grant");
+
+    const openPermissionsModalForSelected = () => {
+        const rolls = students.filter(s => selectedStudentIds.has(s.id)).map(s => s.rollNumber);
+        setPermTargetRolls(rolls);
+        setPermAllowProfile(true);
+        setPermAllowPhoto(true);
+        setPermAction("grant");
+        setIsPermModalOpen(true);
+    };
+
+    const openPermissionsModalForSingle = (student: Student) => {
+        setPermTargetRolls([student.rollNumber]);
+        setPermAllowProfile(true);
+        setPermAllowPhoto(true);
+        setPermAction("grant");
+        setIsPermModalOpen(true);
+    };
+
+    const handleSavePermissions = async () => {
+        if (permTargetRolls.length === 0) return;
+        setPermSaving(true);
+        try {
+            const res = await fetch("/api/admin/student-permissions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    rolls: permTargetRolls,
+                    action: permAction === "revoke" ? "remove" : "set",
+                    allowProfileEdit: permAction === "revoke" ? false : permAllowProfile,
+                    allowPhotoEdit: permAction === "revoke" ? false : permAllowPhoto
+                })
+            });
+
+            if (res.ok) {
+                setStatus({
+                    type: "success",
+                    message: `Successfully ${permAction === "revoke" ? "revoked" : "updated"} edit permissions for ${permTargetRolls.length} student(s)!`
+                });
+                setIsPermModalOpen(false);
+            } else {
+                const data = await res.json();
+                setStatus({ type: "error", message: data.error || "Failed to update permissions" });
+            }
+        } catch (e: any) {
+            console.error(e);
+            setStatus({ type: "error", message: "Network error updating permissions" });
+        } finally {
+            setPermSaving(false);
+        }
+    };
 
     // SMS Logs Modal State
     const [isSmsLogModalOpen, setIsSmsLogModalOpen] = useState(false);
@@ -521,13 +579,13 @@ export default function StudentsPage() {
     // --- STANDARDIZED EXCEL HEADERS ---
     // Single Source of Truth for Column Names (checking aliases for Import)
     const HEADERS = {
-        ROLL_NUMBER: ["Roll Number", "Roll", "rollNumber"],
-        NAME: ["Name", "Student Name", "STUDENT NAME"],
-        PARENT_MOBILE: ["Parent Mobile Number", "Mobile (Parent)", "Mobile", "Phone", "Parent Contact Number", "PARENT CONTACT NUMBER", "parent mobile number"],
-        YEAR: ["Year", "year"],
-        SEMESTER: ["Semester", "Sem", "semester"],
-        SECTION: ["Section", "SectionId", "Sec", "section"],
-        DEPARTMENT: ["Department", "DepartmentId", "Dept", "department"],
+        ROLL_NUMBER: ["Roll Number*", "Roll Number", "Roll*", "Roll", "rollNumber"],
+        NAME: ["Name*", "Name", "Student Name*", "Student Name", "STUDENT NAME"],
+        PARENT_MOBILE: ["Parent Mobile Number*", "Parent Mobile Number", "Mobile (Parent)", "Mobile", "Phone", "Parent Contact Number*", "Parent Contact Number", "PARENT CONTACT NUMBER", "parent mobile number"],
+        YEAR: ["Year*", "Year", "year"],
+        SEMESTER: ["Semester*", "Semester", "Sem*", "Sem", "semester"],
+        SECTION: ["Section*", "Section", "SectionId", "Sec*", "Sec", "section"],
+        DEPARTMENT: ["Department*", "Department", "DepartmentId", "Dept*", "Dept", "department"],
         HALL_TICKET: ["Hall Ticket Number", "Hall Ticket", "HALL TICKET NUMBER"],
         EAMCET_RANK: ["EAMCET Rank", "EAMCET RANK", "Rank"],
         DOB: ["Date of Birth", "DOB", "DATE OF BIRTH"],
@@ -547,7 +605,7 @@ export default function StudentsPage() {
         REIMBURSEMENT: ["Reimbursement", "REIMBURSEMENT"],
         CERTIFICATES_SUBMITTED: ["Certificates Submitted", "CERTIFICATES SUBMITTED"],
         DOMAIN_MAIL: ["Domain Mail ID", "DOMAIN MAIL ID"],
-        BATCH_NAME: ["Batch Name", "BATCH NAME", "Batch"],
+        BATCH_NAME: ["Batch Name*", "Batch Name", "BATCH NAME", "Batch*", "Batch"],
         IS_DETAINED: ["Is Detained", "IS DETAINED"],
         LATERAL_ENTRY: ["Lateral Entry", "LATERAL ENTRY", "Is Lateral"],
         ORIGINAL_BATCH: ["Original Batch", "ORIGINAL BATCH"]
@@ -555,8 +613,18 @@ export default function StudentsPage() {
 
     // Helper to get value from row using multiple aliases
     const getValue = (row: any, aliases: string[]) => {
+        // Direct alias check
         for (const alias of aliases) {
             if (row[alias] !== undefined && row[alias] !== null) return row[alias];
+        }
+        // Fallback: match after stripping whitespace and trailing asterisks
+        const rowKeys = Object.keys(row);
+        for (const alias of aliases) {
+            const cleanAlias = alias.replace(/\*/g, "").trim().toLowerCase();
+            const matchedKey = rowKeys.find(k => k.replace(/\*/g, "").trim().toLowerCase() === cleanAlias);
+            if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
+                return row[matchedKey];
+            }
         }
         return undefined;
     };
@@ -774,20 +842,53 @@ export default function StudentsPage() {
     const downloadSample = () => {
         const headers = [
             {
-                "Roll Number": "21131A0501", "Name": "John Doe", "Parent Mobile Number": "9876543210",
-                "Year": "3", "Semester": "1", "Section": "A", "Department": "CSE",
-                "Hall Ticket Number": "HT123456", "EAMCET Rank": "1000",
-                "Date of Birth": "2003-01-01", "Date of Reporting": "2021-09-01",
-                "Gender": "Male", "Caste": "OC", "Caste Name": "Kapu", "Category": "A",
-                "Admission Type": "Convener", "Father Name": "Father Doe", "Mother Name": "Mother Doe",
-                "Address": "Visakhapatnam, AP", "Student Contact Number": "8888888888",
-                "Email ID": "john.doe@example.com", "Aadhar Number": "123412341234",
-                "ABC ID": "ABC123XYZ", "Reimbursement": "Y", "Certificates Submitted": "Y",
+                "Roll Number*": "21131A0501",
+                "Name*": "John Doe",
+                "Parent Mobile Number*": "9876543210",
+                "Year*": "3",
+                "Semester*": "1",
+                "Section*": "A",
+                "Department*": "CSE",
+                "Batch Name*": "2023-2027",
+                "Hall Ticket Number": "HT123456",
+                "EAMCET Rank": "1000",
+                "Date of Birth": "2003-01-01",
+                "Date of Reporting": "2021-09-01",
+                "Gender": "Male",
+                "Caste": "OC",
+                "Caste Name": "Kapu",
+                "Category": "A",
+                "Admission Type": "Convener",
+                "Father Name": "Father Doe",
+                "Mother Name": "Mother Doe",
+                "Address": "Visakhapatnam, AP",
+                "Student Contact Number": "8888888888",
+                "Email ID": "john.doe@example.com",
+                "Aadhar Number": "123412341234",
+                "ABC ID": "ABC123XYZ",
+                "Reimbursement": "Y",
+                "Certificates Submitted": "Y",
                 "Domain Mail ID": "21131A0501@gvpcdpgc.edu.in",
-                "Batch Name": "2023-2027", "Is Detained": "N", "Lateral Entry": "N", "Original Batch": "2023-2027"
+                "Is Detained": "N",
+                "Lateral Entry": "N",
+                "Original Batch": "2023-2027"
             }
         ];
         const ws = XLSX.utils.json_to_sheet(headers);
+
+        // Apply bold formatting to the header row
+        if (ws["!ref"]) {
+            const range = XLSX.utils.decode_range(ws["!ref"]);
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellAddress = XLSX.utils.encode_col(C) + "1";
+                if (ws[cellAddress]) {
+                    ws[cellAddress].s = {
+                        font: { bold: true, name: "Calibri", sz: 11 }
+                    };
+                }
+            }
+        }
+
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Template");
         XLSX.writeFile(wb, "student_import_template_v4.xlsx");
@@ -939,6 +1040,15 @@ export default function StudentsPage() {
                     {!["FACULTY", "USER"].includes((session?.user as any)?.role) && (
                         <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
                             <FaPlus size={12} /> Add Student
+                        </button>
+                    )}
+
+                    {selectedStudentIds.size > 0 && ["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role) && (
+                        <button
+                            onClick={openPermissionsModalForSelected}
+                            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+                        >
+                            <FaUserShield size={14} /> Student Edit Permissions ({selectedStudentIds.size})
                         </button>
                     )}
 
@@ -1137,6 +1247,15 @@ export default function StudentsPage() {
                                                     >
                                                         <FaEdit size={16} />
                                                     </button>
+                                                    {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes((session?.user as any)?.role) && (
+                                                        <button
+                                                            onClick={() => openPermissionsModalForSingle(student)}
+                                                            className="rounded-md p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                                                            title="Student Edit Permissions"
+                                                        >
+                                                            <FaUserShield size={16} />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => openSmsLogs(student.id)}
                                                         className="rounded-md p-1.5 text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
@@ -1906,6 +2025,119 @@ export default function StudentsPage() {
                             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                         >
                             Close
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Student Self-Edit Permissions Modal */}
+            <Modal
+                isOpen={isPermModalOpen}
+                onClose={() => setIsPermModalOpen(false)}
+                title="Manage Student Self-Edit Permissions"
+                maxWidth="max-w-md"
+            >
+                <div className="space-y-5">
+                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Target Students</p>
+                        <p className="text-sm font-bold text-slate-900">
+                            {permTargetRolls.length === 1 ? (
+                                <>Roll Number: <span className="font-mono text-indigo-600">{permTargetRolls[0]}</span></>
+                            ) : (
+                                <>{permTargetRolls.length} Students Selected</>
+                            )}
+                        </p>
+                        {permTargetRolls.length > 1 && (
+                            <div className="mt-2 max-h-24 overflow-y-auto text-xs font-mono text-slate-600 bg-white p-2 rounded border border-slate-200">
+                                {permTargetRolls.join(", ")}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-3">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                            Permission Action
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPermAction("grant")}
+                                className={`p-3 rounded-xl border text-sm font-bold transition-all ${
+                                    permAction === "grant"
+                                        ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                            >
+                                Grant Edit Access
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPermAction("revoke")}
+                                className={`p-3 rounded-xl border text-sm font-bold transition-all ${
+                                    permAction === "revoke"
+                                        ? "border-red-600 bg-red-50 text-red-700"
+                                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                            >
+                                Lock / Revoke Access
+                            </button>
+                        </div>
+                    </div>
+
+                    {permAction === "grant" && (
+                        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs font-bold text-slate-800 uppercase tracking-wide">Configure Allowed Actions</p>
+
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={permAllowProfile}
+                                    onChange={(e) => setPermAllowProfile(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-semibold text-slate-800 block">Allow Profile Details Edit</span>
+                                    <span className="text-xs text-slate-500 block">Permits updating personal contact info, DOB, parents, caste, etc.</span>
+                                </div>
+                            </label>
+
+                            <label className="flex items-center gap-3 cursor-pointer pt-2 border-t border-slate-100">
+                                <input
+                                    type="checkbox"
+                                    checked={permAllowPhoto}
+                                    onChange={(e) => setPermAllowPhoto(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-semibold text-slate-800 block">Allow Student Photo Upload</span>
+                                    <span className="text-xs text-slate-500 block">Photo will automatically be renamed to student roll number.</span>
+                                </div>
+                            </label>
+                        </div>
+                    )}
+
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                        <FaLock className="shrink-0 mt-0.5" />
+                        <span><strong>Strict Note:</strong> Roll number, section, department, year, regulation, and parent mobile number are permanently locked and cannot be edited by students.</span>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                        <button
+                            type="button"
+                            onClick={() => setIsPermModalOpen(false)}
+                            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSavePermissions}
+                            disabled={permSaving}
+                            className={`px-5 py-2 text-sm font-bold text-white rounded-lg shadow disabled:opacity-50 ${
+                                permAction === "revoke" ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"
+                            }`}
+                        >
+                            {permSaving ? "Saving..." : permAction === "revoke" ? "Revoke Permissions" : "Apply Permissions"}
                         </button>
                     </div>
                 </div>
