@@ -25,7 +25,21 @@ export async function GET(req: NextRequest) {
   }
   if (year) where.year = year;
   if (semester) where.semester = semester;
-  if (sectionId) where.sectionId = sectionId;
+  if (sectionId) {
+    where.OR = [
+      { sectionId: sectionId },
+      { isCommon: true },
+      {
+        subject: {
+          departmentId: departmentId || undefined,
+          OR: [
+            { type: "OPEN_ELECTIVE" },
+            { electiveSlotRelation: { name: { startsWith: "OE" } } }
+          ]
+        }
+      }
+    ];
+  }
   if (subjectId) where.subjectId = subjectId;
   if (examType) where.examType = examType;
 

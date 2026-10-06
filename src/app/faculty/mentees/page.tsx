@@ -43,8 +43,13 @@ interface Mentee {
   attendancePercentage: number;
   healthTier: "SAFE" | "CONDONATION" | "DETENTION";
   backlogsCount: number;
+  mentorId?: string | null;
+  mentorName?: string | null;
+  mentorCode?: string | null;
+  mentorDesignation?: string | null;
   lastCounselingDate?: string;
   lastCounselingRemarks?: string;
+  lastCounselingRecordedBy?: string;
 }
 
 interface SubjectAttendance {
@@ -64,7 +69,8 @@ interface MentoringLog {
   remarks: string;
   actionTaken?: string;
   parentInformed: boolean;
-  faculty: {
+  recordedBy?: string;
+  faculty?: {
     empName: string;
     designation: string;
   };
@@ -77,16 +83,26 @@ export default function FacultyMenteesPage() {
   const [loading, setLoading] = useState(true);
   const [mentees, setMentees] = useState<Mentee[]>([]);
   const [stats, setStats] = useState({ total: 0, safe: 0, condonation: 0, detention: 0 });
+  const [isHOD, setIsHOD] = useState(false);
+  const [departmentFaculties, setDepartmentFaculties] = useState<any[]>([]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTier, setSelectedTier] = useState<string>("ALL");
+  const [selectedMentorFilter, setSelectedMentorFilter] = useState<string>("ALL");
 
   // Detail Modal / Drawer
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [studentDetails, setStudentDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [activeTab, setActiveTab] = useState<"ATTENDANCE" | "MARKS" | "DIARY">("ATTENDANCE");
+  const [selectedResultModal, setSelectedResultModal] = useState<any>(null);
+
+  // Helper for 2-decimal GPA
+  const formatGpa = (val: any) => {
+    if (val === null || val === undefined || isNaN(Number(val))) return "-";
+    return Number(val).toFixed(2);
+  };
 
   // New Counseling Log Form
   const [logCategory, setLogCategory] = useState("ATTENDANCE");
@@ -113,14 +129,20 @@ export default function FacultyMenteesPage() {
     }
   }, [isAllowed]);
 
-  const fetchMentees = async () => {
+  const fetchMentees = async (mentorFilter?: string) => {
     try {
       setLoading(true);
-      const res = await fetch("/api/faculty/mentees");
+      const queryParam = mentorFilter !== undefined ? mentorFilter : selectedMentorFilter;
+      const url = queryParam && queryParam !== "ALL"
+        ? `/api/faculty/mentees?facultyId=${encodeURIComponent(queryParam)}`
+        : "/api/faculty/mentees";
+      const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
         setMentees(json.students || []);
         setStats(json.stats || { total: 0, safe: 0, condonation: 0, detention: 0 });
+        if (json.isHOD !== undefined) setIsHOD(Boolean(json.isHOD));
+        if (json.departmentFaculties) setDepartmentFaculties(json.departmentFaculties);
       }
     } catch (err) {
       console.error("Failed to load mentees:", err);
@@ -240,30 +262,45 @@ export default function FacultyMenteesPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Link
-                href="/faculty"
+                href={isHOD ? "/dashboard" : "/faculty"}
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs"
-                title="Back to Faculty Dashboard"
+                title={isHOD ? "Back to HOD Dashboard" : "Back to Faculty Dashboard"}
               >
                 <FaArrowLeft size={14} />
               </Link>
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-                    My Mentees &bull; Proctoring Portal
+                    {isHOD ? "Department Mentees & Proctoring Oversight" : "My Mentees • Proctoring Portal"}
                   </h1>
-                  <span className="rounded-full bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
-                    Assigned Students
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                    isHOD
+                      ? "bg-purple-100 text-purple-800 border border-purple-200"
+                      : "bg-blue-100 text-blue-800 border border-blue-200"
+                  }`}>
+                    {isHOD ? "HOD Department Control" : "Assigned Students"}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Track assigned student attendance health, mid marks, and log paperless 1-on-1 counseling diary entries.
+                  {isHOD
+                    ? "Monitor all department students, assigned mentors, attendance health, mid marks, and proctoring diaries."
+                    : "Track assigned student attendance health, mid marks, and log paperless 1-on-1 counseling diary entries."}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {isHOD && (
+                <Link
+                  href="/admin/mentors"
+                  className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition"
+                >
+                  <FaUserTie size={12} />
+                  <span>Assign / Manage Mentors</span>
+                </Link>
+              )}
               <button
-                onClick={fetchMentees}
+                onClick={() => fetchMentees()}
                 className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
               >
                 <FaSync className={loading ? "animate-spin text-blue-600" : ""} /> Refresh
@@ -318,7 +355,7 @@ export default function FacultyMenteesPage() {
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs mb-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs mb-6 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="relative flex-1 max-w-md">
               <FaSearch className="absolute left-3.5 top-3 text-slate-400 text-xs" />
@@ -331,7 +368,7 @@ export default function FacultyMenteesPage() {
               />
             </div>
 
-            {/* Filter Buttons */}
+            {/* Attendance Tier Filter Buttons */}
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {[
                 { id: "ALL", label: `All (${mentees.length})` },
@@ -353,6 +390,33 @@ export default function FacultyMenteesPage() {
               ))}
             </div>
           </div>
+
+          {/* HOD Specific: Mentor Filter Dropdown */}
+          {isHOD && departmentFaculties.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+              <div className="flex items-center gap-1.5 font-bold text-slate-600">
+                <FaUserTie className="text-purple-600" />
+                <span>Filter by Mentor:</span>
+              </div>
+              <select
+                value={selectedMentorFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedMentorFilter(val);
+                  fetchMentees(val);
+                }}
+                className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+              >
+                <option value="ALL">All Mentors &amp; Students ({mentees.length})</option>
+                <option value="UNASSIGNED">Unassigned Students</option>
+                {departmentFaculties.map((f: any) => (
+                  <option key={f.id} value={f.id}>
+                    {f.empName} {f.empCode ? `(${f.empCode})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Student Cards Grid */}
@@ -374,9 +438,12 @@ export default function FacultyMenteesPage() {
                 className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs hover:border-blue-300 hover:shadow-xs transition flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2">
+                  <Link
+                    href={`/faculty/mentees/${st.id}`}
+                    className="flex items-start justify-between gap-2 group/header"
+                  >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 font-bold text-blue-700 text-xs overflow-hidden border border-blue-100 shrink-0">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 font-bold text-blue-700 text-xs overflow-hidden border border-blue-100 shrink-0 group-hover/header:border-blue-400 transition">
                         {st.photoUrl ? (
                           <img src={st.photoUrl} alt={st.name} className="h-full w-full object-cover" />
                         ) : (
@@ -384,12 +451,14 @@ export default function FacultyMenteesPage() {
                         )}
                       </div>
                       <div>
-                        <h4 className="text-xs font-black text-slate-900 leading-snug line-clamp-1">{st.name}</h4>
+                        <h4 className="text-xs font-black text-slate-900 leading-snug line-clamp-1 group-hover/header:text-blue-600 transition">
+                          {st.name}
+                        </h4>
                         <p className="text-[11px] font-mono font-bold text-slate-500 mt-0.5">{st.rollNumber}</p>
                       </div>
                     </div>
                     {getTierBadge(st.healthTier, st.attendancePercentage)}
-                  </div>
+                  </Link>
 
                   {/* Section & Department Badges */}
                   <div className="mt-3 flex items-center gap-1.5 flex-wrap text-[10px]">
@@ -402,6 +471,15 @@ export default function FacultyMenteesPage() {
                     {st.backlogsCount > 0 && (
                       <span className="rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 font-bold">
                         ⚠️ {st.backlogsCount} Backlogs
+                      </span>
+                    )}
+                    {isHOD && (
+                      <span className={`rounded-md px-2 py-0.5 font-bold ${
+                        st.mentorName
+                          ? "bg-purple-50 text-purple-700 border border-purple-200/60"
+                          : "bg-amber-50 text-amber-700 border border-amber-200/60"
+                      }`}>
+                        👤 {st.mentorName ? `Mentor: ${st.mentorName}` : "Unassigned"}
                       </span>
                     )}
                   </div>
@@ -447,13 +525,13 @@ export default function FacultyMenteesPage() {
                     <span>Call Parent</span>
                   </a>
 
-                  <button
-                    onClick={() => openStudentModal(st.id)}
+                  <Link
+                    href={`/faculty/mentees/${st.id}`}
                     className="flex-1 rounded-xl bg-blue-600 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 transition shadow-2xs flex items-center justify-center gap-1"
                   >
                     <FaChartLine size={10} />
                     <span>360° Profile &amp; Diary</span>
-                  </button>
+                  </Link>
                 </div>
               </div>
             ))}
@@ -480,12 +558,22 @@ export default function FacultyMenteesPage() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedStudentId(null)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 transition"
-              >
-                <FaTimes size={15} />
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedStudentId && (
+                  <Link
+                    href={`/faculty/mentees/${selectedStudentId}`}
+                    className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 transition"
+                  >
+                    <FaChartLine size={10} /> Full Page
+                  </Link>
+                )}
+                <button
+                  onClick={() => setSelectedStudentId(null)}
+                  className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 transition"
+                >
+                  <FaTimes size={15} />
+                </button>
+              </div>
             </div>
 
             {/* Segmented Tabs */}
@@ -604,13 +692,20 @@ export default function FacultyMenteesPage() {
                                 {studentDetails?.midMarks?.map((m: any, idx: number) => (
                                   <tr key={idx} className="hover:bg-slate-50">
                                     <td className="px-3 py-2 font-bold text-slate-800">
-                                      {m.paper?.subject?.name || "Subject"}
+                                      {m.subjectName || m.paper?.subject?.name || "Subject"}
+                                      {m.subjectCode && <span className="text-[10px] text-slate-400 font-normal ml-1">({m.subjectCode})</span>}
                                     </td>
-                                    <td className="px-3 py-2 text-slate-500">
-                                      {m.paper?.examType === "MID_I" ? "Mid 1" : m.paper?.examType === "MID_II" ? "Mid 2" : (m.paper?.examType || "Mid Exam")}
+                                    <td className="px-3 py-2 text-slate-500 font-medium">
+                                      {m.examType === "MID_I" ? "Mid 1" : m.examType === "MID_II" ? "Mid 2" : (m.examType || "Mid Exam")}
                                     </td>
                                     <td className="px-3 py-2 text-right font-mono font-bold text-blue-600">
-                                      {m.isAbsent ? <span className="text-rose-600">Absent</span> : m.marksObtained ?? "-"}
+                                      {m.isAbsent ? (
+                                        <span className="text-rose-600">Absent</span>
+                                      ) : m.marksObtained !== null && m.marksObtained !== undefined ? (
+                                        `${m.marksObtained} / ${m.totalMarks || 30}`
+                                      ) : (
+                                        "-"
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
@@ -622,17 +717,36 @@ export default function FacultyMenteesPage() {
 
                       {/* Semester Results History */}
                       <div className="pt-2">
-                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Semester Results History</h4>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Semester Results History
+                          </h4>
+                          <span className="text-[11px] text-blue-600 font-semibold">
+                            Click semester card to view subject-wise grades
+                          </span>
+                        </div>
                         {studentDetails?.results?.length === 0 ? (
                           <p className="text-xs text-slate-400 italic py-2">No historical semester results found.</p>
                         ) : (
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             {studentDetails?.results?.map((r: any) => (
-                              <div key={r.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-center">
-                                <span className="text-[10px] font-bold text-slate-500">Year {r.year} Sem {r.semester}</span>
-                                <p className="text-base font-extrabold text-slate-900 mt-0.5">
-                                  SGPA: <span className="text-blue-600">{r.sgpa}</span>
+                              <div
+                                key={r.id}
+                                onClick={() => setSelectedResultModal(r)}
+                                className="cursor-pointer group rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white p-2.5 text-center hover:border-blue-400 hover:shadow-xs transition transform hover:-translate-y-0.5"
+                              >
+                                <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+                                  <span>Yr {r.year} Sem {r.semester}</span>
+                                  <span className="text-blue-600 group-hover:underline">&rarr;</span>
+                                </div>
+                                <p className="text-base font-extrabold text-slate-900">
+                                  SGPA: <span className="text-blue-600 font-mono">{formatGpa(r.sgpa)}</span>
                                 </p>
+                                {r.cgpa && (
+                                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                    CGPA: <span className="font-bold text-slate-700">{formatGpa(r.cgpa)}</span>
+                                  </p>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -759,8 +873,8 @@ export default function FacultyMenteesPage() {
                                   </p>
                                 )}
 
-                                <p className="text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-50">
-                                  Logged by: <span className="font-semibold text-slate-600">{log.faculty?.empName}</span>
+                                <p className="text-[10px] text-slate-500 mt-1 pt-1 border-t border-slate-50 font-semibold">
+                                  {log.recordedBy || (log.faculty?.empName ? `Recorded through ${log.faculty.empName} (Mentor)` : "Recorded through Mentor")}
                                 </p>
                               </div>
                             ))}
@@ -771,6 +885,128 @@ export default function FacultyMenteesPage() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SUBJECT-WISE SEMESTER GRADES */}
+      {selectedResultModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                  <span>Year {selectedResultModal.year} &bull; Semester {selectedResultModal.semester} Grades</span>
+                </h3>
+                <p className="text-xs text-blue-100 font-medium mt-0.5">
+                  {studentDetails?.student?.name} ({studentDetails?.student?.rollNumber})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedResultModal(null)}
+                className="rounded-xl p-1.5 text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <FaTimes size={18} />
+              </button>
+            </div>
+
+            {/* GPA summary bar */}
+            <div className="grid grid-cols-3 divide-x divide-slate-100 bg-slate-50 border-b border-slate-200 text-center py-3">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">SGPA</p>
+                <p className="text-xl font-black text-blue-600 font-mono">
+                  {formatGpa(selectedResultModal.sgpa)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">CGPA</p>
+                <p className="text-xl font-black text-slate-700 font-mono">
+                  {formatGpa(selectedResultModal.cgpa)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Backlogs</p>
+                <p className={`text-xl font-black ${
+                  Array.isArray(selectedResultModal.grades) &&
+                  selectedResultModal.grades.some((g: any) => g.grade === "F")
+                    ? "text-rose-600"
+                    : "text-emerald-600"
+                }`}>
+                  {Array.isArray(selectedResultModal.grades)
+                    ? selectedResultModal.grades.filter((g: any) => g.grade === "F").length
+                    : 0}
+                </p>
+              </div>
+            </div>
+
+            {/* Grades Table */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3">#</th>
+                      <th className="px-4 py-3">Subject / Course</th>
+                      <th className="px-4 py-3 text-center">Grade</th>
+                      <th className="px-4 py-3 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {Array.isArray(selectedResultModal.grades) && selectedResultModal.grades.length > 0 ? (
+                      selectedResultModal.grades.map((item: any, idx: number) => {
+                        const isFail = item.grade === "F" || item.grade === "AB";
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-3 text-slate-400 font-medium">{idx + 1}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-800">
+                              {item.subjectCode || item.subject || `Subject ${idx + 1}`}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-md font-black text-xs ${
+                                isFail
+                                  ? "bg-rose-100 text-rose-700 border border-rose-200"
+                                  : item.grade === "O" || item.grade === "A+"
+                                  ? "bg-purple-100 text-purple-700 border border-purple-200"
+                                  : "bg-blue-100 text-blue-700 border border-blue-200"
+                              }`}>
+                                {item.grade || "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
+                                isFail ? "text-rose-600" : "text-emerald-600"
+                              }`}>
+                                {isFail ? <FaExclamationTriangle size={10} /> : <FaCheckCircle size={10} />}
+                                {isFail ? "Fail" : "Pass"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-slate-400 italic">
+                          No subject-wise grade entries found for this semester.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedResultModal(null)}
+                className="rounded-xl px-5 py-2 text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

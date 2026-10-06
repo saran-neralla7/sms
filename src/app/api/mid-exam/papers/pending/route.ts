@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
             name: true,
             code: true,
             type: true,
+            isElective: true,
+            electiveSlotRelation: { select: { name: true } },
             department: { select: { code: true } }
           }
         },
@@ -47,11 +49,10 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // 2. Get all papers created for this academic year and department
+    // 2. Get all papers created for this academic year and department (across all sections to match open/common electives)
     const papers = await prisma.midExamPaper.findMany({
       where: {
         academicYearId,
-        ...(sectionId && { sectionId }),
         subject: { departmentId },
         ...(year && { year }),
         ...(semester && { semester })
@@ -87,30 +88,49 @@ export async function GET(req: NextRequest) {
 
     // 4. Check if MID_I and MID_II papers exist for each grouped subject-section. If not, add to pending list
     const pendingList: any[] = [];
+    const seenElectivePending = new Set<string>();
+
     for (const [key, val] of groupedMappings.entries()) {
       const [subjectId, sectionId] = key.split("_");
-      const hasMid1 = papers.some(p => p.subjectId === subjectId && p.sectionId === sectionId && p.examType === "MID_I");
-      const hasMid2 = papers.some(p => p.subjectId === subjectId && p.sectionId === sectionId && p.examType === "MID_II");
+      const isElective = val.subject.isElective || 
+        val.subject.type === "OPEN_ELECTIVE" || 
+        val.subject.electiveSlotRelation?.name?.toUpperCase()?.startsWith("OE");
+
+      const hasMid1 = isElective
+        ? papers.some(p => p.subjectId === subjectId && p.examType === "MID_I")
+        : papers.some(p => p.subjectId === subjectId && p.sectionId === sectionId && p.examType === "MID_I");
+
+      const hasMid2 = isElective
+        ? papers.some(p => p.subjectId === subjectId && p.examType === "MID_II")
+        : papers.some(p => p.subjectId === subjectId && p.sectionId === sectionId && p.examType === "MID_II");
 
       const facultyNamesStr = val.faculties.join(", ");
 
       if (!hasMid1) {
-        pendingList.push({
-          id: `${key}-MID_I`,
-          subject: val.subject,
-          section: val.section,
-          facultyName: facultyNamesStr || "Not Assigned",
-          examType: "MID_I"
-        });
+        const pendingKey = isElective ? `${subjectId}-MID_I` : `${key}-MID_I`;
+        if (!seenElectivePending.has(pendingKey)) {
+          if (isElective) seenElectivePending.add(pendingKey);
+          pendingList.push({
+            id: `${key}-MID_I`,
+            subject: val.subject,
+            section: val.section,
+            facultyName: facultyNamesStr || "Not Assigned",
+            examType: "MID_I"
+          });
+        }
       }
       if (!hasMid2) {
-        pendingList.push({
-          id: `${key}-MID_II`,
-          subject: val.subject,
-          section: val.section,
-          facultyName: facultyNamesStr || "Not Assigned",
-          examType: "MID_II"
-        });
+        const pendingKey = isElective ? `${subjectId}-MID_II` : `${key}-MID_II`;
+        if (!seenElectivePending.has(pendingKey)) {
+          if (isElective) seenElectivePending.add(pendingKey);
+          pendingList.push({
+            id: `${key}-MID_II`,
+            subject: val.subject,
+            section: val.section,
+            facultyName: facultyNamesStr || "Not Assigned",
+            examType: "MID_II"
+          });
+        }
       }
     }
 

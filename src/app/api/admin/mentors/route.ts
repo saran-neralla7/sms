@@ -14,14 +14,19 @@ export async function GET(req: NextRequest) {
 
     const user = session.user as any;
     const isGlobal = hasGlobalAccess(user);
+    const isHOD = user.role === "HOD";
 
     // HOD or Global roles allowed
-    if (!isGlobal && user.role !== "HOD") {
+    if (!isGlobal && !isHOD) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
+    if (isHOD && !user.departmentId) {
+      return NextResponse.json({ error: "No department assigned to HOD" }, { status: 400 });
+    }
+
     const { searchParams } = new URL(req.url);
-    const departmentId = searchParams.get("departmentId") || (!isGlobal ? user.departmentId : null);
+    const departmentId = isHOD ? user.departmentId : (searchParams.get("departmentId") || null);
     const year = searchParams.get("year");
     const semester = searchParams.get("semester");
     const sectionId = searchParams.get("sectionId");
@@ -99,13 +104,39 @@ export async function POST(req: NextRequest) {
 
     const user = session.user as any;
     const isGlobal = hasGlobalAccess(user);
+    const isHOD = user.role === "HOD";
 
-    if (!isGlobal && user.role !== "HOD") {
+    if (!isGlobal && !isHOD) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
+    if (isHOD && !user.departmentId) {
+      return NextResponse.json({ error: "No department assigned to HOD" }, { status: 400 });
+    }
+
     const body = await req.json();
-    const { mode, mentorId, studentIds, fromRoll, toRoll, mentorIds, departmentId, sectionId, year } = body;
+    const { mode, mentorId, studentIds, fromRoll, toRoll, mentorIds, sectionId, year } = body;
+    const departmentId = isHOD ? user.departmentId : (body.departmentId || null);
+
+    // If HOD, validate that mentor belongs to HOD's department
+    if (isHOD) {
+      if (mentorId) {
+        const fac = await prisma.faculty.findFirst({
+          where: { id: mentorId, departmentId: user.departmentId }
+        });
+        if (!fac) {
+          return NextResponse.json({ error: "Selected mentor does not belong to your department" }, { status: 400 });
+        }
+      }
+      if (Array.isArray(mentorIds) && mentorIds.length > 0) {
+        const facs = await prisma.faculty.findMany({
+          where: { id: { in: mentorIds }, departmentId: user.departmentId }
+        });
+        if (facs.length !== mentorIds.length) {
+          return NextResponse.json({ error: "One or more selected mentors do not belong to your department" }, { status: 400 });
+        }
+      }
+    }
 
     // Mode 1: By Roll Number Range
     if (mode === "RANGE") {
@@ -139,7 +170,8 @@ export async function POST(req: NextRequest) {
 
       const updateResult = await prisma.student.updateMany({
         where: {
-          id: { in: matchedStudents.map(s => s.id) }
+          id: { in: matchedStudents.map(s => s.id) },
+          ...(isHOD ? { departmentId: user.departmentId } : {})
         },
         data: {
           mentorId
@@ -164,7 +196,8 @@ export async function POST(req: NextRequest) {
 
       const updateResult = await prisma.student.updateMany({
         where: {
-          id: { in: studentIds }
+          id: { in: studentIds },
+          ...(isHOD ? { departmentId: user.departmentId } : {})
         },
         data: {
           mentorId
@@ -189,7 +222,10 @@ export async function POST(req: NextRequest) {
 
       // Sort student IDs consistently
       const studentsToDistribute = await prisma.student.findMany({
-        where: { id: { in: studentIds } },
+        where: {
+          id: { in: studentIds },
+          ...(isHOD ? { departmentId: user.departmentId } : {})
+        },
         select: { id: true, rollNumber: true },
         orderBy: { rollNumber: "asc" }
       });
@@ -205,7 +241,10 @@ export async function POST(req: NextRequest) {
         const chunk = studentsToDistribute.slice(i * chunkSize, (i + 1) * chunkSize);
         if (chunk.length > 0) {
           const res = await prisma.student.updateMany({
-            where: { id: { in: chunk.map(s => s.id) } },
+            where: {
+              id: { in: chunk.map(s => s.id) },
+              ...(isHOD ? { departmentId: user.departmentId } : {})
+            },
             data: { mentorId: mentor }
           });
           totalAssigned += res.count;
@@ -236,8 +275,9 @@ export async function DELETE(req: NextRequest) {
 
     const user = session.user as any;
     const isGlobal = hasGlobalAccess(user);
+    const isHOD = user.role === "HOD";
 
-    if (!isGlobal && user.role !== "HOD") {
+    if (!isGlobal && !isHOD) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -249,7 +289,10 @@ export async function DELETE(req: NextRequest) {
     }
 
     const updateResult = await prisma.student.updateMany({
-      where: { id: { in: studentIds } },
+      where: {
+        id: { in: studentIds },
+        ...(isHOD ? { departmentId: user.departmentId } : {})
+      },
       data: { mentorId: null }
     });
 

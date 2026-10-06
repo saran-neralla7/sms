@@ -102,7 +102,7 @@ export default function StudentDashboardPage() {
                         <div className="shrink-0">
                             <div className="relative mx-auto h-28 w-28 overflow-hidden rounded-2xl border-2 border-white shadow-lg sm:mx-0 sm:h-36 sm:w-36 bg-slate-100">
                                 {student.photoUrl ? (
-                                    <Image src={student.photoUrl} alt={student.name} fill className="object-cover" />
+                                    <img src={student.photoUrl} alt={student.name} className="h-full w-full object-cover" />
                                 ) : (
                                     <div className="flex h-full w-full items-center justify-center text-slate-300">
                                         <FaUser size={48} />

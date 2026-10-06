@@ -2600,13 +2600,15 @@ export default function FacultyMidExamPage() {
 
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center"><LogoSpinner fullScreen={false} /></div>;
 
-  // Group mappings by subject, consolidating open electives
-  const uniqueSubjects = Array.from(new Map(
-    mappings.map(m => {
-      const key = isOpenElective(m.subject) ? m.subject.id : (m.subject.id + m.section.id);
-      return [key, m];
-    })
-  ).values());
+  // Group mappings by subject, consolidating open electives (prefer Section A so papers default to primary section)
+  const uniqueSubjectsMap = new Map<string, Mapping>();
+  for (const m of mappings) {
+    const key = isOpenElective(m.subject) ? m.subject.id : (m.subject.id + m.section.id);
+    if (!uniqueSubjectsMap.has(key)) {
+      uniqueSubjectsMap.set(key, m);
+    }
+  }
+  const uniqueSubjects = Array.from(uniqueSubjectsMap.values());
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 px-4 py-8">

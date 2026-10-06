@@ -125,11 +125,10 @@ export default function StudentProfileModal({ studentId, isOpen, onClose }: Stud
                             <div className="flex flex-col gap-6 sm:flex-row sm:items-center bg-slate-50 p-5 rounded-xl border border-slate-100">
                                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-md mx-auto sm:mx-0">
                                     {student.photoUrl ? (
-                                        <Image
+                                        <img
                                             src={student.photoUrl}
                                             alt={student.name}
-                                            fill
-                                            className="object-cover"
+                                            className="h-full w-full object-cover"
                                         />
                                     ) : (
                                         <div className="flex h-full w-full items-center justify-center bg-slate-200 text-slate-400">

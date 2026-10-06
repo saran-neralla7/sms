@@ -317,11 +317,10 @@ export default function StudentProfilePage() {
                                 onClick={() => student.photoUrl && setIsPhotoModalOpen(true)}
                             >
                                 {student.photoUrl ? (
-                                    <Image
+                                    <img
                                         src={student.photoUrl}
                                         alt={student.name}
-                                        fill
-                                        className="object-cover"
+                                        className="h-full w-full object-cover"
                                     />
                                 ) : (
                                     <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-300">
@@ -957,13 +956,12 @@ export default function StudentProfilePage() {
                 title="Student Photo"
                 maxWidth="max-w-xl"
             >
-                <div className="relative aspect-square w-full overflow-hidden rounded-lg">
+                <div className="relative aspect-square w-full overflow-hidden rounded-lg flex items-center justify-center bg-slate-100">
                     {student.photoUrl && (
-                        <Image
+                        <img
                             src={student.photoUrl}
                             alt={student.name}
-                            fill
-                            className="object-contain"
+                            className="max-h-full max-w-full object-contain rounded"
                         />
                     )}
                 </div>

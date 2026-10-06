@@ -1065,17 +1065,18 @@ model HelpdeskMessage {
 model MentoringLog {
   id             String    @id @default(uuid())
   studentId      String
-  facultyId      String
+  facultyId      String?
   date           DateTime  @default(now())
   category       String    // "ATTENDANCE" | "ACADEMICS" | "BEHAVIORAL" | "PARENT_MEETING" | "CAREER" | "HEALTH" | "GENERAL"
   remarks        String    @db.Text
   actionTaken    String?   @db.Text
   parentInformed Boolean   @default(false)
+  recordedBy     String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  faculty        Faculty   @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  faculty        Faculty?  @relation(fields: [facultyId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([facultyId])

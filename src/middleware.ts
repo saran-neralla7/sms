@@ -42,8 +42,8 @@ export default withAuth(
         const allowedRoles = ["ADMIN", "DIRECTOR", "PRINCIPAL", "HOD"];
         const isGlobalAdmin = allowedRoles.includes(role as string);
 
-        // Allow access to public/student/faculty photos, uploads, cron routes, and university logo
-        if (path.startsWith("/student-photos") || path.startsWith("/api/student-photos") || path.startsWith("/api/faculty-photos") || path.startsWith("/uploads/") || path.startsWith("/api/cron") || path === "/gvpihlr-logo.jpg") {
+        // Allow access to public/student/faculty photos, uploads, mascots, cron routes, and university logo
+        if (path.startsWith("/student-photos") || path.startsWith("/api/student-photos") || path.startsWith("/api/faculty-photos") || path.startsWith("/uploads/") || path.startsWith("/mascots/") || path.startsWith("/api/cron") || path === "/gvpihlr-logo.jpg") {
             return;
         }
 
@@ -109,6 +109,6 @@ export default withAuth(
 
 export const config = {
     matcher: [
-        "/((?!login|api/auth|api/cron|api/upload-photos|api/student-photos|api/faculty-photos|uploads|_next/static|_next/image|favicon.ico|gvplogo.jpg|logo.png|gvp-logo.jpg|gvpihlr-logo.jpg|default-avatar.png|app-icon.jpg|favicon.png|file.svg|globe.svg|next.svg|vercel.svg|window.svg|icon-192.png|icon-512.png|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
+        "/((?!login|api/auth|api/cron|api/upload-photos|api/student-photos|api/faculty-photos|uploads|mascots|_next/static|_next/image|favicon.ico|gvplogo.jpg|logo.png|gvp-logo.jpg|gvpihlr-logo.jpg|default-avatar.png|app-icon.jpg|favicon.png|file.svg|globe.svg|next.svg|vercel.svg|window.svg|icon-192.png|icon-512.png|manifest.webmanifest|manifest.json|sw.js|workbox|icon-|apple-icon|student-photos).*)",
     ],
 };

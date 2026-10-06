@@ -70,6 +70,8 @@ export default function AdminMentorsPage() {
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const user = session?.user as any;
+  const isHOD = user?.role === "HOD";
+  const userDeptId = user?.departmentId;
   const isAllowed = user?.role === "ADMIN" || user?.role === "DIRECTOR" || user?.role === "PRINCIPAL" || user?.role === "HOD";
 
   useEffect(() => {
@@ -79,6 +81,12 @@ export default function AdminMentorsPage() {
       router.push("/dashboard");
     }
   }, [status, isAllowed, router]);
+
+  useEffect(() => {
+    if (isHOD && userDeptId) {
+      setSelectedDept(userDeptId);
+    }
+  }, [isHOD, userDeptId]);
 
   useEffect(() => {
     if (isAllowed) {
@@ -111,7 +119,8 @@ export default function AdminMentorsPage() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (selectedDept !== "ALL") params.set("departmentId", selectedDept);
+      const effectiveDept = isHOD && userDeptId ? userDeptId : selectedDept;
+      if (effectiveDept !== "ALL") params.set("departmentId", effectiveDept);
       if (selectedYear !== "ALL") params.set("year", selectedYear);
       if (selectedSem !== "ALL") params.set("semester", selectedSem);
       if (selectedSection !== "ALL") params.set("sectionId", selectedSection);
@@ -162,7 +171,7 @@ export default function AdminMentorsPage() {
           mentorId: targetMentorId,
           fromRoll,
           toRoll,
-          departmentId: selectedDept,
+          departmentId: isHOD && userDeptId ? userDeptId : selectedDept,
           sectionId: selectedSection,
           year: selectedYear
         })
@@ -304,9 +313,9 @@ export default function AdminMentorsPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Link
-                href="/admin"
+                href={isHOD ? "/dashboard" : "/admin"}
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs"
-                title="Back to Admin Dashboard"
+                title={isHOD ? "Back to Dashboard" : "Back to Admin Dashboard"}
               >
                 <FaArrowLeft size={14} />
               </Link>
@@ -315,12 +324,16 @@ export default function AdminMentorsPage() {
                   <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
                     Mentor-Mentee Allocation Desk
                   </h1>
-                  <span className="rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
-                    Proctoring Control
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                    isHOD ? "bg-blue-100 text-blue-800 border-blue-200" : "bg-indigo-100 text-indigo-800 border-indigo-200"
+                  }`}>
+                    {isHOD ? "HOD Department Control" : "Proctoring Control"}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Assign faculty mentors to students by roll number range, selection, or equal distribution.
+                  {isHOD
+                    ? "Assign department faculty mentors to student batches & proctoring."
+                    : "Assign faculty mentors to students by roll number range, selection, or equal distribution."}
                 </p>
               </div>
             </div>
@@ -359,18 +372,25 @@ export default function AdminMentorsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             {/* Department */}
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Department</label>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                Department {isHOD && <span className="text-indigo-600 font-extrabold">(Locked)</span>}
+              </label>
               <select
-                value={selectedDept}
+                value={isHOD && userDeptId ? userDeptId : selectedDept}
+                disabled={isHOD}
                 onChange={(e) => setSelectedDept(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
+                className={`w-full rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-indigo-500 ${
+                  isHOD ? "bg-slate-100 text-slate-600 cursor-not-allowed font-bold" : "bg-slate-50 text-slate-800"
+                }`}
               >
-                <option value="ALL">All Departments</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.code})
-                  </option>
-                ))}
+                {!isHOD && <option value="ALL">All Departments</option>}
+                {departments
+                  .filter((d) => (!isHOD ? true : d.id === userDeptId))
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code}) {isHOD ? "• Your Department" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
 

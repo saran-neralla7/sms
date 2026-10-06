@@ -13,7 +13,8 @@ import {
   FaCogs,
   FaRupeeSign,
   FaClipboardList,
-  FaChartLine
+  FaChartLine,
+  FaUserTie
 } from "react-icons/fa";
 import DashboardCard from "@/components/DashboardCard";
 import LogoSpinner from "@/components/LogoSpinner";
@@ -188,6 +189,20 @@ export default function DashboardPage() {
         color: "bg-indigo-50 text-indigo-600"
       },
       {
+        title: "Mentee Oversight & Diary",
+        icon: <FaUserGraduate className="h-6 w-6" />,
+        description: "Department-wide proctoring, student attendance health, and 1-on-1 counseling records.",
+        href: "/faculty/mentees",
+        color: "bg-blue-50 text-blue-600"
+      },
+      {
+        title: "Mentor Allocation",
+        icon: <FaUserTie className="h-6 w-6" />,
+        description: "Assign faculty mentors to department student batches with roll number range controls.",
+        href: "/admin/mentors",
+        color: "bg-purple-50 text-purple-600"
+      },
+      {
         title: "System Audit Logs",
         icon: <FaClipboardList className="h-6 w-6" />,
         description: "Inspect system audit trails, logins, mark modifications, and data change history.",
@@ -213,7 +228,7 @@ export default function DashboardPage() {
     const isBSH = role === "HOD" && (session?.user?.username === "hodbsh" || session?.user?.username === "hod-bsh");
     if (role === "HOD") {
       if (isBSH) {
-        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine", "Attendance Analytics", "Syllabus Analytics", "Feedback Analytics"].includes(m.title));
+        modules = modules.filter(m => ["Students", "Faculty", "Time Tables", "Subjects", "Administration", "Leaves Approval", "MID Exam Engine", "Attendance Analytics", "Syllabus Analytics", "Feedback Analytics", "Mentee Oversight & Diary", "Mentor Allocation"].includes(m.title));
       } else {
         modules = modules.filter(m => m.title !== "Administration" && m.title !== "Fees");
       }

@@ -1210,12 +1210,10 @@ export default function StudentsPage() {
                                                 onClick={() => student.photoUrl && setPhotoStudent(student)}
                                             >
                                                 {student.photoUrl ? (
-                                                    <Image
+                                                    <img
                                                         src={student.photoUrl}
                                                         alt={student.name}
-                                                        fill
-                                                        sizes="40px"
-                                                        className="object-cover"
+                                                        className="h-full w-full object-cover"
                                                     />
                                                 ) : (
                                                     <div className="flex h-full w-full items-center justify-center text-slate-300">
@@ -1951,13 +1949,12 @@ export default function StudentsPage() {
                 maxWidth="max-w-xl"
             >
                 <div className="p-4">
-                    <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-slate-100">
+                    <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-slate-100 flex items-center justify-center">
                         {photoStudent?.photoUrl ? (
-                            <Image
+                            <img
                                 src={photoStudent.photoUrl}
                                 alt={photoStudent.name}
-                                fill
-                                className="object-contain"
+                                className="max-h-full max-w-full object-contain rounded"
                             />
                         ) : (
                             <div className="flex h-full w-full items-center justify-center text-slate-400">

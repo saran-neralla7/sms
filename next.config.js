@@ -44,6 +44,9 @@ const nextConfig = {
       bodySizeLimit: '500mb',
     },
   },
+  images: {
+    unoptimized: true,
+  },
 };
 
 module.exports = withPWA(nextConfig);
