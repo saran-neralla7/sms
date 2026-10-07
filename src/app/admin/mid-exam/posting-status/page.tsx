@@ -166,6 +166,39 @@ export default function MidExamPostingStatusPage() {
 
   const filteredYears = getFilteredSections();
 
+  // Group sections by department across all filtered years for 1-department-per-page landscape print
+  const getDepartmentPrintGroups = () => {
+    const deptOrder = ["CIVIL", "CSE", "ECE", "CSM", "MECH", "OE"];
+    const deptLabels: Record<string, string> = {
+      CIVIL: "Civil Engineering",
+      CSE: "Computer Science & Engineering",
+      ECE: "Electronics & Communication Engineering",
+      CSM: "Computer Science & Machine Learning (CSM)",
+      MECH: "Mechanical Engineering",
+      OE: "Open Electives (All Departments)"
+    };
+
+    const deptMap: Record<string, { year: string; section: SectionReport }[]> = {};
+
+    filteredYears.forEach(yGroup => {
+      yGroup.sections.forEach(sec => {
+        const d = sec.dept || "OTHER";
+        if (!deptMap[d]) deptMap[d] = [];
+        deptMap[d].push({ year: yGroup.year, section: sec });
+      });
+    });
+
+    return deptOrder
+      .filter(d => deptMap[d] && deptMap[d].length > 0)
+      .map(d => ({
+        deptCode: d,
+        deptName: deptLabels[d] || d,
+        items: deptMap[d]
+      }));
+  };
+
+  const departmentPrintGroups = getDepartmentPrintGroups();
+
   return (
     <div className="min-h-screen bg-slate-50/80 print:bg-white text-slate-800">
       {/* Top Sticky Header */}
@@ -190,30 +223,6 @@ export default function MidExamPostingStatusPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Print Mode Selector */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs mr-1">
-              <button
-                type="button"
-                onClick={() => setPrintLayout("COMPACT")}
-                className={`px-2.5 py-1 rounded-md font-bold transition ${
-                  printLayout === "COMPACT" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"
-                }`}
-                title="Ultra-compact tables for minimal print pages"
-              >
-                Compact (Minimal Pages)
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintLayout("CARDS")}
-                className={`px-2.5 py-1 rounded-md font-bold transition ${
-                  printLayout === "CARDS" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"
-                }`}
-                title="Standard card layout"
-              >
-                Card Layout
-              </button>
-            </div>
-
             <button
               onClick={fetchData}
               disabled={refreshing}
@@ -221,12 +230,6 @@ export default function MidExamPostingStatusPage() {
             >
               <FaSync className={refreshing ? "animate-spin text-blue-600" : "text-slate-500"} />
               <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-blue-700 transition"
-            >
-              <FaPrint /> Print / Export
             </button>
           </div>
         </div>
@@ -347,31 +350,6 @@ export default function MidExamPostingStatusPage() {
           </div>
         </div>
 
-        {/* PRINT HEADER: Clean institutional report banner visible ONLY when printing */}
-        <div className="hidden print:block mb-4 pb-2 border-b-2 border-black">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-base font-black uppercase tracking-tight text-black">
-                GVP College of Engineering for Women (Autonomous)
-              </h1>
-              <h2 className="text-xs font-bold text-black mt-0.5">
-                Mid-Exam Marks Posting Status Report &bull; Academic Year: {academicYear || "2026-2027"}
-              </h2>
-            </div>
-            <div className="text-right text-[10px] text-black">
-              <p>Generated: {new Date(generatedAt || Date.now()).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
-              <p className="font-bold">Overall: {totalPostedCount}/{totalSubjects} Posted ({overallPercentage}%)</p>
-            </div>
-          </div>
-          {/* Print Summary Compact Strip */}
-          <div className="mt-2 grid grid-cols-4 border border-black text-[10px] text-center font-bold divide-x divide-black bg-slate-100">
-            <div className="py-1">Total Subjects: {totalSubjects}</div>
-            <div className="py-1 text-emerald-800">Posted: {totalPostedCount} ({overallPercentage}%)</div>
-            <div className="py-1 text-amber-800">Draft Only: {totalDraftCount}</div>
-            <div className="py-1 text-rose-800">Pending: {totalNotPostedCount} ({100 - overallPercentage}%)</div>
-          </div>
-        </div>
-
         {/* Section-Wise Side-by-Side Cards (Screen View & Cards Print View) */}
         {filteredYears.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
@@ -381,95 +359,123 @@ export default function MidExamPostingStatusPage() {
           </div>
         ) : (
           <>
-            {/* COMPACT PRINT VIEW: High-density tabular layout designed to fit in minimal pages */}
+            {/* LANDSCAPE 1-DEPARTMENT-PER-PAGE PRINT VIEW: Clean black & white tables */}
             <div className={`space-y-4 ${printLayout === "COMPACT" ? "print:block" : "print:hidden"} hidden`}>
-              {filteredYears.map(yearGroup => (
-                <div key={`compact-${yearGroup.year}`} className="print-year-block">
-                  <div className="bg-black text-white text-[11px] font-black uppercase px-2.5 py-1 tracking-wider flex items-center justify-between">
-                    <span>{yearGroup.year === "4" ? "4th Year 1st Semester" : "3rd Year 1st Semester"}</span>
-                    <span className="text-[10px] font-normal">{yearGroup.sections.length} Sections</span>
-                  </div>
+              {departmentPrintGroups.map((dGroup, dIdx) => {
+                // Compute totals for this department
+                let deptPosted = 0;
+                let deptTotal = 0;
+                dGroup.items.forEach(it => {
+                  deptPosted += it.section.postedMarks.length;
+                  deptTotal += it.section.postedMarks.length + it.section.notPostedMarks.length;
+                });
+                const deptPct = deptTotal > 0 ? Math.round((deptPosted / deptTotal) * 100) : 0;
 
-                  <div className="mt-2 space-y-3">
-                    {yearGroup.sections.map(sec => {
-                      const totalInSec = sec.postedMarks.length + sec.notPostedMarks.length;
-                      const secPct = totalInSec > 0 ? Math.round((sec.postedMarks.length / totalInSec) * 100) : 0;
-                      const allSubjects = [
-                        ...sec.postedMarks.map(s => ({ ...s, isPosted: true })),
-                        ...sec.notPostedMarks.map(s => ({ ...s, isPosted: false }))
-                      ].sort((a, b) => a.code.localeCompare(b.code));
+                return (
+                  <div
+                    key={`dept-page-${dGroup.deptCode}`}
+                    className="print-dept-page mb-6 pb-4"
+                    style={{ pageBreakAfter: dIdx < departmentPrintGroups.length - 1 ? "always" : "auto" }}
+                  >
+                    {/* Institutional Header with Department Banner */}
+                    <div className="pb-1 mb-2.5 border-b-2 border-black flex items-center justify-between">
+                      <div>
+                        <h1 className="text-[12pt] font-black uppercase text-black tracking-tight leading-tight">
+                          GVP College of Engineering for Women (Autonomous)
+                        </h1>
+                        <h2 className="text-[10pt] font-bold text-black mt-0.5">
+                          Department: <span className="underline">{dGroup.deptName}</span> &bull; Mid-Exam Posting Status &bull; AY: {academicYear || "2026-2027"}
+                        </h2>
+                      </div>
+                      <div className="text-right text-[8.5pt] text-black leading-tight">
+                        <p>Date: {new Date(generatedAt || Date.now()).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</p>
+                        <p className="font-bold text-[9pt]">Dept Status: {deptPosted}/{deptTotal} Posted ({deptPct}%)</p>
+                      </div>
+                    </div>
 
-                      return (
-                        <div key={`tbl-${sec.id}`} className="print-section-block border border-black overflow-hidden break-inside-avoid mb-2.5">
-                          {/* Compact Section Header */}
-                          <div className="bg-slate-200 px-2 py-1 flex items-center justify-between text-[10px] font-bold border-b border-black">
-                            <span className="text-black uppercase">
-                              [{sec.dept}] {sec.title}
-                            </span>
-                            <span className="text-black">
-                              Posted: {sec.postedMarks.length}/{totalInSec} ({secPct}%)
-                            </span>
+                    {/* Multi-column layout: side-by-side sections or single section with fixed width tables */}
+                    <div className="print-dept-grid">
+                      {dGroup.items.map(({ year, section: sec }) => {
+                        const totalInSec = sec.postedMarks.length + sec.notPostedMarks.length;
+                        const allSubjects = [
+                          ...sec.postedMarks.map(s => ({ ...s, isPosted: true })),
+                          ...sec.notPostedMarks.map(s => ({ ...s, isPosted: false }))
+                        ].sort((a, b) => a.code.localeCompare(b.code));
+
+                        return (
+                          <div key={`print-sec-${sec.id}`} className="print-section-block">
+                            {/* Plain Section Header */}
+                            <div className="section-title-bar">
+                              <span>
+                                {sec.title} ({year === "4" ? "4-1" : "3-1"})
+                              </span>
+                              <span>
+                                {sec.postedMarks.length}/{totalInSec} posted
+                              </span>
+                            </div>
+
+                            {/* Dense Fixed-Layout Table with explicit column widths */}
+                            <table className="print-table">
+                              <colgroup>
+                                <col style={{ width: "5%" }} />
+                                <col style={{ width: "17%" }} />
+                                <col style={{ width: "38%" }} />
+                                <col style={{ width: "10%" }} />
+                                <col style={{ width: "18%" }} />
+                                <col style={{ width: "12%" }} />
+                              </colgroup>
+                              <thead>
+                                <tr>
+                                  <th className="text-center">#</th>
+                                  <th>Code</th>
+                                  <th>Subject Name</th>
+                                  <th className="text-center">Type</th>
+                                  <th>Faculty</th>
+                                  <th className="text-center">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {allSubjects.map((sub, idx) => {
+                                  const isDraft = sub.statusType === "DRAFT_ONLY";
+                                  const isPaperCreated = sub.statusType === "PAPER_CREATED";
+
+                                  return (
+                                    <tr key={idx}>
+                                      <td className="text-center font-mono">{idx + 1}</td>
+                                      <td className="font-mono font-bold">{sub.code}</td>
+                                      <td>
+                                        <div className="cell-break">
+                                          {sub.name}
+                                          {sub.isOpenElective && <span className="oe-tag"> (OE)</span>}
+                                        </div>
+                                      </td>
+                                      <td className="text-center">{sub.type}</td>
+                                      <td>
+                                        <div className="cell-break">{sub.faculty}</div>
+                                      </td>
+                                      <td className="text-center">
+                                        {sub.isPosted ? (
+                                          "Posted"
+                                        ) : isDraft ? (
+                                          "Draft Only"
+                                        ) : isPaperCreated ? (
+                                          "0 Marks"
+                                        ) : (
+                                          "Not Started"
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
-
-                          {/* Dense Table */}
-                          <table className="w-full text-left text-[9px] border-collapse">
-                            <thead>
-                              <tr className="bg-slate-100 border-b border-black text-black font-bold uppercase text-[8.5px]">
-                                <th className="p-1 w-6 text-center border-r border-black">#</th>
-                                <th className="p-1 w-20 border-r border-black">Code</th>
-                                <th className="p-1 border-r border-black">Subject / Course Name</th>
-                                <th className="p-1 w-12 border-r border-black text-center">Type</th>
-                                <th className="p-1 w-44 border-r border-black">Faculty In-charge</th>
-                                <th className="p-1 w-24 border-r border-black text-center">Status</th>
-                                <th className="p-1 w-14 text-right">Count</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-black/30">
-                              {allSubjects.map((sub, idx) => {
-                                const isDraft = sub.statusType === "DRAFT_ONLY";
-                                const isPaperCreated = sub.statusType === "PAPER_CREATED";
-
-                                return (
-                                  <tr key={idx} className={sub.isPosted ? "bg-white" : isDraft ? "bg-amber-50/70" : "bg-rose-50/60"}>
-                                    <td className="p-1 text-center font-mono border-r border-black text-black">{idx + 1}</td>
-                                    <td className="p-1 font-mono font-bold border-r border-black text-black whitespace-nowrap">{sub.code}</td>
-                                    <td className="p-1 font-medium border-r border-black text-black leading-tight">
-                                      {sub.name}
-                                      {sub.isOpenElective && (
-                                        <span className="ml-1 text-[7.5px] font-black uppercase text-purple-900 border border-purple-400 px-1 rounded-2xs">OE</span>
-                                      )}
-                                    </td>
-                                    <td className="p-1 text-center font-mono border-r border-black text-black">{sub.type}</td>
-                                    <td className="p-1 border-r border-black text-black font-semibold truncate max-w-[170px]">{sub.faculty}</td>
-                                    <td className="p-1 text-center font-bold border-r border-black whitespace-nowrap">
-                                      {sub.isPosted ? (
-                                        <span className="text-emerald-900">✓ Posted</span>
-                                      ) : isDraft ? (
-                                        <span className="text-amber-900">⚠ Draft Only</span>
-                                      ) : isPaperCreated ? (
-                                        <span className="text-rose-900">✗ 0 Marks</span>
-                                      ) : (
-                                        <span className="text-slate-700">✗ Not Started</span>
-                                      )}
-                                    </td>
-                                    <td className="p-1 text-right font-mono font-bold text-black whitespace-nowrap">
-                                      {sub.isPosted
-                                        ? sub.submittedCount || "-"
-                                        : isDraft
-                                        ? `${sub.draftCount || 0} draft`
-                                        : "-"}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* SCREEN VIEW / CARDS PRINT VIEW */}
@@ -682,38 +688,115 @@ export default function MidExamPostingStatusPage() {
         )}
       </main>
 
-      {/* Global Print Style overrides to ensure minimal printed pages */}
+      {/* Global Print Style overrides for Landscape 1-Dept-Per-Page layout */}
       <style jsx global>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 8mm 8mm 8mm 8mm;
+            size: A4 landscape;
+            margin: 5mm 5mm 5mm 5mm;
+          }
+          *, *::before, *::after {
+            color: #000 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
           }
           body {
             background: #fff !important;
             color: #000 !important;
-            font-size: 9px !important;
-            line-height: 1.2 !important;
+            font-size: 8pt !important;
+            line-height: 1.15 !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
           }
-          .print\\:hidden {
+          .print\\:hidden,
+          [class*="GvpSahayak"],
+          [id*="mascot"],
+          [class*="mascot"] {
             display: none !important;
           }
           .print\\:block {
             display: block !important;
           }
+          .print-dept-page {
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .print-dept-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+          .print-dept-grid {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            gap: 12px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .print-section-block {
+            flex: 1 1 0% !important;
+            min-width: 0 !important;
+            border: 1px solid #000 !important;
+            box-sizing: border-box !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .section-title-bar {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            background: #f1f5f9 !important;
+            border-bottom: 1px solid #000 !important;
+            padding: 2px 5px !important;
+            font-size: 8.5pt !important;
+            font-weight: bold !important;
+          }
+          .print-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            font-size: 7.5pt !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .print-table thead {
+            display: table-header-group !important;
+          }
+          .print-table tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .print-table th,
+          .print-table td {
+            border: 1px solid #000 !important;
+            padding: 1.5px 3px !important;
+            vertical-align: middle !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          .print-table th {
+            font-weight: bold !important;
+            background: #f8fafc !important;
+            font-size: 7.5pt !important;
+          }
+          .cell-break {
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: break-word !important;
+            line-height: 1.1 !important;
+            font-size: 7.5pt !important;
+          }
+          .oe-tag {
+            font-weight: bold !important;
+            font-size: 7pt !important;
+          }
           .break-inside-avoid {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-          }
-          table {
-            page-break-inside: auto !important;
-          }
-          tr {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-          thead {
-            display: table-header-group !important;
           }
         }
       `}</style>

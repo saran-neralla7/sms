@@ -386,7 +386,7 @@ export default function GvpSahayakWidget() {
         }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className="fixed bottom-2.5 right-2.5 sm:bottom-5 sm:right-5 z-40 select-none cursor-grab active:cursor-grabbing flex flex-col items-center"
+        className="fixed bottom-2.5 right-2.5 sm:bottom-5 sm:right-5 z-40 select-none cursor-grab active:cursor-grabbing flex flex-col items-center print:hidden"
       >
         {/* Floating Idle Thought / Tip Bubble */}
         <AnimatePresence>
