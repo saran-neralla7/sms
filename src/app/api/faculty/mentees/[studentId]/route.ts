@@ -156,7 +156,7 @@ export async function GET(
       const stats = subjectAttendance[sub.id] || { total: 0, attended: 0 };
       overallTotal += stats.total;
       overallAttended += stats.attended;
-      const pct = stats.total > 0 ? Math.round((stats.attended / stats.total) * 1000) / 10 : 100;
+      const pct = stats.total > 0 ? Math.round((stats.attended / stats.total) * 1000) / 10 : 0;
       return {
         id: sub.id,
         name: sub.name,
@@ -168,12 +168,16 @@ export async function GET(
       };
     });
 
-    const overallPercentage = overallTotal > 0 ? Math.round((overallAttended / overallTotal) * 1000) / 10 : 100;
-    let healthTier: "SAFE" | "CONDONATION" | "DETENTION" = "SAFE";
-    if (overallPercentage < 65) {
-      healthTier = "DETENTION";
-    } else if (overallPercentage < 75) {
-      healthTier = "CONDONATION";
+    const overallPercentage = overallTotal > 0 ? Math.round((overallAttended / overallTotal) * 1000) / 10 : 0;
+    let healthTier: "SAFE" | "CONDONATION" | "DETENTION" | "NO_CLASSES" = "NO_CLASSES";
+    if (overallTotal > 0) {
+      if (overallPercentage < 65) {
+        healthTier = "DETENTION";
+      } else if (overallPercentage < 75) {
+        healthTier = "CONDONATION";
+      } else {
+        healthTier = "SAFE";
+      }
     }
 
     // Fetch and aggregate Mid Exam Marks (clean subject-level aggregation)

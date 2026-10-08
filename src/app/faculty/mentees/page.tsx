@@ -41,7 +41,7 @@ interface Mentee {
   totalClasses: number;
   attendedClasses: number;
   attendancePercentage: number;
-  healthTier: "SAFE" | "CONDONATION" | "DETENTION";
+  healthTier: "SAFE" | "CONDONATION" | "DETENTION" | "NO_CLASSES";
   backlogsCount: number;
   mentorId?: string | null;
   mentorName?: string | null;
@@ -82,14 +82,19 @@ export default function FacultyMenteesPage() {
 
   const [loading, setLoading] = useState(true);
   const [mentees, setMentees] = useState<Mentee[]>([]);
-  const [stats, setStats] = useState({ total: 0, safe: 0, condonation: 0, detention: 0 });
+  const [stats, setStats] = useState({ total: 0, safe: 0, condonation: 0, detention: 0, noClasses: 0 });
   const [isHOD, setIsHOD] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDept, setSelectedDept] = useState<string>("ALL");
   const [departmentFaculties, setDepartmentFaculties] = useState<any[]>([]);
 
-  // Filters
+  // Filters & Pagination
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTier, setSelectedTier] = useState<string>("ALL");
   const [selectedMentorFilter, setSelectedMentorFilter] = useState<string>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 48;
 
   // Detail Modal / Drawer
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -125,23 +130,44 @@ export default function FacultyMenteesPage() {
 
   useEffect(() => {
     if (isAllowed) {
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const qFac = urlParams.get("facultyId");
+        const qDept = urlParams.get("departmentId");
+        if (qDept) setSelectedDept(qDept);
+        if (qFac) {
+          setSelectedMentorFilter(qFac);
+          fetchMentees(qDept || "ALL", qFac);
+          return;
+        }
+        if (qDept) {
+          fetchMentees(qDept, "ALL");
+          return;
+        }
+      }
       fetchMentees();
     }
   }, [isAllowed]);
 
-  const fetchMentees = async (mentorFilter?: string) => {
+  const fetchMentees = async (deptFilter?: string, mentorFilter?: string) => {
     try {
       setLoading(true);
-      const queryParam = mentorFilter !== undefined ? mentorFilter : selectedMentorFilter;
-      const url = queryParam && queryParam !== "ALL"
-        ? `/api/faculty/mentees?facultyId=${encodeURIComponent(queryParam)}`
-        : "/api/faculty/mentees";
+      const d = deptFilter !== undefined ? deptFilter : selectedDept;
+      const m = mentorFilter !== undefined ? mentorFilter : selectedMentorFilter;
+
+      const params = new URLSearchParams();
+      if (d && d !== "ALL") params.set("departmentId", d);
+      if (m && m !== "ALL") params.set("facultyId", m);
+
+      const url = params.toString() ? `/api/faculty/mentees?${params.toString()}` : "/api/faculty/mentees";
       const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
         setMentees(json.students || []);
-        setStats(json.stats || { total: 0, safe: 0, condonation: 0, detention: 0 });
+        setStats(json.stats || { total: 0, safe: 0, condonation: 0, detention: 0, noClasses: 0 });
         if (json.isHOD !== undefined) setIsHOD(Boolean(json.isHOD));
+        if (json.isAdmin !== undefined) setIsAdmin(Boolean(json.isAdmin));
+        if (json.departments) setDepartments(json.departments);
         if (json.departmentFaculties) setDepartmentFaculties(json.departmentFaculties);
       }
     } catch (err) {
@@ -231,8 +257,17 @@ export default function FacultyMenteesPage() {
     return true;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredMentees.length / PAGE_SIZE));
+  const paginatedMentees = filteredMentees.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const getTierBadge = (tier: string, pct: number) => {
     switch (tier) {
+      case "NO_CLASSES":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+            No Classes Held
+          </span>
+        );
       case "SAFE":
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
@@ -262,27 +297,35 @@ export default function FacultyMenteesPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Link
-                href={isHOD ? "/dashboard" : "/faculty"}
+                href={isHOD || isAdmin ? "/dashboard" : "/faculty"}
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs"
-                title={isHOD ? "Back to HOD Dashboard" : "Back to Faculty Dashboard"}
+                title={isHOD || isAdmin ? "Back to Dashboard" : "Back to Faculty Dashboard"}
               >
                 <FaArrowLeft size={14} />
               </Link>
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-                    {isHOD ? "Department Mentees & Proctoring Oversight" : "My Mentees • Proctoring Portal"}
+                    {isAdmin
+                      ? "Campus Mentees & Proctoring Oversight"
+                      : isHOD
+                      ? "Department Mentees & Proctoring Oversight"
+                      : "My Mentees • Proctoring Portal"}
                   </h1>
                   <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                    isHOD
+                    isAdmin
+                      ? "bg-blue-100 text-blue-800 border border-blue-200"
+                      : isHOD
                       ? "bg-purple-100 text-purple-800 border border-purple-200"
-                      : "bg-blue-100 text-blue-800 border border-blue-200"
+                      : "bg-emerald-100 text-emerald-800 border border-emerald-200"
                   }`}>
-                    {isHOD ? "HOD Department Control" : "Assigned Students"}
+                    {isAdmin ? "Admin Campus Oversight" : isHOD ? "HOD Department Control" : "Assigned Students"}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {isHOD
+                  {isAdmin
+                    ? "Monitor all campus students across departments, mentor allocations, attendance health, and proctoring diaries."
+                    : isHOD
                     ? "Monitor all department students, assigned mentors, attendance health, mid marks, and proctoring diaries."
                     : "Track assigned student attendance health, mid marks, and log paperless 1-on-1 counseling diary entries."}
                 </p>
@@ -290,7 +333,7 @@ export default function FacultyMenteesPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {isHOD && (
+              {(isHOD || isAdmin) && (
                 <Link
                   href="/admin/mentors"
                   className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition"
@@ -374,7 +417,8 @@ export default function FacultyMenteesPage() {
                 { id: "ALL", label: `All (${mentees.length})` },
                 { id: "SAFE", label: `Safe (${stats.safe})` },
                 { id: "CONDONATION", label: `Condonation (${stats.condonation})` },
-                { id: "DETENTION", label: `Detention (${stats.detention})` }
+                { id: "DETENTION", label: `Detention (${stats.detention})` },
+                ...(stats.noClasses > 0 ? [{ id: "NO_CLASSES", label: `No Classes (${stats.noClasses})` }] : [])
               ].map((btn) => (
                 <button
                   key={btn.id}
@@ -391,30 +435,61 @@ export default function FacultyMenteesPage() {
             </div>
           </div>
 
-          {/* HOD Specific: Mentor Filter Dropdown */}
-          {isHOD && departmentFaculties.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
-              <div className="flex items-center gap-1.5 font-bold text-slate-600">
-                <FaUserTie className="text-purple-600" />
-                <span>Filter by Mentor:</span>
-              </div>
-              <select
-                value={selectedMentorFilter}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedMentorFilter(val);
-                  fetchMentees(val);
-                }}
-                className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
-              >
-                <option value="ALL">All Mentors &amp; Students ({mentees.length})</option>
-                <option value="UNASSIGNED">Unassigned Students</option>
-                {departmentFaculties.map((f: any) => (
-                  <option key={f.id} value={f.id}>
-                    {f.empName} {f.empCode ? `(${f.empCode})` : ""}
-                  </option>
-                ))}
-              </select>
+          {/* Admin & HOD Filter Controls */}
+          {(isHOD || isAdmin) && (
+            <div className="flex flex-wrap items-center gap-4 pt-2.5 border-t border-slate-100 text-xs">
+              {/* Department Filter for Admin */}
+              {isAdmin && departments.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-700">🏢 Department:</span>
+                  <select
+                    value={selectedDept}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedDept(val);
+                      setSelectedMentorFilter("ALL");
+                      setCurrentPage(1);
+                      fetchMentees(val, "ALL");
+                    }}
+                    className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                  >
+                    <option value="ALL">All Departments (Entire Campus)</option>
+                    {departments.map((d: any) => (
+                      <option key={d.id} value={d.id}>
+                        {d.code} - {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Mentor Filter Dropdown */}
+              {departmentFaculties.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 font-bold text-slate-700">
+                    <FaUserTie className="text-purple-600" />
+                    <span>Mentor:</span>
+                  </div>
+                  <select
+                    value={selectedMentorFilter}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedMentorFilter(val);
+                      setCurrentPage(1);
+                      fetchMentees(selectedDept, val);
+                    }}
+                    className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                  >
+                    <option value="ALL">All Mentors &amp; Students ({mentees.length})</option>
+                    <option value="UNASSIGNED">Unassigned Students</option>
+                    {departmentFaculties.map((f: any) => (
+                      <option key={f.id} value={f.id}>
+                        {f.empName} {f.empCode ? `(${f.empCode})` : ""} {f.department?.code ? `• ${f.department.code}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -432,7 +507,7 @@ export default function FacultyMenteesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredMentees.map((st) => (
+            {paginatedMentees.map((st) => (
               <div
                 key={st.id}
                 className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs hover:border-blue-300 hover:shadow-xs transition flex flex-col justify-between"
@@ -495,13 +570,15 @@ export default function FacultyMenteesPage() {
                     <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
-                          st.healthTier === "SAFE"
+                          st.healthTier === "NO_CLASSES"
+                            ? "bg-slate-300"
+                            : st.healthTier === "SAFE"
                             ? "bg-emerald-500"
                             : st.healthTier === "CONDONATION"
                             ? "bg-amber-500"
                             : "bg-rose-500"
                         }`}
-                        style={{ width: `${Math.min(100, st.attendancePercentage)}%` }}
+                        style={{ width: `${st.healthTier === "NO_CLASSES" ? 0 : Math.min(100, st.attendancePercentage)}%` }}
                       ></div>
                     </div>
                   </div>
@@ -535,6 +612,42 @@ export default function FacultyMenteesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+            <p className="text-xs font-semibold text-slate-500">
+              Showing <span className="font-bold text-slate-800">{(currentPage - 1) * PAGE_SIZE + 1}</span> to{" "}
+              <span className="font-bold text-slate-800">{Math.min(currentPage * PAGE_SIZE, filteredMentees.length)}</span> of{" "}
+              <span className="font-bold text-slate-800">{filteredMentees.length}</span> students
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  setCurrentPage((p) => Math.max(1, p - 1));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                disabled={currentPage === 1}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-1 text-xs font-bold text-slate-600 px-2">
+                Page {currentPage} of {totalPages}
+              </div>
+              <button
+                onClick={() => {
+                  setCurrentPage((p) => Math.min(totalPages, p + 1));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                disabled={currentPage === totalPages}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </main>

@@ -336,38 +336,60 @@ export default function StudentProfilePage() {
                                     <h1 className="text-2xl font-bold text-slate-900">{student.name}</h1>
                                     <p className="font-mono text-lg text-blue-600">{student.rollNumber}</p>
                                 </div>
-                                {canEdit && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {canEdit && (
+                                        <button
+                                            onClick={() => setIsEditModalOpen(true)}
+                                            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+                                        >
+                                            <FaEdit className="text-blue-500" />
+                                            Edit Profile
+                                        </button>
+                                    )}
+                                    {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role) && (
+                                        <button
+                                            onClick={() => {
+                                                setPermAllowProfile(true);
+                                                setPermAllowPhoto(true);
+                                                setPermAction("grant");
+                                                setIsPermModalOpen(true);
+                                            }}
+                                            className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors"
+                                            title="Configure Student Self-Edit Permissions"
+                                        >
+                                            <FaUserShield className="text-indigo-600" />
+                                            Self-Edit Access
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={() => setIsEditModalOpen(true)}
+                                        onClick={openSmsLogs}
                                         className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+                                        title="View SMS Absent Logs"
                                     >
-                                        <FaEdit className="text-blue-500" />
-                                        Edit Profile
+                                        <FaLayerGroup className="text-purple-500" />
+                                        SMS Logs
                                     </button>
-                                )}
-                                {["ADMIN", "DIRECTOR", "PRINCIPAL"].includes(role) && (
-                                    <button
-                                        onClick={() => {
-                                            setPermAllowProfile(true);
-                                            setPermAllowPhoto(true);
-                                            setPermAction("grant");
-                                            setIsPermModalOpen(true);
-                                        }}
-                                        className="ml-2 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors"
-                                        title="Configure Student Self-Edit Permissions"
-                                    >
-                                        <FaUserShield className="text-indigo-600" />
-                                        Self-Edit Access
-                                    </button>
-                                )}
-                                <button
-                                    onClick={openSmsLogs}
-                                    className="ml-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
-                                    title="View SMS Absent Logs"
-                                >
-                                    <FaLayerGroup className="text-purple-500" />
-                                    SMS Logs
-                                </button>
+                                    {student.studentContactNumber && (
+                                        <a
+                                            href={`tel:${student.studentContactNumber}`}
+                                            className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 transition-colors"
+                                            title={`Call Student (${student.studentContactNumber})`}
+                                        >
+                                            <FaPhone className="text-emerald-600 text-xs" />
+                                            <span>Call Student</span>
+                                        </a>
+                                    )}
+                                    {student.mobile && (
+                                        <a
+                                            href={`tel:${student.mobile}`}
+                                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100 transition-colors"
+                                            title={`Call Parent (${student.mobile})`}
+                                        >
+                                            <FaPhone className="text-blue-600 text-xs" />
+                                            <span>Call Parent</span>
+                                        </a>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-600 sm:justify-start">
@@ -455,8 +477,30 @@ export default function StudentProfilePage() {
                                 <div className="flex flex-col gap-4">
                                     <InfoItem label="Email ID" value={student.emailId} icon={<FaEnvelope />} />
                                     <InfoItem label="Domain Mail ID" value={student.domainMailId} icon={<FaEnvelope />} />
-                                    <InfoItem label="Student Mobile" value={student.studentContactNumber} icon={<FaPhone />} />
-                                    <InfoItem label="Parent Mobile" value={student.mobile} icon={<FaPhone />} />
+                                    <div className="flex items-center justify-between">
+                                        <InfoItem label="Student Mobile" value={student.studentContactNumber} icon={<FaPhone />} />
+                                        {student.studentContactNumber && (
+                                            <a
+                                                href={`tel:${student.studentContactNumber}`}
+                                                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 shadow-xs hover:bg-emerald-100 transition"
+                                            >
+                                                <FaPhone size={10} />
+                                                <span>Call</span>
+                                            </a>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <InfoItem label="Parent Mobile" value={student.mobile} icon={<FaPhone />} />
+                                        {student.mobile && (
+                                            <a
+                                                href={`tel:${student.mobile}`}
+                                                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 shadow-xs hover:bg-blue-100 transition"
+                                            >
+                                                <FaPhone size={10} />
+                                                <span>Call</span>
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

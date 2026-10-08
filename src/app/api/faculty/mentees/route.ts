@@ -33,12 +33,26 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const queryFacultyId = searchParams.get("facultyId");
 
-    // Build student query
+    // Build student query — active regular non-alumni students only
     const whereClause: any = {
-      isLeftCollege: false
+      isLeftCollege: false,
+      isAlumni: false
     };
 
-    if (isHOD) {
+    // If user is ADMIN or DIRECTOR and did not specify facultyId, default to department if specified, or return early with faculties and stats
+    if (!facultyId && !isHOD && (user.role === "ADMIN" || user.role === "DIRECTOR")) {
+      const selectedDept = searchParams.get("departmentId");
+      if (selectedDept && selectedDept !== "ALL") {
+        whereClause.departmentId = selectedDept;
+      }
+      if (queryFacultyId && queryFacultyId !== "ALL") {
+        if (queryFacultyId === "UNASSIGNED") {
+          whereClause.mentorId = null;
+        } else {
+          whereClause.mentorId = queryFacultyId;
+        }
+      }
+    } else if (isHOD) {
       whereClause.departmentId = user.departmentId;
       if (queryFacultyId && queryFacultyId !== "ALL") {
         if (queryFacultyId === "UNASSIGNED") {
@@ -51,16 +65,30 @@ export async function GET(req: NextRequest) {
       whereClause.mentorId = queryFacultyId || facultyId;
     }
 
-    // Fetch department faculties for filter dropdown if HOD
+    // Fetch departments for Admin/Director filter dropdown
+    const departments = (user.role === "ADMIN" || user.role === "DIRECTOR")
+      ? await prisma.department.findMany({
+          select: { id: true, name: true, code: true },
+          orderBy: { code: "asc" }
+        })
+      : [];
+
+    // Fetch department faculties for filter dropdown if HOD or ADMIN
     const departmentFaculties = isHOD
       ? await prisma.faculty.findMany({
           where: { departmentId: user.departmentId },
           select: { id: true, empName: true, empCode: true, designation: true },
           orderBy: { empName: "asc" }
         })
+      : (user.role === "ADMIN" || user.role === "DIRECTOR")
+      ? await prisma.faculty.findMany({
+          where: searchParams.get("departmentId") && searchParams.get("departmentId") !== "ALL" ? { departmentId: searchParams.get("departmentId")! } : {},
+          select: { id: true, empName: true, empCode: true, designation: true, department: { select: { code: true } } },
+          orderBy: { empName: "asc" }
+        })
       : [];
 
-    // Fetch mentees assigned or department students
+    // Fetch all mentees assigned or department students (NO artificial cap)
     const mentees = await prisma.student.findMany({
       where: whereClause,
       include: {
@@ -81,150 +109,171 @@ export async function GET(req: NextRequest) {
     if (mentees.length === 0) {
       return NextResponse.json({
         success: true,
+        role: user.role,
         isHOD,
+        isAdmin: user.role === "ADMIN" || user.role === "DIRECTOR",
+        departments,
         departmentFaculties,
-        stats: { total: 0, safe: 0, condonation: 0, detention: 0 },
+        stats: { total: 0, safe: 0, condonation: 0, detention: 0, noClasses: 0 },
         students: []
       });
     }
 
-    // Compute attendance statistics for each mentee
-    const enrichedStudents = await Promise.all(
-      mentees.map(async (st) => {
-        // Fetch student's valid curriculum subjects
-        const subjects = await prisma.subject.findMany({
-          where: {
-            year: st.year,
-            semester: st.semester,
-            OR: [
-              { departmentId: st.departmentId },
-              { students: { some: { id: st.id } } }
-            ]
-          },
-          select: { id: true }
-        });
-        const subjectIdSet = new Set(subjects.map(s => s.id));
+    // High performance batch attendance calculation
+    const menteeYears = Array.from(new Set(mentees.map(m => m.year)));
+    const menteeSemesters = Array.from(new Set(mentees.map(m => m.semester)));
+    const menteeDeptIds = Array.from(new Set(mentees.map(m => m.departmentId)));
 
-        // Attendance calculation — matching academic stats engine
-        const attendanceRecords = await prisma.attendanceHistory.findMany({
-          where: {
-            year: st.year,
-            semester: st.semester,
-            type: "ACADEMIC",
-            user: { role: { not: "USER" } },
-            OR: [
-              { departmentId: st.departmentId, sectionId: st.sectionId },
-              { details: { contains: st.rollNumber } }
-            ]
-          },
-          select: {
-            subjectId: true,
-            status: true,
-            details: true
-          }
-        });
+    // Fetch subjects for these years and semesters
+    const subjects = await prisma.subject.findMany({
+      where: {
+        year: { in: menteeYears },
+        semester: { in: menteeSemesters },
+        departmentId: { in: menteeDeptIds }
+      },
+      select: { id: true, year: true, semester: true, departmentId: true }
+    });
+    const subjectIdSet = new Set(subjects.map(s => s.id));
 
-        let totalClasses = 0;
-        let attendedClasses = 0;
+    // Fetch batch attendance records once
+    const attendanceRecords = await prisma.attendanceHistory.findMany({
+      where: {
+        year: { in: menteeYears },
+        semester: { in: menteeSemesters },
+        departmentId: { in: menteeDeptIds },
+        type: "ACADEMIC",
+        user: { role: { not: "USER" } }
+      },
+      select: {
+        subjectId: true,
+        details: true
+      }
+    });
 
-        for (const rec of attendanceRecords) {
-          if (rec.subjectId && !subjectIdSet.has(rec.subjectId)) {
-            continue;
-          }
+    // Single-pass ultra-fast attendance indexing O(attendanceRecords)
+    const rollSet = new Set(mentees.map(m => m.rollNumber.toUpperCase()));
+    const idSet = new Set(mentees.map(m => m.id));
+    const attendanceMap = new Map<string, { totalClasses: number; attendedClasses: number }>();
 
-          let recordAppliesToStudent = false;
-          let isPresent = false;
-          let details: any[] = [];
-          try {
-            details = typeof rec.details === "string" ? JSON.parse(rec.details) : rec.details;
-          } catch {
-            details = [];
-          }
+    for (const rec of attendanceRecords) {
+      if (rec.subjectId && !subjectIdSet.has(rec.subjectId)) {
+        continue;
+      }
 
-          if (Array.isArray(details)) {
-            const sObj = details.find((d: any) => {
-              const r = d["Roll Number"] || d["rollNumber"] || d["studentRollNumber"];
-              return (r && String(r).toUpperCase() === st.rollNumber.toUpperCase()) || d.studentId === st.id;
-            });
-            if (sObj) {
-              recordAppliesToStudent = true;
-              const status = String(sObj["Status"] || sObj["status"] || "").toLowerCase();
-              isPresent = status === "present" || status === "p" || sObj.isPresent === true;
-            } else if (rec.status === "Marked Absent") {
-              recordAppliesToStudent = true;
-              isPresent = true;
-            }
-          } else if (rec.status === "Marked Absent") {
-            recordAppliesToStudent = true;
-            isPresent = true;
+      let details: any[] = [];
+      try {
+        details = typeof rec.details === "string" ? JSON.parse(rec.details) : rec.details;
+      } catch {
+        continue;
+      }
+
+      if (Array.isArray(details)) {
+        for (const d of details) {
+          const r = (d["Roll Number"] || d["rollNumber"] || d["studentRollNumber"] || "").toString().trim().toUpperCase();
+          const sid = d.studentId;
+          const matchKey = r && rollSet.has(r) ? r : (sid && idSet.has(sid) ? sid : null);
+          if (!matchKey) continue;
+
+          let entry = attendanceMap.get(matchKey);
+          if (!entry) {
+            entry = { totalClasses: 0, attendedClasses: 0 };
+            attendanceMap.set(matchKey, entry);
           }
 
-          if (recordAppliesToStudent) {
-            totalClasses++;
-            if (isPresent) attendedClasses++;
+          entry.totalClasses++;
+          const status = String(d["Status"] || d["status"] || "").toLowerCase();
+          const isPresent = status === "present" || status === "p" || d.isPresent === true;
+          if (isPresent) {
+            entry.attendedClasses++;
           }
         }
+      }
+    }
 
-        const percentage = totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 1000) / 10 : 100;
+    // Fetch active backlogs in one grouped query
+    const studentIds = mentees.map(m => m.id);
+    const failResults = await prisma.semesterResult.groupBy({
+      by: ["studentId"],
+      where: {
+        studentId: { in: studentIds },
+        sgpa: { in: ["F", "FAIL", "0", "0.0", "0.00"] }
+      },
+      _count: { id: true }
+    });
+    const backlogMap = new Map<string, number>();
+    for (const r of failResults) {
+      backlogMap.set(r.studentId, r._count.id);
+    }
 
-        // Health tier
-        let healthTier: "SAFE" | "CONDONATION" | "DETENTION" = "SAFE";
+    // Instant memory mapping for each mentee
+    const enrichedStudents = mentees.map((st) => {
+      const att = attendanceMap.get(st.rollNumber.toUpperCase()) || attendanceMap.get(st.id) || { totalClasses: 0, attendedClasses: 0 };
+      const totalClasses = att.totalClasses;
+      const attendedClasses = att.attendedClasses;
+
+      let percentage: number | null = null;
+      let healthTier: "SAFE" | "CONDONATION" | "DETENTION" | "NO_CLASSES" = "NO_CLASSES";
+
+      if (totalClasses > 0) {
+        percentage = Math.round((attendedClasses / totalClasses) * 1000) / 10;
         if (percentage < 65) {
           healthTier = "DETENTION";
         } else if (percentage < 75) {
           healthTier = "CONDONATION";
+        } else {
+          healthTier = "SAFE";
         }
+      }
 
-        // Active backlogs count
-        const backlogsCount = await prisma.semesterResult.count({
-          where: {
-            studentId: st.id,
-            sgpa: { in: ["F", "FAIL", "0", "0.0", "0.00"] }
-          }
-        });
+      const backlogsCount = backlogMap.get(st.id) || 0;
 
-        return {
-          id: st.id,
-          rollNumber: st.rollNumber,
-          name: st.name,
-          mobile: st.mobile,
-          parentMobile: st.studentContactNumber || st.mobile,
-          email: st.emailId || st.domainMailId,
-          photoUrl: st.photoUrl,
-          year: st.year,
-          semester: st.semester,
-          department: st.department.name,
-          deptCode: st.department.code,
-          section: st.section.name,
-          totalClasses,
-          attendedClasses,
-          attendancePercentage: percentage,
-          healthTier,
-          backlogsCount,
-          mentorId: st.mentor?.id || null,
-          mentorName: st.mentor?.empName || null,
-          mentorCode: st.mentor?.empCode || null,
-          mentorDesignation: st.mentor?.designation || null,
-          lastCounselingDate: st.mentoringLogs[0]?.date || null,
-          lastCounselingRemarks: st.mentoringLogs[0]?.remarks || null,
-          lastCounselingRecordedBy: st.mentoringLogs[0]?.recordedBy || (st.mentoringLogs[0]?.faculty?.empName ? `Recorded through ${st.mentoringLogs[0]?.faculty?.empName} (Mentor)` : null)
-        };
-      })
-    );
+      return {
+        id: st.id,
+        rollNumber: st.rollNumber,
+        name: st.name,
+        mobile: st.mobile,
+        parentMobile: st.studentContactNumber || st.mobile,
+        email: st.emailId || st.domainMailId,
+        photoUrl: st.photoUrl,
+        year: st.year,
+        semester: st.semester,
+        department: st.department.name,
+        deptCode: st.department.code,
+        section: st.section?.name || "A",
+        totalClasses,
+        attendedClasses,
+        attendancePercentage: percentage !== null ? percentage : 0,
+        hasAttendanceData: totalClasses > 0,
+        healthTier,
+        backlogsCount,
+        mentorId: st.mentor?.id || null,
+        mentorName: st.mentor?.empName || null,
+        mentorCode: st.mentor?.empCode || null,
+        mentorDesignation: st.mentor?.designation || null,
+        lastCounselingDate: st.mentoringLogs[0]?.date || null,
+        lastCounselingRemarks: st.mentoringLogs[0]?.remarks || null,
+        lastCounselingRecordedBy: st.mentoringLogs[0]?.recordedBy || (st.mentoringLogs[0]?.faculty?.empName ? `Recorded through ${st.mentoringLogs[0]?.faculty?.empName} (Mentor)` : null)
+      };
+    });
 
     const safeCount = enrichedStudents.filter(s => s.healthTier === "SAFE").length;
     const condonationCount = enrichedStudents.filter(s => s.healthTier === "CONDONATION").length;
     const detentionCount = enrichedStudents.filter(s => s.healthTier === "DETENTION").length;
+    const noClassesCount = enrichedStudents.filter(s => s.healthTier === "NO_CLASSES").length;
 
     return NextResponse.json({
       success: true,
+      role: user.role,
       isHOD,
+      isAdmin: user.role === "ADMIN" || user.role === "DIRECTOR",
+      departments,
       departmentFaculties,
       stats: {
         total: enrichedStudents.length,
         safe: safeCount,
         condonation: condonationCount,
-        detention: detentionCount
+        detention: detentionCount,
+        noClasses: noClassesCount
       },
       students: enrichedStudents
     });

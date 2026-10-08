@@ -30,6 +30,10 @@ export default function OfficeExamApplicationsPage() {
     const [overviewSem, setOverviewSem] = useState("ALL");
     const [mainTab, setMainTab] = useState<"overview" | "edit-requests" | "student-tracker">("overview");
 
+    // Academic Years state
+    const [academicYears, setAcademicYears] = useState<any[]>([]);
+    const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("ALL");
+
     // Student Tracker state
     const [trackerDept, setTrackerDept] = useState("");
     const [trackerYear, setTrackerYear] = useState("");
@@ -64,24 +68,49 @@ export default function OfficeExamApplicationsPage() {
         return sortDir === "asc" ? " ↑" : " ↓";
     };
 
+    const loadData = (ayId = selectedAcademicYear) => {
+        setLoading(true);
+        const statsUrl = ayId && ayId !== "ALL" ? `/api/exam-applications/stats?academicYearId=${ayId}` : "/api/exam-applications/stats";
+        Promise.all([
+            fetch(statsUrl).then(r => r.ok ? r.json() : []),
+            fetch("/api/departments").then(r => r.ok ? r.json() : []),
+            fetch("/api/academic-years").then(r => r.ok ? r.json() : [])
+        ]).then(([data, depts, ays]) => {
+            setStats(data);
+            setTrackerDepts(depts.map((d: any) => d.name).sort());
+            if (Array.isArray(ays)) {
+                setAcademicYears(ays);
+            }
+            setLoading(false);
+        });
+    };
+
+    const handleAcademicYearChange = (ayId: string) => {
+        setSelectedAcademicYear(ayId);
+        setSelectedCard(null);
+        setApplications([]);
+        loadData(ayId);
+    };
+
     useEffect(() => {
-        if (mainTab === "edit-requests" && editReqApplications.length === 0) {
+        if (mainTab === "edit-requests") {
             setLoadingEditReqs(true);
-            fetch("/api/exam-applications?editRequested=true")
+            const ayParam = selectedAcademicYear !== "ALL" ? `&academicYearId=${selectedAcademicYear}` : "";
+            fetch(`/api/exam-applications?editRequested=true${ayParam}`)
                 .then(r => r.ok ? r.json() : [])
                 .then(data => { setEditReqApplications(data); setLoadingEditReqs(false); });
         }
-    }, [mainTab]);
+    }, [mainTab, selectedAcademicYear]);
 
     useEffect(() => {
-        Promise.all([
-            fetch("/api/exam-applications/stats").then(r => r.ok ? r.json() : []),
-            fetch("/api/departments").then(r => r.ok ? r.json() : [])
-        ]).then(([data, depts]) => {
-            setStats(data);
-            setTrackerDepts(depts.map((d: any) => d.name).sort());
-            setLoading(false);
-        });
+        const match = document.cookie.match(new RegExp('(^| )academic-year-id=([^;]+)'));
+        const cookieAy = match ? match[2] : null;
+        if (cookieAy) {
+            setSelectedAcademicYear(cookieAy);
+            loadData(cookieAy);
+        } else {
+            loadData("ALL");
+        }
 
         const handlePopState = () => {
             setSelectedCard(null);
@@ -91,11 +120,19 @@ export default function OfficeExamApplicationsPage() {
         return () => window.removeEventListener("popstate", handlePopState);
     }, []);
 
-    const loadApplications = async (card: StatCard) => {
+    const loadApplications = async (card: any) => {
         setSelectedCard(card);
         setLoading(true);
         window.history.pushState({ view: "details" }, "", `?view=details`);
         const params = new URLSearchParams({ department: card.department, year: card.year, semester: card.semester });
+        if (card.settingId === null) {
+            params.append("history", "true");
+        } else if (card.settingId) {
+            params.append("settingId", card.settingId);
+        }
+        if (selectedAcademicYear && selectedAcademicYear !== "ALL") {
+            params.append("academicYearId", selectedAcademicYear);
+        }
         const res = await fetch(`/api/exam-applications?${params}`);
         const data = await res.ok ? await res.json() : [];
         setApplications(data);
@@ -142,6 +179,14 @@ export default function OfficeExamApplicationsPage() {
             params.set("department", selectedCard.department);
             params.set("year", selectedCard.year);
             params.set("semester", selectedCard.semester);
+            if ((selectedCard as any).settingId === null) {
+                params.set("history", "true");
+            } else if ((selectedCard as any).settingId) {
+                params.set("settingId", (selectedCard as any).settingId);
+            }
+        }
+        if (selectedAcademicYear && selectedAcademicYear !== "ALL") {
+            params.set("academicYearId", selectedAcademicYear);
         }
         if (filter !== "ALL") params.set("status", filter);
         window.open(`/api/exam-applications/export?${params}`, "_blank");
@@ -576,10 +621,28 @@ export default function OfficeExamApplicationsPage() {
     // Overview — department-wise cards
     return (
         <div className="mx-auto max-w-6xl">
-            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4">
-                <h1 className="text-2xl font-extrabold text-slate-900">Exam Applications</h1>
-                <p className="mt-1 text-slate-500">Manage departmental applications and requests.</p>
-            </motion.div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h1 className="text-2xl font-extrabold text-slate-900">Exam Applications</h1>
+                    <p className="mt-1 text-slate-500">Manage departmental applications and requests.</p>
+                </div>
+                {/* Academic Year Selector */}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Academic Year:</span>
+                    <select
+                        value={selectedAcademicYear}
+                        onChange={e => handleAcademicYearChange(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    >
+                        <option value="ALL">All Academic Years</option>
+                        {academicYears.map((ay: any) => (
+                            <option key={ay.id} value={ay.id}>
+                                {ay.name} {ay.isCurrent ? "★ (Active)" : ""}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
 
             {/* Tabs */}
             <div className="mb-8 flex gap-1 rounded-xl bg-slate-100 p-1 w-fit">
@@ -629,9 +692,16 @@ export default function OfficeExamApplicationsPage() {
                             (overviewDept === "ALL" || s.department === overviewDept) &&
                             (overviewYear === "ALL" || s.year === overviewYear) &&
                             (overviewSem === "ALL" || s.semester === overviewSem)
-                        ).map((card, i) => (
-                            <motion.div key={`${card.department}-${card.year}-${card.semester}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                        ).map((card: any, i) => (
+                            <motion.div key={`${card.department}-${card.year}-${card.semester}-${card.settingId || 'history'}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                             <button onClick={() => loadApplications(card)} className="block w-full text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer">
+                                {card.settingName && (
+                                    <div className="mb-2">
+                                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold w-fit ${card.settingId ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-700'}`}>
+                                            {card.settingName}
+                                        </span>
+                                    </div>
+                                )}
                                 <h3 className="text-lg font-bold text-slate-800">{card.department}</h3>
                                 <p className="text-sm text-slate-500 mb-4">Year {card.year} • Semester {card.semester}</p>
                                 <div className="text-2xl font-extrabold text-blue-600 mb-3">{card.total} <span className="text-sm font-medium text-slate-500">applications</span></div>

@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const effectiveTargetBatch = paperBatch || facultyMappedBatch;
+    const effectiveTargetBatch = facultyMappedBatch || paperBatch;
 
     // Filter students: if the paper or faculty is mapped to a specific batch, only include students of that batch
     const eligibleStudents = effectiveTargetBatch

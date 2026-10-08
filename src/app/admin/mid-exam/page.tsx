@@ -164,6 +164,9 @@ export default function AdminMidExamDashboard() {
 
     previewData.rows.forEach((row: any) => {
       const marksObj = row.subjects[subId] || { mid1: null, mid2: null, assignment: null, internal: 0 };
+      if (marksObj.isNotEnrolled) {
+        return; // Student is not enrolled in this elective subject
+      }
       let val: number | null = null;
       let isAbsent = false;
 
@@ -476,7 +479,7 @@ export default function AdminMidExamDashboard() {
 
   useEffect(() => {
     if (selectedDept && selectedYear && selectedSem) {
-      fetch(`/api/subjects?departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}`)
+      fetch(`/api/subjects?departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&includeEnrolledElectives=true`)
         .then(r => r.json())
         .then(data => {
           setReportSubjects(data || []);
@@ -1394,7 +1397,9 @@ export default function AdminMidExamDashboard() {
       for (const sub of subjects) {
         const marks = r.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
         let displayVal = "";
-        if (reportType === "MID_I") {
+        if (marks.isNotEnrolled) {
+          displayVal = "-";
+        } else if (reportType === "MID_I") {
           displayVal = marks.isMid1Absent ? "AB" : (marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB");
         } else if (reportType === "MID_II") {
           displayVal = marks.isMid2Absent ? "AB" : (marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB");
@@ -1435,6 +1440,9 @@ export default function AdminMidExamDashboard() {
 
         rows.forEach((r: any) => {
           const m = r.subjects[subId] || {};
+          if (m.isNotEnrolled) {
+            return;
+          }
           let val: number | null = null;
           let isAbsent = false;
 
@@ -2176,7 +2184,8 @@ export default function AdminMidExamDashboard() {
                 else if (reportType === "ASSIGNMENT") { val = m.assignment; }
                 else if (reportType === "FINAL")   { val = m.internal; }
 
-                if (isAbsent) rd.push("AB");
+                if (m.isNotEnrolled) rd.push("-");
+                else if (isAbsent) rd.push("AB");
                 else rd.push(val !== null && val !== undefined ? (reportType === "FINAL" ? Math.ceil(val) : Math.round(val)) : "");
               });
               if (reportType === "FINAL") {
@@ -2271,7 +2280,7 @@ export default function AdminMidExamDashboard() {
     }
     setFetchingReport(true);
     try {
-      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
+      const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}&subjectId=${selectedReportSubjectId}`);
       if (!res.ok) {
         showToast("Failed to fetch report data", "error");
         return;
@@ -2444,7 +2453,9 @@ export default function AdminMidExamDashboard() {
             val = marksObj.internal;
           }
 
-          if (isAbsent) {
+          if (marksObj.isNotEnrolled) {
+            rowData.push("-");
+          } else if (isAbsent) {
             rowData.push("AB");
           } else {
             rowData.push(val !== null && val !== undefined ? (previewType === "FINAL" ? Math.ceil(val) : Math.round(val)) : "");
@@ -2636,7 +2647,9 @@ export default function AdminMidExamDashboard() {
         for (const sub of subjects) {
           const marks = r.subjects[sub.id] || { mid1: null, mid2: null, assignment: null, internal: 0 };
           let displayVal = "";
-          if (reportType === "MID_I") {
+          if (marks.isNotEnrolled) {
+            displayVal = "-";
+          } else if (reportType === "MID_I") {
             displayVal = marks.isMid1Absent ? "AB" : (marks.mid1 !== null ? Math.round(marks.mid1).toString() : "AB");
           } else if (reportType === "MID_II") {
             displayVal = marks.isMid2Absent ? "AB" : (marks.mid2 !== null ? Math.round(marks.mid2).toString() : "AB");
@@ -2676,6 +2689,9 @@ export default function AdminMidExamDashboard() {
 
           rows.forEach((r: any) => {
             const m = r.subjects[subId] || {};
+            if (m.isNotEnrolled) {
+              return;
+            }
             let val: number | null = null;
             let isAbsent = false;
 
@@ -2876,7 +2892,7 @@ export default function AdminMidExamDashboard() {
       showToast("Generating Detailed Subject PDF...", "success");
       let data = cachedData;
       if (!data) {
-        const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}`);
+        const res = await fetch(`/api/mid-exam/reports/memo?academicYearId=${selectedAY}&departmentId=${selectedDept}&year=${selectedYear}&semester=${selectedSem}&sectionId=${selectedSection}&subjectId=${selectedReportSubjectId}`);
         if (!res.ok) {
           showToast("Failed to fetch report data", "error");
           return;
@@ -3847,7 +3863,7 @@ export default function AdminMidExamDashboard() {
                       ) : (
                         reportSubjects.map(sub => (
                           <option key={sub.id} value={sub.id}>
-                            {sub.name} ({sub.code})
+                            {sub.name} ({sub.code}){sub.electiveSlotRelation ? ` [${sub.electiveSlotRelation.name}]` : (sub.department ? ` [${sub.department.code}]` : "")}
                           </option>
                         ))
                       )}
@@ -4137,7 +4153,9 @@ export default function AdminMidExamDashboard() {
                                       let displayVal = "";
                                       const maxMarks = sub.type?.toUpperCase() === "LAB" ? 50 : (previewType === "ASSIGNMENT" ? 10 : 30);
 
-                                      if (previewType === "MID_I") {
+                                      if (marksObj.isNotEnrolled) {
+                                        displayVal = "-";
+                                      } else if (previewType === "MID_I") {
                                         val = marksObj.mid1;
                                         displayVal = marksObj.isMid1Absent ? "AB" : (val !== null ? Math.round(val).toString() : "AB");
                                       } else if (previewType === "MID_II") {
@@ -4153,7 +4171,9 @@ export default function AdminMidExamDashboard() {
 
                                       // Get dynamic color class
                                       let colorClass = "";
-                                      if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
+                                      if (displayVal === "-") {
+                                        colorClass = "bg-slate-50 text-slate-300 font-normal border border-black";
+                                      } else if (showHeatmap && displayVal !== "AB" && displayVal !== "") {
                                         const parsedVal = parseFloat(displayVal);
                                         if (!isNaN(parsedVal)) {
                                           const pct = (parsedVal / maxMarks) * 100;

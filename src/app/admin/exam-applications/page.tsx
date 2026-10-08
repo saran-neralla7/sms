@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaPlus, FaTrash, FaUserPlus, FaCalendarAlt, FaCheckCircle, FaClock, FaTimesCircle, FaDownload, FaTimes, FaImage, FaSearch, FaFileExcel, FaClipboardList, FaEdit } from "react-icons/fa";
+import { FaPlus, FaTrash, FaUserPlus, FaCalendarAlt, FaCheckCircle, FaClock, FaTimesCircle, FaDownload, FaTimes, FaImage, FaSearch, FaFileExcel, FaClipboardList, FaEdit, FaUserSlash, FaUnlock, FaBan, FaCheck } from "react-icons/fa";
 import LogoSpinner from "@/components/LogoSpinner";
 import * as XLSX from "xlsx";
 
@@ -19,12 +19,39 @@ export default function AdminExamApplicationsPage() {
     const [trackerLoading, setTrackerLoading] = useState(false);
     const [trackerSearch, setTrackerSearch] = useState("");
 
+    // Academic Years state
+    const [academicYears, setAcademicYears] = useState<any[]>([]);
+    const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("ALL");
+
     // Settings state
     const [settings, setSettings] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
-    const [settingForm, setSettingForm] = useState({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "", circularFileUrl: "" });
+    const [settingForm, setSettingForm] = useState({
+        name: "",
+        type: "REGULAR",
+        year: "",
+        semester: "",
+        startDate: "",
+        endDate: "",
+        lateFeeEndDate: "",
+        regularFee: "",
+        circularFileUrl: "",
+        accessMode: "ALL",
+        allowedRollNumbers: "",
+        allowAlumni: true,
+        holdMessage: "Your exam application is kept on hold, please contact the OFFICE.",
+        academicYearId: ""
+    });
     const [editingSettingId, setEditingSettingId] = useState<string | null>(null);
     const [settingsLoading, setSettingsLoading] = useState(true);
+
+    // Audience / Blocklist management modal
+    const [audienceModalSetting, setAudienceModalSetting] = useState<any | null>(null);
+    const [audienceSearch, setAudienceSearch] = useState<string>("");
+    const [audienceNewInput, setAudienceNewInput] = useState<string>("");
+    const [audienceMode, setAudienceMode] = useState<string>("ALL");
+    const [audienceSaving, setAudienceSaving] = useState<boolean>(false);
+    const [audienceToast, setAudienceToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
     // Office account state
     const [accountForm, setAccountForm] = useState({ username: "", password: "", departmentId: "" });
@@ -55,21 +82,47 @@ export default function AdminExamApplicationsPage() {
     };
     const sortIcon = (field: "rollNumber" | "submittedAt") => sortField !== field ? " ↕" : sortDir === "asc" ? " ↑" : " ↓";
 
-    const refreshStats = () => {
-        fetch("/api/exam-applications/stats").then(r => r.ok ? r.json() : []).then(st => setStats(st));
+    const refreshStats = (ayId = selectedAcademicYear) => {
+        const url = ayId && ayId !== "ALL" ? `/api/exam-applications/stats?academicYearId=${ayId}` : "/api/exam-applications/stats";
+        fetch(url).then(r => r.ok ? r.json() : []).then(st => setStats(st));
     };
 
-    useEffect(() => {
+    const loadData = (ayId = selectedAcademicYear) => {
+        setSettingsLoading(true);
+        const settingsUrl = ayId && ayId !== "ALL" ? `/api/exam-applications/settings?academicYearId=${ayId}` : "/api/exam-applications/settings";
+        const statsUrl = ayId && ayId !== "ALL" ? `/api/exam-applications/stats?academicYearId=${ayId}` : "/api/exam-applications/stats";
+
         Promise.all([
-            fetch("/api/exam-applications/settings").then(r => r.ok ? r.json() : []),
+            fetch(settingsUrl).then(r => r.ok ? r.json() : []),
             fetch("/api/departments").then(r => r.ok ? r.json() : []),
-            fetch("/api/exam-applications/stats").then(r => r.ok ? r.json() : [])
-        ]).then(([s, d, st]) => {
+            fetch(statsUrl).then(r => r.ok ? r.json() : []),
+            fetch("/api/academic-years").then(r => r.ok ? r.json() : [])
+        ]).then(([s, d, st, ays]) => {
             setSettings(s);
             setDepartments(Array.isArray(d) ? d : []);
             setStats(st);
+            if (Array.isArray(ays)) {
+                setAcademicYears(ays);
+                const currentAY = ays.find(y => y.isCurrent);
+                if (currentAY && selectedAcademicYear === "ALL") {
+                    // Set default academic year for setting form if not already set
+                    setSettingForm(p => ({ ...p, academicYearId: p.academicYearId || currentAY.id }));
+                }
+            }
             setSettingsLoading(false);
         });
+    };
+
+    useEffect(() => {
+        // Read academic-year-id cookie if present
+        const match = document.cookie.match(new RegExp('(^| )academic-year-id=([^;]+)'));
+        const cookieAy = match ? match[2] : null;
+        if (cookieAy) {
+            setSelectedAcademicYear(cookieAy);
+            loadData(cookieAy);
+        } else {
+            loadData("ALL");
+        }
 
         const handlePopState = () => {
             setSelectedCard(null);
@@ -78,6 +131,13 @@ export default function AdminExamApplicationsPage() {
         window.addEventListener("popstate", handlePopState);
         return () => window.removeEventListener("popstate", handlePopState);
     }, []);
+
+    const handleAcademicYearChange = (ayId: string) => {
+        setSelectedAcademicYear(ayId);
+        setSelectedCard(null);
+        setApplications([]);
+        loadData(ayId);
+    };
 
     const [uploadingFile, setUploadingFile] = useState(false);
     const [fileInputKey, setFileInputKey] = useState(0);
@@ -111,7 +171,20 @@ export default function AdminExamApplicationsPage() {
         e.preventDefault();
         const url = "/api/exam-applications/settings";
         const method = editingSettingId ? "PUT" : "POST";
-        const body = editingSettingId ? JSON.stringify({ id: editingSettingId, ...settingForm }) : JSON.stringify(settingForm);
+
+        // Parse roll numbers from comma/newline/space separated text
+        const rollsArray = settingForm.allowedRollNumbers
+            ? Array.from(new Set(settingForm.allowedRollNumbers.split(/[\n,\s]+/).map(r => r.trim().toUpperCase()).filter(Boolean)))
+            : [];
+
+        const payload = {
+            ...settingForm,
+            allowedRollNumbers: rollsArray,
+            allowAlumni: Boolean(settingForm.allowAlumni),
+            academicYearId: settingForm.academicYearId || (selectedAcademicYear !== "ALL" ? selectedAcademicYear : (academicYears.find(y => y.isCurrent)?.id || null))
+        };
+
+        const body = editingSettingId ? JSON.stringify({ id: editingSettingId, ...payload }) : JSON.stringify(payload);
         
         const res = await fetch(url, {
             method,
@@ -126,8 +199,26 @@ export default function AdminExamApplicationsPage() {
             } else {
                 setSettings(prev => [...prev, s]);
             }
-            setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "", circularFileUrl: "" });
+            setSettingForm({
+                name: "",
+                type: "REGULAR",
+                year: "",
+                semester: "",
+                startDate: "",
+                endDate: "",
+                lateFeeEndDate: "",
+                regularFee: "",
+                circularFileUrl: "",
+                accessMode: "ALL",
+                allowedRollNumbers: "",
+                allowAlumni: true,
+                holdMessage: "Your exam application is kept on hold, please contact the OFFICE.",
+                academicYearId: selectedAcademicYear !== "ALL" ? selectedAcademicYear : (academicYears.find(y => y.isCurrent)?.id || "")
+            });
             setFileInputKey(k => k + 1);
+        } else {
+            const errData = await res.json();
+            alert(errData.error || "Failed to save setting");
         }
     };
 
@@ -138,6 +229,7 @@ export default function AdminExamApplicationsPage() {
             const d = new Date(dateStr);
             return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
         };
+        const rollString = Array.isArray(s.allowedRollNumbers) ? s.allowedRollNumbers.join("\n") : "";
         setSettingForm({
             name: s.name || "",
             type: s.type || "REGULAR",
@@ -147,7 +239,12 @@ export default function AdminExamApplicationsPage() {
             endDate: formatDateTime(s.endDate),
             lateFeeEndDate: formatDateTime(s.lateFeeEndDate),
             regularFee: s.regularFee || "",
-            circularFileUrl: s.circularFileUrl || ""
+            circularFileUrl: s.circularFileUrl || "",
+            accessMode: s.accessMode || "ALL",
+            allowedRollNumbers: rollString,
+            allowAlumni: s.allowAlumni !== undefined && s.allowAlumni !== null ? Boolean(s.allowAlumni) : (s.type === "SUPPLY"),
+            holdMessage: s.holdMessage || "Your exam application is kept on hold, please contact the OFFICE.",
+            academicYearId: s.academicYearId || ""
         });
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
@@ -155,6 +252,167 @@ export default function AdminExamApplicationsPage() {
     const handleDeleteSetting = async (id: string) => {
         await fetch(`/api/exam-applications/settings/${id}`, { method: "DELETE" });
         setSettings(prev => prev.filter(s => s.id !== id));
+    };
+
+    const openAudienceModal = (s: any) => {
+        setAudienceModalSetting(s);
+        setAudienceMode(s.accessMode || "ALL");
+        setAudienceSearch("");
+        setAudienceNewInput("");
+        setAudienceToast(null);
+    };
+
+    const handleUnblockSingle = async (identifierToRemove: string) => {
+        if (!audienceModalSetting) return;
+        setAudienceSaving(true);
+        setAudienceToast(null);
+        try {
+            const currentList: string[] = Array.isArray(audienceModalSetting.allowedRollNumbers)
+                ? audienceModalSetting.allowedRollNumbers
+                : [];
+            const updatedList = currentList.filter(
+                id => id.trim().toUpperCase() !== identifierToRemove.trim().toUpperCase()
+            );
+            const res = await fetch("/api/exam-applications/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: audienceModalSetting.id,
+                    allowedRollNumbers: updatedList
+                })
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setAudienceModalSetting(updated);
+                setSettings(prev => prev.map(s => s.id === updated.id ? updated : s));
+                setAudienceToast({ type: "success", text: `Unblocked / Removed "${identifierToRemove}" successfully!` });
+            } else {
+                const err = await res.json();
+                setAudienceToast({ type: "error", text: err.error || "Failed to update list" });
+            }
+        } catch (e) {
+            setAudienceToast({ type: "error", text: "Network error updating list" });
+        } finally {
+            setAudienceSaving(false);
+        }
+    };
+
+    const handleAddAudienceEntries = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!audienceModalSetting || !audienceNewInput.trim()) return;
+        setAudienceSaving(true);
+        setAudienceToast(null);
+        try {
+            const newEntries = audienceNewInput
+                .split(/[\n,\s]+/)
+                .map(r => r.trim().toUpperCase())
+                .filter(Boolean);
+
+            if (newEntries.length === 0) return;
+
+            const currentList: string[] = Array.isArray(audienceModalSetting.allowedRollNumbers)
+                ? audienceModalSetting.allowedRollNumbers
+                : [];
+            const mergedList = Array.from(new Set([...currentList, ...newEntries]));
+
+            const targetMode = (audienceModalSetting.accessMode === "ALL" || !audienceModalSetting.accessMode)
+                ? (audienceMode === "ALL" ? "BLACKLIST" : audienceMode)
+                : audienceModalSetting.accessMode;
+
+            const res = await fetch("/api/exam-applications/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: audienceModalSetting.id,
+                    allowedRollNumbers: mergedList,
+                    accessMode: targetMode
+                })
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setAudienceModalSetting(updated);
+                setAudienceMode(updated.accessMode);
+                setSettings(prev => prev.map(s => s.id === updated.id ? updated : s));
+                setAudienceNewInput("");
+                const actionVerb = targetMode === "BLACKLIST" ? "blocked" : "added to whitelist";
+                setAudienceToast({
+                    type: "success",
+                    text: `Successfully ${actionVerb} ${newEntries.length} identifier(s)!`
+                });
+            } else {
+                const err = await res.json();
+                setAudienceToast({ type: "error", text: err.error || "Failed to update list" });
+            }
+        } catch (e) {
+            setAudienceToast({ type: "error", text: "Network error updating list" });
+        } finally {
+            setAudienceSaving(false);
+        }
+    };
+
+    const handleAudienceModeChange = async (newMode: string) => {
+        if (!audienceModalSetting || newMode === audienceModalSetting.accessMode) return;
+        setAudienceSaving(true);
+        setAudienceToast(null);
+        try {
+            const res = await fetch("/api/exam-applications/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: audienceModalSetting.id,
+                    accessMode: newMode,
+                    allowedRollNumbers: audienceModalSetting.allowedRollNumbers || []
+                })
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setAudienceModalSetting(updated);
+                setAudienceMode(updated.accessMode);
+                setSettings(prev => prev.map(s => s.id === updated.id ? updated : s));
+                setAudienceToast({
+                    type: "success",
+                    text: `Mode changed to ${newMode === "BLACKLIST" ? "Blocklist (Blacklist)" : newMode === "WHITELIST" ? "Whitelist" : "Open to All"}`
+                });
+            } else {
+                const err = await res.json();
+                setAudienceToast({ type: "error", text: err.error || "Failed to change mode" });
+            }
+        } catch (e) {
+            setAudienceToast({ type: "error", text: "Network error changing mode" });
+        } finally {
+            setAudienceSaving(false);
+        }
+    };
+
+    const handleClearAudienceList = async () => {
+        if (!audienceModalSetting) return;
+        const modeLabel = audienceModalSetting.accessMode === "BLACKLIST" ? "unblock all students" : "clear all whitelisted students";
+        if (!confirm(`Are you sure you want to ${modeLabel}? This will remove all student identifiers from this list.`)) return;
+        setAudienceSaving(true);
+        setAudienceToast(null);
+        try {
+            const res = await fetch("/api/exam-applications/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: audienceModalSetting.id,
+                    allowedRollNumbers: []
+                })
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setAudienceModalSetting(updated);
+                setSettings(prev => prev.map(s => s.id === updated.id ? updated : s));
+                setAudienceToast({ type: "success", text: "All students unblocked / cleared successfully!" });
+            } else {
+                const err = await res.json();
+                setAudienceToast({ type: "error", text: err.error || "Failed to clear list" });
+            }
+        } catch (e) {
+            setAudienceToast({ type: "error", text: "Network error clearing list" });
+        } finally {
+            setAudienceSaving(false);
+        }
     };
 
     const handleCreateAccount = async (e: React.FormEvent) => {
@@ -667,6 +925,25 @@ export default function AdminExamApplicationsPage() {
                 <p className="text-slate-500 mb-8">Manage exam application windows, office accounts, and view statistics.</p>
             </motion.div>
 
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                {/* Academic Year Selector */}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Academic Year:</span>
+                    <select
+                        value={selectedAcademicYear}
+                        onChange={e => handleAcademicYearChange(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    >
+                        <option value="ALL">All Academic Years</option>
+                        {academicYears.map((ay: any) => (
+                            <option key={ay.id} value={ay.id}>
+                                {ay.name} {ay.isCurrent ? "★ (Active)" : ""}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
             {/* Tabs */}
             <div className="mb-8 flex gap-1 rounded-xl bg-slate-100 p-1">
                 {[
@@ -742,12 +1019,145 @@ export default function AdminExamApplicationsPage() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Audience Selection & Access Rules */}
+                        <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Student Access Rules</label>
+                                <div className="flex flex-wrap gap-4">
+                                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="accessMode"
+                                            value="ALL"
+                                            checked={settingForm.accessMode === "ALL"}
+                                            onChange={() => setSettingForm(p => ({ ...p, accessMode: "ALL" }))}
+                                            className="h-4 w-4 text-blue-600"
+                                        />
+                                        <span className="text-sm font-medium text-slate-700">All Eligible Students (Default)</span>
+                                    </label>
+                                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="accessMode"
+                                            value="WHITELIST"
+                                            checked={settingForm.accessMode === "WHITELIST" || settingForm.accessMode === "SELECTED"}
+                                            onChange={() => setSettingForm(p => ({ ...p, accessMode: "WHITELIST" }))}
+                                            className="h-4 w-4 text-emerald-600"
+                                        />
+                                        <span className="text-sm font-semibold text-emerald-700">Allow Specific Students Only (Whitelist)</span>
+                                    </label>
+                                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="accessMode"
+                                            value="BLACKLIST"
+                                            checked={settingForm.accessMode === "BLACKLIST"}
+                                            onChange={() => setSettingForm(p => ({ ...p, accessMode: "BLACKLIST" }))}
+                                            className="h-4 w-4 text-red-600"
+                                        />
+                                        <span className="text-sm font-semibold text-red-700">Block Specific Students Only (Hold List / Blacklist)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Alumni Access Toggle */}
+                            <div className="pt-2 border-t border-slate-200/80">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Alumni Student Access</label>
+                                <div className="flex flex-wrap gap-4">
+                                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="allowAlumni"
+                                            value="true"
+                                            checked={settingForm.allowAlumni === true}
+                                            onChange={() => setSettingForm(p => ({ ...p, allowAlumni: true }))}
+                                            className="h-4 w-4 text-blue-600"
+                                        />
+                                        <span className="text-xs font-medium text-slate-700">Allow Alumni Students</span>
+                                    </label>
+                                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="allowAlumni"
+                                            value="false"
+                                            checked={settingForm.allowAlumni === false}
+                                            onChange={() => setSettingForm(p => ({ ...p, allowAlumni: false }))}
+                                            className="h-4 w-4 text-red-600"
+                                        />
+                                        <span className="text-xs font-medium text-red-700">Do Not Allow Alumni Students</span>
+                                    </label>
+                                </div>
+                                <p className="mt-1 text-[11px] text-slate-500">
+                                    {settingForm.type === "REGULAR" ? "Typically 'Do Not Allow' for regular exams." : "Typically 'Allow' for supply exams."}
+                                </p>
+                            </div>
+
+                            {(settingForm.accessMode === "WHITELIST" || settingForm.accessMode === "SELECTED" || settingForm.accessMode === "BLACKLIST") && (
+                                <div className="pt-2 border-t border-slate-200/80 space-y-3">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="block text-xs font-semibold text-slate-700">
+                                                {settingForm.accessMode === "BLACKLIST"
+                                                    ? "Blocked Students: Roll Numbers or Mobile Numbers"
+                                                    : "Allowed Students: Roll Numbers or Mobile Numbers"}
+                                            </label>
+                                            <span className="text-[11px] text-slate-500 font-medium">Supports Roll Numbers & 10-digit Mobile Numbers</span>
+                                        </div>
+                                        <textarea
+                                            rows={4}
+                                            value={settingForm.allowedRollNumbers}
+                                            onChange={e => setSettingForm(p => ({ ...p, allowedRollNumbers: e.target.value }))}
+                                            placeholder="Paste Roll Numbers or Mobile Numbers (separated by comma, space, or newline)&#10;e.g.&#10;23A91A0501&#10;9876543210&#10;23A91A0502, 9123456789"
+                                            className="w-full font-mono text-xs rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        />
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            {settingForm.allowedRollNumbers
+                                                ? `${settingForm.allowedRollNumbers.split(/[\n,\s]+/).map(r => r.trim()).filter(Boolean).length} identifier(s) specified (${settingForm.accessMode === "BLACKLIST" ? "will be blocked" : "will be allowed"})`
+                                                : "Enter roll numbers or mobile numbers."}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                            Hold Message Displayed to Unselected / Blocked Students
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={settingForm.holdMessage}
+                                            onChange={e => setSettingForm(p => ({ ...p, holdMessage: e.target.value }))}
+                                            placeholder="Your exam application is kept on hold, please contact the OFFICE."
+                                            className="w-full text-xs rounded-xl border border-slate-300 bg-white p-2.5 outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="flex gap-2">
                             <button type="submit" disabled={uploadingFile} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
                                 {editingSettingId ? <FaEdit /> : <FaPlus />} {editingSettingId ? "Update Setting" : "Save Setting"}
                             </button>
                             {editingSettingId && (
-                                <button type="button" onClick={() => { setEditingSettingId(null); setSettingForm({ name: "", type: "REGULAR", year: "", semester: "", startDate: "", endDate: "", lateFeeEndDate: "", regularFee: "", circularFileUrl: "" }); setFileInputKey(k => k + 1); }} className="flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 transition-colors">
+                                <button type="button" onClick={() => {
+                                    setEditingSettingId(null);
+                                    setSettingForm({
+                                        name: "",
+                                        type: "REGULAR",
+                                        year: "",
+                                        semester: "",
+                                        startDate: "",
+                                        endDate: "",
+                                        lateFeeEndDate: "",
+                                        regularFee: "",
+                                        circularFileUrl: "",
+                                        accessMode: "ALL",
+                                        allowedRollNumbers: "",
+                                        allowAlumni: true,
+                                        holdMessage: "Your exam application is kept on hold, please contact the OFFICE.",
+                                        academicYearId: selectedAcademicYear !== "ALL" ? selectedAcademicYear : (academicYears.find(y => y.isCurrent)?.id || "")
+                                    });
+                                    setFileInputKey(k => k + 1);
+                                }} className="flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 transition-colors">
                                     <FaTimes /> Cancel
                                 </button>
                             )}
@@ -764,6 +1174,7 @@ export default function AdminExamApplicationsPage() {
                                         <th className="px-4 py-3">Type</th>
                                         <th className="px-4 py-3">Year</th>
                                         <th className="px-4 py-3">Semester</th>
+                                        <th className="px-4 py-3">Audience</th>
                                         <th className="px-4 py-3">Start</th>
                                         <th className="px-4 py-3">End</th>
                                         <th className="px-4 py-3">Late Fee End</th>
@@ -781,14 +1192,57 @@ export default function AdminExamApplicationsPage() {
                                             </td>
                                             <td className="px-4 py-3 font-medium">{s.year}</td>
                                             <td className="px-4 py-3">{s.semester}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="flex flex-col gap-1">
+                                                    {s.accessMode === "BLACKLIST" ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openAudienceModal(s)}
+                                                            className="inline-flex items-center gap-1 rounded-full bg-red-100 hover:bg-red-200 text-red-700 px-2.5 py-0.5 text-[11px] font-semibold transition cursor-pointer text-left w-fit"
+                                                            title="Click to manage & unblock students"
+                                                        >
+                                                            <FaBan className="text-[10px]" /> Blocked ({Array.isArray(s.allowedRollNumbers) ? s.allowedRollNumbers.length : 0})
+                                                        </button>
+                                                    ) : (s.accessMode === "SELECTED" || s.accessMode === "WHITELIST") ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openAudienceModal(s)}
+                                                            className="inline-flex items-center gap-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-2.5 py-0.5 text-[11px] font-semibold transition cursor-pointer text-left w-fit"
+                                                            title="Click to manage whitelisted students"
+                                                        >
+                                                            <FaCheck className="text-[10px]" /> Whitelisted ({Array.isArray(s.allowedRollNumbers) ? s.allowedRollNumbers.length : 0})
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openAudienceModal(s)}
+                                                            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2.5 py-0.5 text-[11px] font-semibold transition cursor-pointer text-left w-fit"
+                                                            title="Click to restrict or manage access"
+                                                        >
+                                                            Open to All
+                                                        </button>
+                                                    )}
+                                                    <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-medium w-fit ${s.allowAlumni ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                        Alumni: {s.allowAlumni ? "Allowed" : "Not Allowed"}
+                                                    </span>
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3 whitespace-nowrap">{new Date(s.startDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">{new Date(s.endDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">{s.lateFeeEndDate ? new Date(s.lateFeeEndDate).toLocaleString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "—"}</td>
-                                            <td className="px-4 py-3 flex gap-2">
-                                                <button onClick={() => handleEditSettingClick(s)} className="rounded-lg bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-200">
+                                            <td className="px-4 py-3 flex items-center gap-1.5">
+                                                <button
+                                                    onClick={() => openAudienceModal(s)}
+                                                    title="Manage Blocked / Whitelisted Students"
+                                                    className="rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1 text-xs font-semibold transition flex items-center gap-1"
+                                                >
+                                                    <FaUserSlash className="text-xs" />
+                                                    <span className="hidden xl:inline">Audience</span>
+                                                </button>
+                                                <button onClick={() => handleEditSettingClick(s)} title="Edit Setting" className="rounded-lg bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-200">
                                                     <FaEdit />
                                                 </button>
-                                                <button onClick={() => handleDeleteSetting(s.id)} className="rounded-lg bg-red-100 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-200">
+                                                <button onClick={() => handleDeleteSetting(s.id)} title="Delete Setting" className="rounded-lg bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-200">
                                                     <FaTrash />
                                                 </button>
                                             </td>
@@ -1041,6 +1495,239 @@ export default function AdminExamApplicationsPage() {
                     )}
                 </motion.div>
             )}
+
+            {/* Audience / Blocked List Management Modal */}
+            <AnimatePresence>
+                {audienceModalSetting && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setAudienceModalSetting(null)}
+                            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] flex flex-col"
+                        >
+                            {/* Header */}
+                            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2.5 rounded-xl ${audienceModalSetting.accessMode === "BLACKLIST" ? "bg-red-100 text-red-600" : "bg-purple-100 text-purple-600"}`}>
+                                        {audienceModalSetting.accessMode === "BLACKLIST" ? <FaBan className="text-xl" /> : <FaUserSlash className="text-xl" />}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-slate-800">
+                                            {audienceModalSetting.accessMode === "BLACKLIST"
+                                                ? "Manage Blocked Students"
+                                                : (audienceModalSetting.accessMode === "WHITELIST" || audienceModalSetting.accessMode === "SELECTED")
+                                                    ? "Manage Whitelisted Students"
+                                                    : "Manage Student Access Restrictions"}
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            <span className="font-semibold text-slate-700">{audienceModalSetting.type}</span> • Year {audienceModalSetting.year}, Semester {audienceModalSetting.semester}
+                                            {audienceModalSetting.name ? ` • ${audienceModalSetting.name}` : ""}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setAudienceModalSetting(null)}
+                                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                                >
+                                    <FaTimes />
+                                </button>
+                            </div>
+
+                            {/* Toast Notification */}
+                            {audienceToast && (
+                                <div className={`mt-3 rounded-lg p-2.5 text-xs font-semibold flex items-center justify-between border ${audienceToast.type === "success" ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-800 border-red-200"}`}>
+                                    <span>{audienceToast.text}</span>
+                                    <button onClick={() => setAudienceToast(null)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+                                </div>
+                            )}
+
+                            {/* Access Mode Selector */}
+                            <div className="mt-4 rounded-xl bg-slate-50 p-3 border border-slate-200">
+                                <div className="text-xs font-bold text-slate-700 mb-2">Access Rule:</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition ${audienceModalSetting.accessMode === "BLACKLIST" ? "bg-red-50 border-red-300 font-bold text-red-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"}`}>
+                                        <input
+                                            type="radio"
+                                            name="modalAccessMode"
+                                            checked={audienceModalSetting.accessMode === "BLACKLIST"}
+                                            onChange={() => handleAudienceModeChange("BLACKLIST")}
+                                            disabled={audienceSaving}
+                                        />
+                                        <span>🚫 Blocklist (Block Listed)</span>
+                                    </label>
+                                    <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition ${audienceModalSetting.accessMode === "WHITELIST" || audienceModalSetting.accessMode === "SELECTED" ? "bg-purple-50 border-purple-300 font-bold text-purple-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"}`}>
+                                        <input
+                                            type="radio"
+                                            name="modalAccessMode"
+                                            checked={audienceModalSetting.accessMode === "WHITELIST" || audienceModalSetting.accessMode === "SELECTED"}
+                                            onChange={() => handleAudienceModeChange("WHITELIST")}
+                                            disabled={audienceSaving}
+                                        />
+                                        <span>✅ Whitelist (Only Listed)</span>
+                                    </label>
+                                    <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition ${audienceModalSetting.accessMode === "ALL" || !audienceModalSetting.accessMode ? "bg-emerald-50 border-emerald-300 font-bold text-emerald-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"}`}>
+                                        <input
+                                            type="radio"
+                                            name="modalAccessMode"
+                                            checked={audienceModalSetting.accessMode === "ALL" || !audienceModalSetting.accessMode}
+                                            onChange={() => handleAudienceModeChange("ALL")}
+                                            disabled={audienceSaving}
+                                        />
+                                        <span>🌐 Open to All Students</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Add / Block new student(s) */}
+                            <form onSubmit={handleAddAudienceEntries} className="mt-4">
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                    {audienceModalSetting.accessMode === "BLACKLIST" ? "Block Student(s) — Roll Number or 10-digit Mobile Number:" : "Add Allowed Student(s) — Roll Number or Mobile Number:"}
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 23A91A0501, 23A91A0502, 9876543210 (comma/space separated)"
+                                        value={audienceNewInput}
+                                        onChange={e => setAudienceNewInput(e.target.value)}
+                                        disabled={audienceSaving}
+                                        className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={audienceSaving || !audienceNewInput.trim()}
+                                        className={`rounded-xl px-4 py-2 text-xs font-bold text-white transition flex items-center gap-1.5 whitespace-nowrap ${audienceModalSetting.accessMode === "BLACKLIST" ? "bg-red-600 hover:bg-red-700 disabled:bg-red-300" : "bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300"}`}
+                                    >
+                                        <FaPlus />
+                                        <span>{audienceModalSetting.accessMode === "BLACKLIST" ? "Block Student" : "Add to List"}</span>
+                                    </button>
+                                </div>
+                                <span className="text-[11px] text-slate-400 mt-1 block">
+                                    Tip: You can paste multiple roll numbers or mobile numbers separated by commas, spaces, or newlines.
+                                </span>
+                            </form>
+
+                            {/* List section */}
+                            <div className="mt-4 flex-1 flex flex-col min-h-0 border-t border-slate-100 pt-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                            {audienceModalSetting.accessMode === "BLACKLIST" ? "Blocked Students / Numbers" : "Allowed Students / Numbers"}
+                                        </span>
+                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                                            {Array.isArray(audienceModalSetting.allowedRollNumbers) ? audienceModalSetting.allowedRollNumbers.length : 0}
+                                        </span>
+                                    </div>
+                                    {Array.isArray(audienceModalSetting.allowedRollNumbers) && audienceModalSetting.allowedRollNumbers.length > 5 && (
+                                        <div className="relative w-44">
+                                            <input
+                                                type="text"
+                                                placeholder="Filter list..."
+                                                value={audienceSearch}
+                                                onChange={e => setAudienceSearch(e.target.value)}
+                                                className="w-full rounded-lg border border-slate-200 pl-7 pr-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                                            />
+                                            <FaSearch className="absolute left-2.5 top-2 text-[10px] text-slate-400" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Scrollable list of identifiers */}
+                                <div className="flex-1 overflow-y-auto max-h-56 rounded-xl border border-slate-200 bg-slate-50/50 p-2">
+                                    {(() => {
+                                        const rawList: string[] = Array.isArray(audienceModalSetting.allowedRollNumbers) ? audienceModalSetting.allowedRollNumbers : [];
+                                        const filteredList = audienceSearch
+                                            ? rawList.filter(id => id.toLowerCase().includes(audienceSearch.toLowerCase()))
+                                            : rawList;
+
+                                        if (rawList.length === 0) {
+                                            return (
+                                                <div className="py-8 text-center text-xs text-slate-400">
+                                                    No student roll numbers or mobile numbers in this list yet.
+                                                </div>
+                                            );
+                                        }
+
+                                        if (filteredList.length === 0) {
+                                            return (
+                                                <div className="py-8 text-center text-xs text-slate-400">
+                                                    No entries match "{audienceSearch}".
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {filteredList.map((id: string) => {
+                                                    const isPhone = /^\d{10}$/.test(id);
+                                                    return (
+                                                        <div
+                                                            key={id}
+                                                            className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xs hover:border-slate-300 transition"
+                                                        >
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span className={`text-xs ${audienceModalSetting.accessMode === "BLACKLIST" ? "text-red-500" : "text-purple-500"}`}>
+                                                                    {audienceModalSetting.accessMode === "BLACKLIST" ? <FaBan /> : <FaCheck />}
+                                                                </span>
+                                                                <span className="font-mono text-xs font-bold text-slate-800 truncate">
+                                                                    {id}
+                                                                </span>
+                                                                {isPhone && (
+                                                                    <span className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-medium text-slate-500">
+                                                                        Phone
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                disabled={audienceSaving}
+                                                                onClick={() => handleUnblockSingle(id)}
+                                                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold transition disabled:opacity-50 ${audienceModalSetting.accessMode === "BLACKLIST" ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200" : "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"}`}
+                                                                title={`Unblock / Remove ${id}`}
+                                                            >
+                                                                <FaUnlock className="text-[10px]" />
+                                                                <span>{audienceModalSetting.accessMode === "BLACKLIST" ? "Unblock" : "Remove"}</span>
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                                {Array.isArray(audienceModalSetting.allowedRollNumbers) && audienceModalSetting.allowedRollNumbers.length > 0 ? (
+                                    <button
+                                        type="button"
+                                        disabled={audienceSaving}
+                                        onClick={handleClearAudienceList}
+                                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
+                                    >
+                                        {audienceModalSetting.accessMode === "BLACKLIST" ? "Unblock All" : "Clear All"}
+                                    </button>
+                                ) : <div />}
+                                <button
+                                    type="button"
+                                    onClick={() => setAudienceModalSetting(null)}
+                                    className="rounded-xl bg-slate-800 px-5 py-2 text-xs font-bold text-white hover:bg-slate-900 transition"
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

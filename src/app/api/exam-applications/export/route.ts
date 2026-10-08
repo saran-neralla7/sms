@@ -35,6 +35,28 @@ export async function GET(request: Request) {
         where.settingId = null;
     }
 
+    const academicYearId = searchParams.get("academicYearId");
+    if (academicYearId && academicYearId !== "ALL") {
+        const targetAY = await prisma.academicYear.findUnique({ where: { id: academicYearId } });
+        if (targetAY) {
+            where.AND = [
+                ...(where.AND || []),
+                {
+                    OR: [
+                        { setting: { academicYearId: targetAY.id } },
+                        {
+                            settingId: null,
+                            submittedAt: {
+                                gte: targetAY.startDate,
+                                lte: targetAY.endDate
+                            }
+                        }
+                    ]
+                }
+            ];
+        }
+    }
+
     try {
         const applications = await prisma.examApplication.findMany({
             where,

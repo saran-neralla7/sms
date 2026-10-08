@@ -102,11 +102,37 @@ export async function GET(request: Request) {
     }
 
     try {
-        const subjects = await prisma.subject.findMany({
+        let subjects = await prisma.subject.findMany({
             where,
             orderBy: { name: 'asc' },
             include: { department: true, regulation: true, electiveSlotRelation: true, _count: { select: { students: true } } }
         });
+
+        const includeEnrolledElectives = searchParams.get("includeEnrolledElectives") === "true";
+        if (includeEnrolledElectives && departmentId && year && semester) {
+            const enrolledElectives = await prisma.subject.findMany({
+                where: {
+                    year,
+                    semester,
+                    isElective: true,
+                    students: {
+                        some: {
+                            departmentId,
+                            year,
+                            semester
+                        }
+                    }
+                },
+                orderBy: { name: 'asc' },
+                include: { department: true, regulation: true, electiveSlotRelation: true, _count: { select: { students: true } } }
+            });
+
+            const subMap = new Map<string, any>();
+            subjects.forEach(s => subMap.set(s.id, s));
+            enrolledElectives.forEach(s => subMap.set(s.id, s));
+            subjects = Array.from(subMap.values());
+        }
+
         return NextResponse.json(subjects);
     } catch (error) {
         return NextResponse.json({ error: "Failed to fetch subjects" }, { status: 500 });

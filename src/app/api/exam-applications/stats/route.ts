@@ -13,8 +13,29 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const academicYearId = searchParams.get("academicYearId");
+
     try {
         const where: any = {};
+
+        if (academicYearId && academicYearId !== "ALL") {
+            // Find the selected academic year boundaries or settings
+            const targetAY = await prisma.academicYear.findUnique({ where: { id: academicYearId } });
+            if (targetAY) {
+                // An application matches this AY either by its linked setting's academicYearId OR by submittedAt date within the AY
+                where.OR = [
+                    { setting: { academicYearId: targetAY.id } },
+                    {
+                        settingId: null,
+                        submittedAt: {
+                            gte: targetAY.startDate,
+                            lte: targetAY.endDate
+                        }
+                    }
+                ];
+            }
+        }
 
         if (role === "OFFICE") {
             const deptId = (session.user as any).departmentId;

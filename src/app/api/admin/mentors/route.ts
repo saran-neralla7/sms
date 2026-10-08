@@ -33,7 +33,8 @@ export async function GET(req: NextRequest) {
     const filter = searchParams.get("filter"); // "ALL", "ASSIGNED", "UNASSIGNED"
 
     const whereClause: any = {
-      isLeftCollege: false
+      isLeftCollege: false,
+      isAlumni: false
     };
 
     if (departmentId && departmentId !== "ALL") {
@@ -55,7 +56,9 @@ export async function GET(req: NextRequest) {
       whereClause.mentorId = null;
     }
 
-    const [students, facultyList] = await Promise.all([
+    const deptStatsWhere: any = isHOD ? { id: user.departmentId } : {};
+
+    const [students, facultyList, allDepartments] = await Promise.all([
       prisma.student.findMany({
         where: whereClause,
         include: {
@@ -80,13 +83,52 @@ export async function GET(req: NextRequest) {
           }
         },
         orderBy: { empName: "asc" }
+      }),
+      prisma.department.findMany({
+        where: deptStatsWhere,
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          students: {
+            where: { isLeftCollege: false, isAlumni: false },
+            select: { id: true, mentorId: true }
+          },
+          faculty: {
+            select: {
+              id: true,
+              empName: true,
+              _count: { select: { mentees: true } }
+            }
+          }
+        },
+        orderBy: { name: "asc" }
       })
     ]);
+
+    const departmentStats = allDepartments.map((d) => {
+      const totalStudents = d.students.length;
+      const assignedCount = d.students.filter(s => s.mentorId !== null).length;
+      const unassignedCount = totalStudents - assignedCount;
+      const activeMentorsCount = d.faculty.filter(f => f._count.mentees > 0).length;
+      return {
+        id: d.id,
+        name: d.name,
+        code: d.code,
+        totalStudents,
+        assignedCount,
+        unassignedCount,
+        facultyCount: d.faculty.length,
+        activeMentorsCount,
+        coveragePercentage: totalStudents > 0 ? Math.round((assignedCount / totalStudents) * 100) : 0
+      };
+    });
 
     return NextResponse.json({
       success: true,
       students,
-      facultyList
+      facultyList,
+      departmentStats
     });
   } catch (error: any) {
     console.error("Error fetching mentor allocation data:", error);
@@ -159,7 +201,8 @@ export async function POST(req: NextRequest) {
           ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
           ...(sectionId && sectionId !== "ALL" ? { sectionId } : {}),
           ...(year && year !== "ALL" ? { year } : {}),
-          isLeftCollege: false
+          isLeftCollege: false,
+          isAlumni: false
         },
         select: { id: true, rollNumber: true }
       });

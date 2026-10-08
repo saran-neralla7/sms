@@ -173,6 +173,12 @@ export default function MenteeFullProfilePage() {
 
   const getTierBadge = (tier: string) => {
     switch (tier) {
+      case "NO_CLASSES":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            No Classes Held (N/A)
+          </span>
+        );
       case "SAFE":
         return (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
@@ -340,7 +346,9 @@ export default function MenteeFullProfilePage() {
               <FaChartLine className="text-blue-500" />
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-black text-slate-900">{attendancePct}%</span>
+              <span className="text-3xl font-black text-slate-900">
+                {healthTier === "NO_CLASSES" ? "N/A" : `${attendancePct}%`}
+              </span>
               <span className="text-xs font-bold text-slate-500">
                 ({overallStats?.attendedClasses} / {overallStats?.totalClasses})
               </span>
@@ -348,9 +356,15 @@ export default function MenteeFullProfilePage() {
             <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
-                  healthTier === "SAFE" ? "bg-emerald-500" : healthTier === "CONDONATION" ? "bg-amber-500" : "bg-rose-500"
+                  healthTier === "NO_CLASSES"
+                    ? "bg-slate-300"
+                    : healthTier === "SAFE"
+                    ? "bg-emerald-500"
+                    : healthTier === "CONDONATION"
+                    ? "bg-amber-500"
+                    : "bg-rose-500"
                 }`}
-                style={{ width: `${Math.min(100, attendancePct)}%` }}
+                style={{ width: `${healthTier === "NO_CLASSES" ? 0 : Math.min(100, attendancePct)}%` }}
               ></div>
             </div>
           </div>

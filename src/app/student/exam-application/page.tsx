@@ -33,6 +33,7 @@ export default function ExamApplicationPage() {
     const { data: session } = useSession();
     const [student, setStudent] = useState<any>(null);
     const [activeSemesters, setActiveSemesters] = useState<SemesterData[]>([]);
+    const [heldSettings, setHeldSettings] = useState<any[]>([]);
     const [expandedSemester, setExpandedSemester] = useState<string | null>(null);
 
     const [editModalAppId, setEditModalAppId] = useState<string | null>(null);
@@ -60,6 +61,9 @@ export default function ExamApplicationPage() {
                 const currentSemNum = getSemNumber(studentData.year, studentData.semester);
                 const now = new Date();
 
+                // Track settings where this student is specifically held
+                const heldList: any[] = [];
+
                 // Filter active settings that are for the current or past semesters, and within date range
                 const validSettings = (settings as any[]).filter(s => {
                     const settingSemNum = getSemNumber(s.year, s.semester);
@@ -67,15 +71,47 @@ export default function ExamApplicationPage() {
                     
                     if (!s.isActive || !isDateValid) return false;
 
+                    // 1. Check Student Specific Hold / Whitelisting
+                    if (s.isHold) {
+                        // Check if this setting is relevant to the student (either their regular semester or past semesters)
+                        if (s.type === "REGULAR" && settingSemNum === currentSemNum) {
+                            heldList.push(s);
+                        } else if (s.type === "SUPPLY" && (studentData.isAlumni || settingSemNum < currentSemNum)) {
+                            heldList.push(s);
+                        }
+                        return false;
+                    }
+
+                    // 2. Regular vs Supply eligibility rules
                     if (s.type === "REGULAR") {
-                        // Regular exams are ONLY for students currently in that exact year and semester
+                        // DETENTION RULE: If currently detained, Regular exam is NOT shown
+                        if (studentData.isDetained) {
+                            heldList.push({
+                                ...s,
+                                holdMessage: "Your exam application is kept on hold, please contact the OFFICE."
+                            });
+                            return false;
+                        }
+                        // ALUMNI RULE: Alumni cannot write regular exams unless specifically enabled by setting
+                        if (studentData.isAlumni) {
+                            if (!s.allowAlumni) return false;
+                        }
+                        // Active regular and rejoined students in that exact semester can write regular exams
                         return settingSemNum === currentSemNum;
                     } else {
-                        // Supply exams are ONLY for semesters BEFORE the student's current semester
-                        // (students cannot apply for supplementary of the semester they are currently in)
+                        // SUPPLY EXAMS:
+                        // If setting explicitly disallows alumni, skip
+                        if (studentData.isAlumni && s.allowAlumni === false) {
+                            return false;
+                        }
+                        if (studentData.isAlumni) {
+                            return true; // Alumni can register for past semester supply when allowed
+                        }
                         return settingSemNum < currentSemNum;
                     }
                 });
+
+                setHeldSettings(heldList);
 
                 // For each valid setting, fetch its subjects and construct the form state
                 const semestersData: SemesterData[] = [];
@@ -493,6 +529,34 @@ export default function ExamApplicationPage() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {/* Held Applications Notice */}
+                {heldSettings.length > 0 && (
+                    <div className="mb-6 space-y-3">
+                        {heldSettings.map((held, idx) => (
+                            <div key={`held-${idx}`} className="rounded-2xl border border-amber-300 bg-amber-50/90 p-5 shadow-xs">
+                                <div className="flex items-start gap-3.5">
+                                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                                        <FaExclamationTriangle size={18} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                                            <h3 className="text-sm font-bold text-amber-950">
+                                                {held.name || `Year ${held.year} Semester ${held.semester} ${held.type === "REGULAR" ? "Regular" : "Supplementary"} Exams`}
+                                            </h3>
+                                            <span className="rounded-md bg-amber-200/80 px-2 py-0.5 text-[10px] font-bold text-amber-900 uppercase tracking-wide">
+                                                Application on Hold
+                                            </span>
+                                        </div>
+                                        <p className="text-sm font-semibold text-amber-900 leading-snug">
+                                            {held.holdMessage || "Your exam application is kept on hold, please contact the OFFICE."}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
