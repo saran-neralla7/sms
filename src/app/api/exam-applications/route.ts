@@ -50,8 +50,16 @@ export async function GET(request: Request) {
     }
 
     const academicYearId = searchParams.get("academicYearId");
-    if (academicYearId && academicYearId !== "ALL") {
-        const targetAY = await prisma.academicYear.findUnique({ where: { id: academicYearId } });
+    let activeAcademicYearId = academicYearId;
+    if (!activeAcademicYearId && role !== "STUDENT") {
+        const currentAY = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+        if (currentAY) {
+            activeAcademicYearId = currentAY.id;
+        }
+    }
+
+    if (activeAcademicYearId && activeAcademicYearId !== "ALL") {
+        const targetAY = await prisma.academicYear.findUnique({ where: { id: activeAcademicYearId } });
         if (targetAY) {
             where.AND = [
                 ...(where.AND || []),

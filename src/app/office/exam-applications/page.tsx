@@ -77,7 +77,19 @@ export default function OfficeExamApplicationsPage() {
             fetch("/api/academic-years").then(r => r.ok ? r.json() : [])
         ]).then(([data, depts, ays]) => {
             setStats(data);
-            setTrackerDepts(depts.map((d: any) => d.name).sort());
+            const deptNames = depts.map((d: any) => d.name).sort();
+            setTrackerDepts(deptNames);
+
+            // Auto-lock or auto-select department if the logged-in office user has a specific department
+            const userDeptId = (session?.user as any)?.departmentId;
+            if (userDeptId) {
+                const userDept = depts.find((d: any) => d.id === userDeptId);
+                if (userDept) {
+                    setTrackerDept(userDept.name);
+                    setOverviewDept(userDept.name);
+                }
+            }
+
             if (Array.isArray(ays)) {
                 setAcademicYears(ays);
             }
@@ -109,7 +121,16 @@ export default function OfficeExamApplicationsPage() {
             setSelectedAcademicYear(cookieAy);
             loadData(cookieAy);
         } else {
-            loadData("ALL");
+            // Fetch academic years to find the active one
+            fetch("/api/academic-years")
+                .then(r => r.ok ? r.json() : [])
+                .then((ays: any[]) => {
+                    const currentAY = ays.find(y => y.isCurrent);
+                    const defaultAy = currentAY ? currentAY.id : "ALL";
+                    setSelectedAcademicYear(defaultAy);
+                    loadData(defaultAy);
+                })
+                .catch(() => loadData("ALL"));
         }
 
         const handlePopState = () => {

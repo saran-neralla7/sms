@@ -19,9 +19,17 @@ export async function GET(request: Request) {
     try {
         const where: any = {};
 
-        if (academicYearId && academicYearId !== "ALL") {
+        let activeAcademicYearId = academicYearId;
+        if (!activeAcademicYearId) {
+            const currentAY = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+            if (currentAY) {
+                activeAcademicYearId = currentAY.id;
+            }
+        }
+
+        if (activeAcademicYearId && activeAcademicYearId !== "ALL") {
             // Find the selected academic year boundaries or settings
-            const targetAY = await prisma.academicYear.findUnique({ where: { id: academicYearId } });
+            const targetAY = await prisma.academicYear.findUnique({ where: { id: activeAcademicYearId } });
             if (targetAY) {
                 // An application matches this AY either by its linked setting's academicYearId OR by submittedAt date within the AY
                 where.OR = [

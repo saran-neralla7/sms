@@ -23,6 +23,9 @@ export async function PUT(
         if (password) {
             dataToUpdate.password = await bcrypt.hash(password, 10);
         }
+        if (dataToUpdate.departmentId === "") {
+            dataToUpdate.departmentId = null;
+        }
 
         const user = await prisma.user.update({
             where: { id: params.id },

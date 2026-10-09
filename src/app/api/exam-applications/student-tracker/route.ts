@@ -28,6 +28,16 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Department not found" }, { status: 404 });
         }
 
+        // Find active exam application settings (or recent within current cycle window)
+        const activeSettings = await prisma.examApplicationSetting.findMany({
+            where: {
+                isActive: true,
+                endDate: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+            },
+            select: { id: true }
+        });
+        const activeSettingIds = activeSettings.map(s => s.id);
+
         // Fetch all students in this class
         const students = await prisma.student.findMany({
             where: { departmentId: dept.id, year, semester },
@@ -39,16 +49,23 @@ export async function GET(request: Request) {
                 year: true,
                 semester: true,
                 examApplications: {
+                    where: activeSettingIds.length > 0 ? {
+                        settingId: { in: activeSettingIds }
+                    } : {
+                        submittedAt: { gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) }
+                    },
                     select: {
                         id: true,
                         year: true,
                         semester: true,
+                        type: true,
                         status: true,
                         utrNumber: true,
                         amountPaid: true,
                         paymentDate: true,
                         duplicateUtr: true,
                         editRequested: true,
+                        settingId: true,
                         subjects: {
                             select: {
                                 subject: { select: { code: true, name: true } }
@@ -59,10 +76,12 @@ export async function GET(request: Request) {
             }
         });
 
-        // Format: separate regular vs backlog
+        // Format: separate regular vs backlog for the current cycle
         const result = students.map(s => {
-            const regular = s.examApplications.find(a => a.year === year && a.semester === semester) || null;
-            const backlogs = s.examApplications.filter(a => !(a.year === year && a.semester === semester));
+            // Regular application must match year, semester, and type === 'REGULAR'
+            const regular = s.examApplications.find(a => a.year === year && a.semester === semester && a.type === "REGULAR") || null;
+            // Backlog applications: supplementary applications submitted in this cycle
+            const backlogs = s.examApplications.filter(a => a.type === "SUPPLY");
             return {
                 rollNumber: s.rollNumber,
                 name: s.name,

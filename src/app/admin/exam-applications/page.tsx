@@ -121,7 +121,16 @@ export default function AdminExamApplicationsPage() {
             setSelectedAcademicYear(cookieAy);
             loadData(cookieAy);
         } else {
-            loadData("ALL");
+            // Fetch academic years to find the active one
+            fetch("/api/academic-years")
+                .then(r => r.ok ? r.json() : [])
+                .then((ays: any[]) => {
+                    const currentAY = ays.find(y => y.isCurrent);
+                    const defaultAy = currentAY ? currentAY.id : "ALL";
+                    setSelectedAcademicYear(defaultAy);
+                    loadData(defaultAy);
+                })
+                .catch(() => loadData("ALL"));
         }
 
         const handlePopState = () => {

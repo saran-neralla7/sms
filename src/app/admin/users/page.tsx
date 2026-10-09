@@ -29,7 +29,7 @@ export default function AdminUsersPage() {
     // Filters and Tabs
     const [searchQuery, setSearchQuery] = useState("");
     const [roleFilter, setRoleFilter] = useState("ALL");
-    const [activeTab, setActiveTab] = useState<"FACULTY" | "STUDENT">("FACULTY");
+    const [activeTab, setActiveTab] = useState<"FACULTY" | "OFFICE" | "STUDENT">("FACULTY");
     const [isGeneratingLogins, setIsGeneratingLogins] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -136,6 +136,9 @@ export default function AdminUsersPage() {
             const body: any = { ...formData };
             if (editingUser && !body.password) {
                 delete body.password;
+            }
+            if (!body.departmentId) {
+                body.departmentId = null;
             }
 
             const res = await fetch(url, {
@@ -247,10 +250,20 @@ export default function AdminUsersPage() {
 
     const filteredUsers = users.filter(user => {
         const isStudentRole = user.role === "STUDENT";
-        if (activeTab === "FACULTY" && isStudentRole) return false;
-        if (activeTab === "STUDENT" && !isStudentRole) return false;
+        const isOfficeRole = user.role === "OFFICE";
 
-        if (roleFilter !== "ALL" && user.role !== roleFilter) return false;
+        if (activeTab === "STUDENT" && !isStudentRole) return false;
+        if (activeTab === "OFFICE" && !isOfficeRole) return false;
+        if (activeTab === "FACULTY" && (isStudentRole || isOfficeRole)) return false;
+
+        if (roleFilter !== "ALL") {
+            if (activeTab === "OFFICE") {
+                if (roleFilter === "CENTRAL" && user.departmentId) return false;
+                if (roleFilter === "DEPARTMENT" && !user.departmentId) return false;
+            } else if (user.role !== roleFilter) {
+                return false;
+            }
+        }
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -282,7 +295,12 @@ export default function AdminUsersPage() {
 
     const openAddModal = () => {
         setEditingUser(null);
-        setFormData({ username: "", password: "", role: "USER", departmentId: "" });
+        setFormData({
+            username: "",
+            password: "",
+            role: activeTab === "OFFICE" ? "OFFICE" : activeTab === "STUDENT" ? "STUDENT" : "FACULTY",
+            departmentId: ""
+        });
         setIsModalOpen(true);
     };
 
@@ -301,12 +319,12 @@ export default function AdminUsersPage() {
         <div className="mx-auto max-w-7xl">
             <div className="mb-8 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${activeTab === 'STUDENT' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${activeTab === 'STUDENT' ? 'bg-red-100 text-red-600' : activeTab === 'OFFICE' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
                         <FaUsers size={24} />
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
-                        <p className="text-sm text-slate-500">Manage system access for {activeTab === 'STUDENT' ? 'Students' : 'Faculty & Staff'}.</p>
+                        <p className="text-sm text-slate-500">Manage system access for {activeTab === 'STUDENT' ? 'Students' : activeTab === 'OFFICE' ? 'Office Staff' : 'Faculty & Staff'}.</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -386,6 +404,13 @@ export default function AdminUsersPage() {
                         Faculty Logins
                     </button>
                     <button
+                        onClick={() => { setActiveTab("OFFICE"); setRoleFilter("ALL"); setSearchQuery(""); }}
+                        className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all ${activeTab === "OFFICE" ? "bg-white text-purple-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                            }`}
+                    >
+                        Office Logins
+                    </button>
+                    <button
                         onClick={() => { setActiveTab("STUDENT"); setRoleFilter("ALL"); setSearchQuery(""); }}
                         className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all ${activeTab === "STUDENT" ? "bg-white text-red-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                             }`}
@@ -406,20 +431,26 @@ export default function AdminUsersPage() {
                             className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 placeholder:text-slate-400"
                         />
                     </div>
-                    <div className="relative w-full sm:w-48">
+                    <div className="relative w-full sm:w-56">
                         <FaFilter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <select
                             value={roleFilter}
                             onChange={(e) => setRoleFilter(e.target.value)}
                             className="w-full appearance-none rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-8 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                         >
-                            <option value="ALL">All Roles</option>
+                            <option value="ALL">All {activeTab === "OFFICE" ? "Office Logins" : "Roles"}</option>
                             {activeTab === "FACULTY" && (
                                 <>
                                     <option value="ADMIN">ADMIN</option>
                                     <option value="HOD">HOD</option>
                                     <option value="FACULTY">FACULTY</option>
                                     <option value="SMS_USER">SMS USER</option>
+                                </>
+                            )}
+                            {activeTab === "OFFICE" && (
+                                <>
+                                    <option value="CENTRAL">Central Office (All Depts)</option>
+                                    <option value="DEPARTMENT">Department Office Only</option>
                                 </>
                             )}
                             {activeTab === "STUDENT" && (
@@ -485,15 +516,29 @@ export default function AdminUsersPage() {
                                                             ? "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20"
                                                             : user.role === "SMS_USER"
                                                                 ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
-                                                                : "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20"
+                                                                : user.role === "OFFICE"
+                                                                    ? "bg-purple-100 text-purple-800 ring-1 ring-inset ring-purple-600/20 font-bold"
+                                                                    : "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20"
                                                         }`}>
                                                         {user.role}
                                                     </span>
                                                 </div>
-                                                {user.department && (
-                                                    <span className="text-xs text-slate-400">
-                                                        {user.department.name}
-                                                    </span>
+                                                {user.role === "OFFICE" ? (
+                                                    user.department ? (
+                                                        <span className="text-xs font-semibold text-purple-700">
+                                                            Dept: {user.department.name} ({user.department.code})
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs font-medium text-slate-500">
+                                                            Central Office (All Departments)
+                                                        </span>
+                                                    )
+                                                ) : (
+                                                    user.department && (
+                                                        <span className="text-xs text-slate-400">
+                                                            {user.department.name}
+                                                        </span>
+                                                    )
                                                 )}
                                             </div>
                                         </td>
@@ -576,6 +621,7 @@ export default function AdminUsersPage() {
                             >
                                 <option value="FACULTY">FACULTY - Attendance & History</option>
                                 <option value="HOD">HOD - Dept Admin</option>
+                                <option value="OFFICE">OFFICE - Exam & Certificate Office Staff</option>
                                 <option value="ADMIN">ADMIN - Super Admin</option>
                                 <option value="SMS_USER">SMS USER - Alerts Only</option>
                                 <option value="STUDENT">STUDENT - Student Portal</option>
@@ -586,18 +632,29 @@ export default function AdminUsersPage() {
 
                         {!isGlobalRole && (
                             <div className="space-y-1.5">
-                                <label className="text-sm font-semibold text-slate-700">Department</label>
+                                <label className="text-sm font-semibold text-slate-700">
+                                    Department {formData.role === "OFFICE" ? "(Optional)" : ""}
+                                </label>
                                 <select
                                     value={formData.departmentId}
                                     onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                                    required={!isGlobalRole && formData.role !== "USER"}
+                                    required={!isGlobalRole && formData.role !== "USER" && formData.role !== "OFFICE"}
                                 >
-                                    <option value="">Select Department {isGlobalRole ? "(Optional)" : ""}</option>
+                                    <option value="">
+                                        {formData.role === "OFFICE"
+                                            ? "Central Office (All Departments)"
+                                            : `Select Department ${isGlobalRole ? "(Optional)" : ""}`}
+                                    </option>
                                     {departments.map(dept => (
                                         <option key={dept.id} value={dept.id}>{dept.name} ({dept.code})</option>
                                     ))}
                                 </select>
+                                {formData.role === "OFFICE" && (
+                                    <p className="text-[11px] text-slate-500">
+                                        Leave as Central Office for all departments (e.g. office, gvpoffice) or select a department for department office logins (e.g. cse, ece).
+                                    </p>
+                                )}
                             </div>
                         )}
                     </div>

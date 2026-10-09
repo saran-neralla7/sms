@@ -56,18 +56,47 @@ export async function GET(req: NextRequest) {
       })
     ]);
 
-    // 4. Exam Fee Application Verification Stats
-    const [totalExamApps, verifiedFeeApps, pendingFeeApps, activeUnexpiredSettingsCount] = await Promise.all([
-      prisma.examApplication.count(),
-      prisma.examApplication.count({ where: { status: "APPROVED" } }),
-      prisma.examApplication.count({ where: { status: "SUBMITTED" } }),
-      prisma.examApplicationSetting.count({
+    // 4. Exam Fee Application Verification Stats (Current Active Exam Cycle)
+    const activeUnexpiredSettings = await prisma.examApplicationSetting.findMany({
+      where: {
+        isActive: true,
+        endDate: { gte: today }
+      },
+      select: { id: true }
+    });
+    const activeSettingIds = activeUnexpiredSettings.map(s => s.id);
+
+    let totalExamApps = 0;
+    let verifiedFeeApps = 0;
+    let pendingFeeApps = 0;
+
+    if (activeSettingIds.length > 0) {
+      [totalExamApps, verifiedFeeApps, pendingFeeApps] = await Promise.all([
+        prisma.examApplication.count({ where: { settingId: { in: activeSettingIds } } }),
+        prisma.examApplication.count({ where: { settingId: { in: activeSettingIds }, status: "APPROVED" } }),
+        prisma.examApplication.count({ where: { settingId: { in: activeSettingIds }, status: "PENDING" } })
+      ]);
+    } else {
+      const recentSettings = await prisma.examApplicationSetting.findMany({
         where: {
           isActive: true,
-          endDate: { gte: today }
-        }
-      })
-    ]);
+          startDate: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+        },
+        select: { id: true }
+      });
+      const recentIds = recentSettings.map(s => s.id);
+      if (recentIds.length > 0) {
+        [totalExamApps, verifiedFeeApps, pendingFeeApps] = await Promise.all([
+          prisma.examApplication.count({ where: { settingId: { in: recentIds } } }),
+          prisma.examApplication.count({ where: { settingId: { in: recentIds }, status: "APPROVED" } }),
+          prisma.examApplication.count({ where: { settingId: { in: recentIds }, status: "PENDING" } })
+        ]);
+      } else {
+        pendingFeeApps = await prisma.examApplication.count({ where: { status: "PENDING" } });
+        verifiedFeeApps = await prisma.examApplication.count({ where: { status: "APPROVED" } });
+        totalExamApps = await prisma.examApplication.count();
+      }
+    }
 
     // Check if there are published MID marks for active exams in the last 30 days
     const recentPublishedMidCount = await prisma.midExamPublish.count({
@@ -77,7 +106,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const hasActiveExamApplications = pendingFeeApps > 0 || activeUnexpiredSettingsCount > 0;
+    const hasActiveExamApplications = activeSettingIds.length > 0 || pendingFeeApps > 0;
     const hasFrozenMidPapers = recentPublishedMidCount > 0;
 
     // 5. Dynamic Real-time Attendance Calculation (Strictly Faculty Academic Attendance, excluding SMS_USER)
