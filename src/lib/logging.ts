@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { DeviceInfo } from "./device-detector";
 
 /**
  * Log a user activity to the AuditLog table.
@@ -7,13 +8,15 @@ import { prisma } from "./prisma";
  * @param entity - The entity/model name (e.g. "TeachingDiary", "CourseFile", "LeaveRequest")
  * @param entityId - A human-readable label for the entity (e.g. "DWDM | Year 3 | Sem 1 | CSE-A")
  * @param details - Any extra detail object stored as JSON
+ * @param deviceInfo - Optional client telemetry (IP, OS, Browser, Device Model)
  */
 export async function logActivity(
     performedBy: string,
     action: string,
     entity: string,
     entityId: string | null,
-    details: any
+    details: any,
+    deviceInfo?: Partial<DeviceInfo>
 ) {
     try {
         await prisma.auditLog.create({
@@ -22,10 +25,17 @@ export async function logActivity(
                 entity,
                 entityId,
                 details: typeof details === "string" ? details : JSON.stringify(details),
-                performedBy
+                performedBy,
+                ipAddress: deviceInfo?.ip || null,
+                deviceType: deviceInfo?.deviceType || null,
+                deviceModel: deviceInfo?.deviceModel || null,
+                os: deviceInfo?.os || null,
+                browser: deviceInfo?.browser || null,
+                userAgent: deviceInfo?.userAgent || null
             }
         });
     } catch (error) {
         console.error("Audit log error:", error);
     }
 }
+

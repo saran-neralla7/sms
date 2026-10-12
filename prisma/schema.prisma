@@ -360,6 +360,12 @@ model AuditLog {
   entityId    String?
   details     String
   performedBy String
+  ipAddress   String?
+  deviceType  String?
+  deviceModel String?
+  os          String?
+  browser     String?
+  userAgent   String?
   createdAt   DateTime @default(now())
 }
 
@@ -446,6 +452,11 @@ model ExamApplication {
   subjects           ExamApplicationSubject[]
   editRequested      Boolean                  @default(false)
   editRequestReason  String?
+  editRequestIp      String?
+  editRequestDevice  String?
+  editRequestAt      DateTime?
+  submissionIp       String?
+  submissionDevice   String?
   type               String                   @default("REGULAR") // REGULAR or SUPPLY
   settingId          String?
   setting            ExamApplicationSetting?  @relation(fields: [settingId], references: [id], onDelete: SetNull)

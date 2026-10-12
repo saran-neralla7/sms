@@ -53,6 +53,17 @@ const prismaClientSingleton = () => {
                         };
                     }
 
+                    // Try extracting telemetry from current request headers
+                    let deviceInfo = null;
+                    try {
+                        const { headers } = await import('next/headers');
+                        const { parseDeviceFromHeaders } = await import('@/lib/device-detector');
+                        const reqHeaders = await headers();
+                        deviceInfo = parseDeviceFromHeaders(reqHeaders);
+                    } catch (e) {
+                        // Background or non-request contexts
+                    }
+
                     // Create audit log record
                     await client.auditLog.create({
                         data: {
@@ -60,7 +71,13 @@ const prismaClientSingleton = () => {
                             entity: params.model,
                             entityId: entityId ? String(entityId).substring(0, 100) : null,
                             details: JSON.stringify(detailsObj),
-                            performedBy: user.id || 'SYSTEM'
+                            performedBy: user.id || 'SYSTEM',
+                            ipAddress: deviceInfo?.ip || null,
+                            deviceType: deviceInfo?.deviceType || null,
+                            deviceModel: deviceInfo?.deviceModel || null,
+                            os: deviceInfo?.os || null,
+                            browser: deviceInfo?.browser || null,
+                            userAgent: deviceInfo?.userAgent || null
                         }
                     });
                 }

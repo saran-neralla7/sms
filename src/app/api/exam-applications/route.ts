@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { parseDeviceFromHeaders } from "@/lib/device-detector";
+import { logActivity } from "@/lib/logging";
 
 // GET: List exam applications (filtered by role)
 export async function GET(request: Request) {
@@ -141,6 +143,9 @@ export async function POST(request: Request) {
         const now = new Date();
         const applicationsToCreate = [];
 
+        const deviceInfo = parseDeviceFromHeaders(request.headers);
+        const deviceSummary = [deviceInfo.deviceModel, deviceInfo.os, deviceInfo.browser].filter(Boolean).join(" • ") || deviceInfo.deviceType;
+
         for (const app of applicationsData) {
             let { year, semester, subjectIds, utrNumber, amountPaid: amountPaidStr, paymentDate, settingId, type, payments } = app;
 
@@ -209,6 +214,8 @@ export async function POST(request: Request) {
                 payments: payments && Array.isArray(payments) ? payments : [{ utrNumber, amountPaid, paymentDate }],
                 duplicateUtr: !!duplicateUtrRecord,
                 duplicateUtrRollNo: duplicateUtrRecord ? duplicateUtrRecord.rollNumber : null,
+                submissionIp: deviceInfo.ip,
+                submissionDevice: deviceSummary,
                 type,
                 settingId,
                 subjects: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import LogoSpinner from "@/components/LogoSpinner";
 import { FaHistory, FaUser, FaInfoCircle, FaSignInAlt, FaShieldAlt, FaDatabase, FaBook, FaFileAlt, FaUserTie, FaCheck } from "react-icons/fa";
 
@@ -48,6 +48,29 @@ export default function AuditLogsPage() {
         successLogins: 0,
         dataMutations: 0
     });
+
+    // Refs for synced dual horizontal scrollbars (top & bottom)
+    const topScrollRef = useRef<HTMLDivElement>(null);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+    const handleTopScroll = () => {
+        if (topScrollRef.current && tableScrollRef.current) {
+            tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+        }
+    };
+
+    const handleTableScroll = () => {
+        if (topScrollRef.current && tableScrollRef.current) {
+            topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+        }
+    };
+
+    useEffect(() => {
+        if (tableScrollRef.current) {
+            setTableScrollWidth(tableScrollRef.current.scrollWidth);
+        }
+    }, [logs, loading]);
 
     useEffect(() => {
         fetchLogs();
@@ -194,24 +217,39 @@ export default function AuditLogsPage() {
                 </div>
             </div>
 
+            {/* Top Horizontal Scrollbar */}
+            <div
+                ref={topScrollRef}
+                onScroll={handleTopScroll}
+                className="overflow-x-auto rounded-t-xl bg-slate-50 border border-b-0 border-slate-200"
+                style={{ height: "14px" }}
+            >
+                <div style={{ width: `${tableScrollWidth || 1200}px`, height: "1px" }} />
+            </div>
+
             {/* Table */}
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
+            <div className="overflow-hidden rounded-b-xl border border-slate-200 bg-white shadow-sm">
+                <div
+                    ref={tableScrollRef}
+                    onScroll={handleTableScroll}
+                    className="overflow-x-auto"
+                >
+                    <table className="w-full text-left min-w-[1000px]">
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/50">
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Time</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">User</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Action</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Entity / What Changed</th>
+                                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Device & IP</th>
                                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Details</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
-                                <tr><td colSpan={5} className="py-12 text-center"><LogoSpinner /></td></tr>
+                                <tr><td colSpan={6} className="py-12 text-center"><LogoSpinner /></td></tr>
                             ) : logs.length === 0 ? (
-                                <tr><td colSpan={5} className="py-12 text-center text-slate-500">No logs found.</td></tr>
+                                <tr><td colSpan={6} className="py-12 text-center text-slate-500">No logs found.</td></tr>
                             ) : (
                                 logs.map((log) => {
                                     const details = parseDetails(log.details);
@@ -247,6 +285,22 @@ export default function AuditLogsPage() {
                                                     {log.entityId && (
                                                         <span className="text-sm font-medium text-slate-800 leading-snug break-words">
                                                             {log.entityId}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col gap-0.5 text-xs">
+                                                    {log.ipAddress ? (
+                                                        <span className="font-mono font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded w-fit text-[11px]">
+                                                            {log.ipAddress}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400">—</span>
+                                                    )}
+                                                    {(log.deviceModel || log.os || log.browser) && (
+                                                        <span className="text-[11px] text-slate-500 truncate max-w-[200px]" title={[log.deviceModel, log.os, log.browser].filter(Boolean).join(" • ")}>
+                                                            {[log.deviceModel, log.os, log.browser].filter(Boolean).join(" • ")}
                                                         </span>
                                                     )}
                                                 </div>

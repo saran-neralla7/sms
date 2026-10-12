@@ -3,7 +3,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/logging";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { parseDeviceFromHeaders } from "@/lib/device-detector";
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -18,13 +19,22 @@ export const authOptions: NextAuthOptions = {
                     return null;
                 }
 
+                // Extract client device & IP telemetry
+                let deviceInfo = undefined;
+                try {
+                    const reqHeaders = await headers();
+                    deviceInfo = parseDeviceFromHeaders(reqHeaders);
+                } catch (e) {
+                    // In environments where headers() isn't available synchronously
+                }
+
                 const user = await prisma.user.findUnique({
                     where: { username: credentials.username },
                     include: { faculty: true }
                 });
 
                 if (!user) {
-                    await logActivity("SYSTEM", "LOGIN_FAILURE", "Auth", credentials.username, { reason: "User not found" });
+                    await logActivity("SYSTEM", "LOGIN_FAILURE", "Auth", credentials.username, { reason: "User not found" }, deviceInfo);
                     return null;
                 }
 
@@ -33,7 +43,7 @@ export const authOptions: NextAuthOptions = {
                         where: { key: "DISABLE_STUDENT_LOGIN" }
                     });
                     if (disableSetting && disableSetting.value === "true") {
-                        await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Deactivated: Student logins disabled by Admin" });
+                        await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Deactivated: Student logins disabled by Admin" }, deviceInfo);
                         throw new Error("Student logins are currently disabled by the Administrator.");
                     }
 
@@ -41,7 +51,7 @@ export const authOptions: NextAuthOptions = {
                         where: { rollNumber: user.username }
                     });
                     if (student?.isLeftCollege) {
-                        await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Deactivated: Left College" });
+                        await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Deactivated: Left College" }, deviceInfo);
                         throw new Error("Your account has been deactivated as you have left the college.");
                     }
                 }
@@ -52,11 +62,11 @@ export const authOptions: NextAuthOptions = {
                 );
 
                 if (!isPasswordValid) {
-                    await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Incorrect password" });
+                    await logActivity(user.id, "LOGIN_FAILURE", "Auth", user.username, { reason: "Incorrect password" }, deviceInfo);
                     return null;
                 }
 
-                await logActivity(user.id, "LOGIN_SUCCESS", "Auth", user.username, { role: user.role });
+                await logActivity(user.id, "LOGIN_SUCCESS", "Auth", user.username, { role: user.role }, deviceInfo);
 
                 return {
                     id: user.id,
@@ -130,7 +140,14 @@ export const authOptions: NextAuthOptions = {
     events: {
         async signOut({ token }) {
             if (token && token.id) {
-                await logActivity(token.id as string, "LOGOUT", "Auth", (token as any).username || "", { role: token.role });
+                let deviceInfo = undefined;
+                try {
+                    const reqHeaders = await headers();
+                    deviceInfo = parseDeviceFromHeaders(reqHeaders);
+                } catch (e) {
+                    // Ignore if headers unavailable
+                }
+                await logActivity(token.id as string, "LOGOUT", "Auth", (token as any).username || "", { role: token.role }, deviceInfo);
             }
         }
     },

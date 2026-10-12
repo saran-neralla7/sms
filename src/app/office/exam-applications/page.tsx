@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaCheckCircle, FaTimesCircle, FaClock, FaExclamationTriangle, FaDownload, FaArrowLeft, FaImage, FaTimes, FaSearch, FaFileExcel } from "react-icons/fa";
@@ -49,6 +49,76 @@ export default function OfficeExamApplicationsPage() {
     const [duplicateModal, setDuplicateModal] = useState<any | null>(null);
     const [confirmModal, setConfirmModal] = useState<{ id: string, open: boolean } | null>(null);
     const [viewModal, setViewModal] = useState<any | null>(null);
+
+    const viewModalRef = useRef(viewModal);
+    viewModalRef.current = viewModal;
+    const confirmModalRef = useRef(confirmModal);
+    confirmModalRef.current = confirmModal;
+    const rejectModalRef = useRef(rejectModal);
+    rejectModalRef.current = rejectModal;
+    const previewImageRef = useRef(previewImage);
+    previewImageRef.current = previewImage;
+    const duplicateModalRef = useRef(duplicateModal);
+    duplicateModalRef.current = duplicateModal;
+    const selectedCardRef = useRef(selectedCard);
+    selectedCardRef.current = selectedCard;
+
+    const openViewModal = (app: any) => {
+        setViewModal(app);
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "viewModal" },
+            "",
+            window.location.href
+        );
+    };
+
+    const openDuplicateModal = (app: any) => {
+        setDuplicateModal(app);
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "duplicateModal" },
+            "",
+            window.location.href
+        );
+    };
+
+    const openPreviewImage = (url: string) => {
+        setPreviewImage(url);
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "previewImage" },
+            "",
+            window.location.href
+        );
+    };
+
+    const openConfirmModal = (id: string) => {
+        setConfirmModal({ id, open: true });
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "confirmModal" },
+            "",
+            window.location.href
+        );
+    };
+
+    const openRejectModal = (id: string) => {
+        setRejectModal({ id, open: true });
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "rejectModal" },
+            "",
+            window.location.href
+        );
+    };
+
+    const closeModals = () => {
+        setViewModal(null);
+        setConfirmModal(null);
+        setRejectModal({ id: "", open: false });
+        setPreviewImage(null);
+        setDuplicateModal(null);
+        if (window.history.state?.modal) {
+            window.history.back();
+        }
+    };
+
     const [editReqApplications, setEditReqApplications] = useState<any[]>([]);
     const [loadingEditReqs, setLoadingEditReqs] = useState(false);
     const [sortField, setSortField] = useState<"rollNumber" | "submittedAt" | null>(null);
@@ -133,9 +203,37 @@ export default function OfficeExamApplicationsPage() {
                 .catch(() => loadData("ALL"));
         }
 
-        const handlePopState = () => {
-            setSelectedCard(null);
-            setApplications([]);
+        const handlePopState = (e: PopStateEvent) => {
+            const isModalOpen = Boolean(
+                viewModalRef.current ||
+                confirmModalRef.current?.open ||
+                rejectModalRef.current?.open ||
+                previewImageRef.current ||
+                duplicateModalRef.current
+            );
+
+            if (isModalOpen) {
+                setViewModal(null);
+                setConfirmModal(null);
+                setRejectModal({ id: "", open: false });
+                setPreviewImage(null);
+                setDuplicateModal(null);
+
+                // If user was viewing details and backed out of modal, keep details view
+                if (e.state?.view === "details" || (selectedCardRef.current && !e.state?.view)) {
+                    return;
+                }
+            }
+
+            if (!e.state?.view || e.state.view !== "details") {
+                setSelectedCard(null);
+                setApplications([]);
+                setViewModal(null);
+                setConfirmModal(null);
+                setRejectModal({ id: "", open: false });
+                setPreviewImage(null);
+                setDuplicateModal(null);
+            }
         };
         window.addEventListener("popstate", handlePopState);
         return () => window.removeEventListener("popstate", handlePopState);
@@ -189,6 +287,9 @@ export default function OfficeExamApplicationsPage() {
         const res = await fetch(`/api/exam-applications/${id}`, { method: "DELETE" });
         if (res.ok) {
             setApplications(prev => prev.filter(a => a.id !== id));
+            setEditReqApplications(prev => prev.filter(a => a.id !== id));
+            // Refresh counts in overview cards if needed
+            loadData(selectedAcademicYear);
         }
         setActionLoading(null);
         setConfirmModal(null);
@@ -243,16 +344,20 @@ export default function OfficeExamApplicationsPage() {
         return <div className="flex items-center justify-center py-20"><LogoSpinner fullScreen={false} /></div>;
     }
 
-    // Detail view — application table
-    if (selectedCard) {
-        return (
-            <div className="mx-auto max-w-6xl">
+    return (
+        <div className="mx-auto max-w-6xl">
+            {selectedCard ? (
                 <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
                     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <button onClick={() => { 
                                 setSelectedCard(null); 
                                 setApplications([]); 
+                                setViewModal(null);
+                                setConfirmModal(null);
+                                setRejectModal({ id: "", open: false });
+                                setPreviewImage(null);
+                                setDuplicateModal(null);
                                 if (window.history.state?.view === "details") {
                                     window.history.back();
                                 } else {
@@ -318,8 +423,8 @@ export default function OfficeExamApplicationsPage() {
                                         const totalAmount = paymentsList.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
                                         return (
                                         <tr key={app.id} className={`hover:bg-slate-50 transition-colors ${app.status === "PENDING" ? "bg-yellow-50/30" : ""}`}>
-                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer whitespace-nowrap" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
-                                            <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
+                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer whitespace-nowrap" onClick={() => openViewModal(app)}>{app.rollNumber}</td>
+                                            <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => openViewModal(app)}>{app.student?.name || ""}</td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-wrap gap-1">
                                                     {(app.subjects || []).map((s: any) => (
@@ -334,7 +439,7 @@ export default function OfficeExamApplicationsPage() {
                                                     ))}
                                                 </div>
                                                 {app.duplicateUtr && (
-                                                    <button onClick={() => setDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
+                                                    <button onClick={() => openDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
                                                         <FaExclamationTriangle /> DUPLICATE
                                                     </button>
                                                 )}
@@ -382,7 +487,7 @@ export default function OfficeExamApplicationsPage() {
                                                     <div className="flex flex-wrap gap-1.5">
                                                         {app.editRequested && (
                                                             <button
-                                                                onClick={() => setConfirmModal({ id: app.id, open: true })}
+                                                                onClick={() => openConfirmModal(app.id)}
                                                                 disabled={actionLoading === app.id}
                                                                 className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50 whitespace-nowrap outline-none"
                                                                 title="Delete application & allow resubmit"
@@ -400,7 +505,7 @@ export default function OfficeExamApplicationsPage() {
                                                                     ✓ Approve
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => setRejectModal({ id: app.id, open: true })}
+                                                                    onClick={() => openRejectModal(app.id)}
                                                                     disabled={actionLoading === app.id}
                                                                     className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
                                                                 >
@@ -419,230 +524,9 @@ export default function OfficeExamApplicationsPage() {
                         </div>
                     )}
                 </motion.div>
-
-                {/* Duplicate UTR Modal */}
-                <AnimatePresence>
-                    {duplicateModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDuplicateModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
-                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-                                <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-red-600">
-                                    <FaExclamationTriangle /> Duplicate UTR Detected
-                                </h3>
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                                    <p className="mb-3 text-sm text-slate-600">This UTR number (<span className="font-mono font-bold text-slate-900">{duplicateModal.utrNumber}</span>) was also submitted by:</p>
-                                    <div className="space-y-3">
-                                        <div className="flex flex-col border-b border-slate-200 pb-2">
-                                            <span className="text-xs font-semibold uppercase text-slate-500">Student Name</span>
-                                            <span className="text-sm font-bold text-slate-900">{duplicateModal.duplicateDetails?.name || "Unknown"}</span>
-                                        </div>
-                                        <div className="flex flex-col border-b border-slate-200 pb-2">
-                                            <span className="text-xs font-semibold uppercase text-slate-500">Roll Number</span>
-                                            <span className="text-sm font-bold text-slate-900">{duplicateModal.duplicateDetails?.rollNumber || duplicateModal.duplicateUtrRollNo || "Unknown"}</span>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-xs font-semibold uppercase text-slate-500">Original Submission</span>
-                                            <span className="text-sm font-bold text-slate-900">
-                                                {duplicateModal.duplicateDetails ? `Year ${duplicateModal.duplicateDetails.year}, Semester ${duplicateModal.duplicateDetails.semester}` : "Unknown"}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-6 flex justify-end">
-                                    <button onClick={() => setDuplicateModal(null)} className="rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-300 transition-colors">
-                                        Close
-                                    </button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
-
-                {/* Reject Remarks Modal */}
-                <AnimatePresence>
-                    {rejectModal.open && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setRejectModal({ id: "", open: false })} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
-                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
-                                <h3 className="mb-2 text-lg font-bold text-slate-900">Reject Application</h3>
-                                <p className="mb-4 text-sm text-slate-500">Please enter the reason for rejection.</p>
-                                <textarea
-                                    value={remarks}
-                                    onChange={e => setRemarks(e.target.value)}
-                                    rows={3}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                                    placeholder="Remarks (optional)"
-                                />
-                                <div className="mt-4 flex gap-3 justify-end">
-                                    <button onClick={() => setRejectModal({ id: "", open: false })} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">Cancel</button>
-                                    <button onClick={handleReject} disabled={!!actionLoading} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">Reject</button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
-
-                {/* Screenshot Preview Modal */}
-                <AnimatePresence>
-                    {previewImage && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPreviewImage(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
-                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative max-w-lg max-h-[80vh] rounded-xl bg-white p-2 shadow-2xl">
-                                <button onClick={() => setPreviewImage(null)} className="absolute -top-3 -right-3 rounded-full bg-white p-2 shadow-lg text-slate-600 hover:text-slate-900"><FaTimes /></button>
-                                <img src={previewImage} alt="Payment Screenshot" className="max-h-[75vh] rounded-lg object-contain" />
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
-
-                {/* Approve Edit Confirmation Modal */}
-                <AnimatePresence>
-                    {confirmModal?.open && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
-                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-                                <h3 className="mb-2 text-center text-lg font-bold text-slate-900">Approve Edit Request?</h3>
-                                <p className="mb-6 text-center text-sm text-slate-500">
-                                    This will permanently discard the current application and allow the student to submit a fresh one. This action cannot be undone.
-                                </p>
-                                <div className="flex justify-center gap-3">
-                                    <button onClick={() => setConfirmModal(null)} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
-                                        Cancel
-                                    </button>
-                                    <button onClick={() => handleApproveEdit(confirmModal.id)} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
-                                        {actionLoading === confirmModal.id ? <LogoSpinner fullScreen={false} /> : "Approve Edit"}
-                                    </button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
-
-                {/* Application Details Modal */}
-                <AnimatePresence>
-                    {viewModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setViewModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
-                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-                                <div className="flex justify-between items-start mb-4">
-                                    <h3 className="text-xl font-bold text-slate-800">Application Details</h3>
-                                    <button onClick={() => setViewModal(null)} className="text-slate-400 hover:text-slate-700"><FaTimes /></button>
-                                </div>
-                                
-                                {viewModal.editRequested && (
-                                    <div className="mb-6 rounded-xl border border-orange-200 bg-orange-50 p-4">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold text-orange-800">Edit Requested by Student</span>
-                                        </div>
-                                        <p className="text-sm text-slate-700">{viewModal.editRequestReason}</p>
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                    {/* Photo */}
-                                    <div className="flex flex-col items-center justify-start">
-                                        {viewModal.student?.photoUrl ? (
-                                            <img src={viewModal.student.photoUrl} alt="Student" className="h-32 w-32 rounded-xl object-cover border border-slate-200 shadow-sm" />
-                                        ) : (
-                                            <div className="h-32 w-32 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200 shadow-sm">
-                                                <FaImage size={32} />
-                                            </div>
-                                        )}
-                                        <span className="mt-2 text-sm font-bold text-slate-800 text-center">{viewModal.student?.name || "Unknown"}</span>
-                                        <span className="text-xs text-slate-500 font-mono">{viewModal.rollNumber}</span>
-                                    </div>
-
-                                    {/* Details */}
-                                    <div className="md:col-span-2 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
-                                            <div>
-                                                <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Year & Semester</span>
-                                                <span className="text-sm font-medium text-slate-900">Year {viewModal.year} — Sem {viewModal.semester}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Apply Status</span>
-                                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold w-fit ${
-                                                    viewModal.status === "APPROVED" ? "bg-green-100 text-green-700" :
-                                                    viewModal.status === "REJECTED" ? "bg-red-100 text-red-700" :
-                                                    "bg-yellow-100 text-yellow-700"
-                                                }`}>{viewModal.status}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
-                                            <div>
-                                                <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Payment Date</span>
-                                                <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Amount Paid</span>
-                                                <span className="text-sm font-medium text-slate-900">{viewModal.amountPaid ? `₹${viewModal.amountPaid}` : "—"}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Submitted At</span>
-                                                <span className="text-sm font-medium text-slate-900">{viewModal.submittedAt ? new Date(viewModal.submittedAt).toLocaleString("en-IN") : "—"}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="border-b border-slate-100 pb-4">
-                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">UTR Number</span>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-mono text-sm text-slate-900">{viewModal.utrNumber}</span>
-                                                {viewModal.duplicateUtr && (
-                                                    <span className="inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                                                        DUPLICATE
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-2">Applied Subjects</span>
-                                            <ul className="text-sm text-slate-700 space-y-1">
-                                                {(viewModal.subjects || []).map((s: any) => (
-                                                    <li key={s.id} className="flex gap-2">
-                                                        <span className="font-medium text-slate-600 min-w-[70px]">{s.subject?.code}</span>
-                                                        <span>{s.subject?.name}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="mt-6 flex justify-end gap-3 rounded-xl bg-slate-50 p-4 border border-slate-100">
-                                    <button onClick={() => setViewModal(null)} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300">Close</button>
-                                    {viewModal.status === "PENDING" && (
-                                        <>
-                                            <button
-                                                onClick={() => { setRejectModal({ id: viewModal.id, open: true }); setViewModal(null); }}
-                                                disabled={actionLoading === viewModal.id}
-                                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                                            >
-                                                Reject
-                                            </button>
-                                            <button
-                                                onClick={() => { handleApprove(viewModal.id); setViewModal(null); }}
-                                                disabled={actionLoading === viewModal.id}
-                                                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-                                            >
-                                                Approve
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
-            </div>
-        );
-    }
-
-    // Overview — department-wise cards
-    return (
-        <div className="mx-auto max-w-6xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            ) : (
+                <>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
                     <h1 className="text-2xl font-extrabold text-slate-900">Exam Applications</h1>
                     <p className="mt-1 text-slate-500">Manage departmental applications and requests.</p>
@@ -759,7 +643,7 @@ export default function OfficeExamApplicationsPage() {
                             <tbody className="divide-y divide-slate-100">
                                 {editReqApplications.map((app: any) => (
                                     <tr key={app.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
+                                        <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => openViewModal(app)}>{app.rollNumber}</td>
                                         <td className="px-4 py-3 text-slate-700">{app.student?.name || ""}</td>
                                         <td className="px-4 py-3">
                                             <div className="flex flex-wrap gap-1">
@@ -768,10 +652,18 @@ export default function OfficeExamApplicationsPage() {
                                                 ))}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 text-xs text-slate-600 max-w-xs truncate" title={app.editRequestReason}>{app.editRequestReason}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600 max-w-xs">
+                                            <div className="font-medium text-slate-800 line-clamp-2" title={app.editRequestReason}>{app.editRequestReason}</div>
+                                            {(app.editRequestIp || app.editRequestDevice) && (
+                                                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                                                    {app.editRequestIp && <span className="font-mono bg-slate-100 px-1 rounded text-slate-600">{app.editRequestIp}</span>}
+                                                    {app.editRequestDevice && <span className="truncate max-w-[150px]">{app.editRequestDevice}</span>}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <button
-                                                onClick={() => setConfirmModal({ id: app.id, open: true })}
+                                                onClick={() => openConfirmModal(app.id)}
                                                 disabled={actionLoading === app.id}
                                                 className="rounded-lg bg-orange-100 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-200 disabled:opacity-50"
                                             >
@@ -929,6 +821,254 @@ export default function OfficeExamApplicationsPage() {
                     )}
                 </div>
             ) : null}
+            </>
+            )}
+
+            {/* Reject Remarks Modal */}
+            <AnimatePresence>
+                {rejectModal.open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+                            <h3 className="mb-2 text-lg font-bold text-slate-900">Reject Application</h3>
+                            <p className="mb-4 text-sm text-slate-500">Please enter the reason for rejection.</p>
+                            <textarea
+                                value={remarks}
+                                onChange={e => setRemarks(e.target.value)}
+                                rows={3}
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                                placeholder="Remarks (optional)"
+                            />
+                            <div className="mt-4 flex gap-3 justify-end">
+                                <button onClick={closeModals} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">Cancel</button>
+                                <button onClick={async () => { await handleReject(); closeModals(); }} disabled={!!actionLoading} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">Reject</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Screenshot Preview Modal */}
+            <AnimatePresence>
+                {previewImage && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative max-w-lg max-h-[80vh] rounded-xl bg-white p-2 shadow-2xl">
+                            <button onClick={closeModals} className="absolute -top-3 -right-3 rounded-full bg-white p-2 shadow-lg text-slate-600 hover:text-slate-900"><FaTimes /></button>
+                            <img src={previewImage} alt="Payment Screenshot" className="max-h-[75vh] rounded-lg object-contain" />
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Approve Edit Confirmation Modal */}
+            <AnimatePresence>
+                {confirmModal?.open && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                            <h3 className="mb-2 text-center text-lg font-bold text-slate-900">Approve Edit Request?</h3>
+                            <p className="mb-6 text-center text-sm text-slate-500">
+                                This will discard the current application and allow the student to select subjects and resubmit a fresh one.
+                            </p>
+                            <div className="flex justify-center gap-3">
+                                <button onClick={closeModals} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                                    Cancel
+                                </button>
+                                <button onClick={async () => { await handleApproveEdit(confirmModal.id); closeModals(); }} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
+                                    {actionLoading === confirmModal.id ? <LogoSpinner fullScreen={false} /> : "Approve Edit"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Duplicate UTR Modal */}
+            <AnimatePresence>
+                {duplicateModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+                            <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-red-600">
+                                <FaExclamationTriangle /> Duplicate UTR Detected
+                            </h3>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="mb-3 text-sm text-slate-600">This UTR number (<span className="font-mono font-bold text-slate-900">{duplicateModal.utrNumber}</span>) was also submitted by:</p>
+                                <div className="space-y-3">
+                                    <div className="flex flex-col border-b border-slate-200 pb-2">
+                                        <span className="text-xs font-semibold uppercase text-slate-500">Student Name</span>
+                                        <span className="text-sm font-bold text-slate-900">{duplicateModal.duplicateDetails?.name || "Unknown"}</span>
+                                    </div>
+                                    <div className="flex flex-col border-b border-slate-200 pb-2">
+                                        <span className="text-xs font-semibold uppercase text-slate-500">Roll Number</span>
+                                        <span className="text-sm font-bold text-slate-900">{duplicateModal.duplicateDetails?.rollNumber || duplicateModal.duplicateUtrRollNo || "Unknown"}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-semibold uppercase text-slate-500">Original Submission</span>
+                                        <span className="text-sm font-bold text-slate-900">
+                                            {duplicateModal.duplicateDetails ? `Year ${duplicateModal.duplicateDetails.year}, Semester ${duplicateModal.duplicateDetails.semester}` : "Unknown"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end">
+                                <button onClick={closeModals} className="rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-300 transition-colors">
+                                    Close
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Application Details Modal */}
+            <AnimatePresence>
+                {viewModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex justify-between items-start mb-4">
+                                <h3 className="text-xl font-bold text-slate-800">Application Details</h3>
+                                <button onClick={closeModals} className="text-slate-400 hover:text-slate-700"><FaTimes /></button>
+                            </div>
+                            
+                            {viewModal.editRequested && (
+                                <div className="mb-6 rounded-xl border border-orange-200 bg-orange-50 p-4">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="font-bold text-orange-800">Edit Requested by Student</span>
+                                        {viewModal.editRequestAt && (
+                                            <span className="text-[11px] text-orange-600 font-medium">
+                                                {new Date(viewModal.editRequestAt).toLocaleString("en-IN")}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-slate-800 font-medium mb-2">{viewModal.editRequestReason}</p>
+                                    {(viewModal.editRequestIp || viewModal.editRequestDevice) && (
+                                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-orange-200/60 text-xs text-orange-900">
+                                            {viewModal.editRequestIp && (
+                                                <span className="inline-flex items-center gap-1 font-mono bg-white/80 px-2 py-0.5 rounded border border-orange-200">
+                                                    🌐 IP: {viewModal.editRequestIp}
+                                                </span>
+                                            )}
+                                            {viewModal.editRequestDevice && (
+                                                <span className="inline-flex items-center gap-1 bg-white/80 px-2 py-0.5 rounded border border-orange-200">
+                                                    📱 Device: {viewModal.editRequestDevice}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                {/* Photo */}
+                                <div className="flex flex-col items-center justify-start">
+                                    {viewModal.student?.photoUrl ? (
+                                        <img src={viewModal.student.photoUrl} alt="Student" className="h-32 w-32 rounded-xl object-cover border border-slate-200 shadow-sm" />
+                                    ) : (
+                                        <div className="h-32 w-32 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200 shadow-sm">
+                                            <FaImage size={32} />
+                                        </div>
+                                    )}
+                                    <span className="mt-2 text-sm font-bold text-slate-800 text-center">{viewModal.student?.name || "Unknown"}</span>
+                                    <span className="text-xs text-slate-500 font-mono">{viewModal.rollNumber}</span>
+                                </div>
+
+                                {/* Details */}
+                                <div className="md:col-span-2 space-y-4">
+                                    <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                                        <div>
+                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Year & Semester</span>
+                                            <span className="text-sm font-medium text-slate-900">Year {viewModal.year} — Sem {viewModal.semester}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Apply Status</span>
+                                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold w-fit ${
+                                                viewModal.status === "APPROVED" ? "bg-green-100 text-green-700" :
+                                                viewModal.status === "REJECTED" ? "bg-red-100 text-red-700" :
+                                                "bg-yellow-100 text-yellow-700"
+                                            }`}>{viewModal.status}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
+                                        <div>
+                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Payment Date</span>
+                                            <span className="text-sm font-medium text-slate-900">{viewModal.paymentDate ? new Date(viewModal.paymentDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Amount Paid</span>
+                                            <span className="text-sm font-medium text-slate-900">{viewModal.amountPaid ? `₹${viewModal.amountPaid}` : "—"}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">Submitted At</span>
+                                            <span className="text-sm font-medium text-slate-900">{viewModal.submittedAt ? new Date(viewModal.submittedAt).toLocaleString("en-IN") : "—"}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="border-b border-slate-100 pb-4">
+                                        <span className="block text-xs uppercase font-semibold text-slate-500 mb-1">UTR Number</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono text-sm text-slate-900">{viewModal.utrNumber}</span>
+                                            {viewModal.duplicateUtr && (
+                                                <span className="inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                                                    DUPLICATE
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <span className="block text-xs uppercase font-semibold text-slate-500 mb-2">Applied Subjects</span>
+                                        <ul className="text-sm text-slate-700 space-y-1">
+                                            {(viewModal.subjects || []).map((s: any) => (
+                                                <li key={s.id} className="flex gap-2">
+                                                    <span className="font-medium text-slate-600 min-w-[70px]">{s.subject?.code}</span>
+                                                    <span>{s.subject?.name}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex justify-end gap-3 rounded-xl bg-slate-50 p-4 border border-slate-100">
+                                <button onClick={closeModals} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300">Close</button>
+                                {viewModal.editRequested && (
+                                    <button
+                                        onClick={() => {
+                                            openConfirmModal(viewModal.id);
+                                            setViewModal(null);
+                                        }}
+                                        className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700"
+                                    >
+                                        Approve Edit
+                                    </button>
+                                )}
+                                {viewModal.status === "PENDING" && (
+                                    <>
+                                        <button
+                                            onClick={() => { openRejectModal(viewModal.id); setViewModal(null); }}
+                                            disabled={actionLoading === viewModal.id}
+                                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                                        >
+                                            Reject
+                                        </button>
+                                        <button
+                                            onClick={async () => { await handleApprove(viewModal.id); closeModals(); }}
+                                            disabled={actionLoading === viewModal.id}
+                                            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                                        >
+                                            Approve
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

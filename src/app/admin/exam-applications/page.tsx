@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaPlus, FaTrash, FaUserPlus, FaCalendarAlt, FaCheckCircle, FaClock, FaTimesCircle, FaDownload, FaTimes, FaImage, FaSearch, FaFileExcel, FaClipboardList, FaEdit, FaUserSlash, FaUnlock, FaBan, FaCheck } from "react-icons/fa";
@@ -67,6 +67,46 @@ export default function AdminExamApplicationsPage() {
     const [confirmModal, setConfirmModal] = useState<{ id: string, type: "DELETE" | "APPROVE_EDIT", open: boolean } | null>(null);
     const [viewModal, setViewModal] = useState<any | null>(null);
     const [rejectModal, setRejectModal] = useState<{ id: string; open: boolean }>({ id: "", open: false });
+
+    const viewModalRef = useRef(viewModal);
+    viewModalRef.current = viewModal;
+    const confirmModalRef = useRef(confirmModal);
+    confirmModalRef.current = confirmModal;
+    const rejectModalRef = useRef(rejectModal);
+    rejectModalRef.current = rejectModal;
+    const duplicateModalRef = useRef(duplicateModal);
+    duplicateModalRef.current = duplicateModal;
+    const selectedCardRef = useRef(selectedCard);
+    selectedCardRef.current = selectedCard;
+
+    const openViewModal = (app: any) => {
+        setViewModal(app);
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "viewModal" },
+            "",
+            window.location.href
+        );
+    };
+
+    const openDuplicateModal = (app: any) => {
+        setDuplicateModal(app);
+        window.history.pushState(
+            { view: selectedCardRef.current ? "details" : "overview", modal: "duplicateModal" },
+            "",
+            window.location.href
+        );
+    };
+
+    const closeModals = () => {
+        setViewModal(null);
+        setConfirmModal(null);
+        setRejectModal({ id: "", open: false });
+        setDuplicateModal(null);
+        if (window.history.state?.modal) {
+            window.history.back();
+        }
+    };
+
     const [remarks, setRemarks] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState("ALL");
@@ -133,9 +173,33 @@ export default function AdminExamApplicationsPage() {
                 .catch(() => loadData("ALL"));
         }
 
-        const handlePopState = () => {
-            setSelectedCard(null);
-            setApplications([]);
+        const handlePopState = (e: PopStateEvent) => {
+            const isModalOpen = Boolean(
+                viewModalRef.current ||
+                confirmModalRef.current?.open ||
+                rejectModalRef.current?.open ||
+                duplicateModalRef.current
+            );
+
+            if (isModalOpen) {
+                setViewModal(null);
+                setConfirmModal(null);
+                setRejectModal({ id: "", open: false });
+                setDuplicateModal(null);
+
+                if (e.state?.view === "details" || (selectedCardRef.current && !e.state?.view)) {
+                    return;
+                }
+            }
+
+            if (!e.state?.view || e.state.view !== "details") {
+                setSelectedCard(null);
+                setApplications([]);
+                setViewModal(null);
+                setConfirmModal(null);
+                setRejectModal({ id: "", open: false });
+                setDuplicateModal(null);
+            }
         };
         window.addEventListener("popstate", handlePopState);
         return () => window.removeEventListener("popstate", handlePopState);
@@ -533,6 +597,10 @@ export default function AdminExamApplicationsPage() {
                             <button onClick={() => { 
                                 setSelectedCard(null); 
                                 setApplications([]); 
+                                setViewModal(null);
+                                setConfirmModal(null);
+                                setRejectModal({ id: "", open: false });
+                                setDuplicateModal(null);
                                 if (window.history.state?.view === "details") {
                                     window.history.back();
                                 } else {
@@ -617,8 +685,8 @@ export default function AdminExamApplicationsPage() {
                                         const totalAmount = paymentsList.reduce((sum: number, p: any) => sum + (parseFloat(p.amountPaid) || 0), 0);
                                         return (
                                         <tr key={app.id} className={`hover:bg-slate-50 transition-colors ${app.status === "PENDING" ? "bg-yellow-50/30" : ""}`}>
-                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer whitespace-nowrap" onClick={() => setViewModal(app)}>{app.rollNumber}</td>
-                                            <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => setViewModal(app)}>{app.student?.name || ""}</td>
+                                            <td className="px-4 py-3 font-medium text-blue-600 hover:underline cursor-pointer whitespace-nowrap" onClick={() => openViewModal(app)}>{app.rollNumber}</td>
+                                            <td className="px-4 py-3 text-slate-700 hover:text-blue-600 cursor-pointer" onClick={() => openViewModal(app)}>{app.student?.name || ""}</td>
                                             <td className="px-4 py-3 align-top">
                                                 <div className="flex flex-col gap-1.5">
                                                     {paymentsList.map((p: any, i: number) => (
@@ -626,7 +694,7 @@ export default function AdminExamApplicationsPage() {
                                                     ))}
                                                 </div>
                                                 {app.duplicateUtr && (
-                                                    <button onClick={() => setDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
+                                                    <button onClick={() => openDuplicateModal(app)} className="mt-1 inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-200 hover:bg-red-200 transition-colors whitespace-nowrap">
                                                         ⚠️ DUPLICATE
                                                     </button>
                                                 )}
@@ -703,7 +771,7 @@ export default function AdminExamApplicationsPage() {
                 <AnimatePresence>
                     {duplicateModal && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDuplicateModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
                             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
                                 <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-red-600">
                                     ⚠️ Duplicate UTR Detected
@@ -728,7 +796,7 @@ export default function AdminExamApplicationsPage() {
                                     </div>
                                 </div>
                                 <div className="mt-6 flex justify-end">
-                                    <button onClick={() => setDuplicateModal(null)} className="rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-300 transition-colors">
+                                    <button onClick={closeModals} className="rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-300 transition-colors">
                                         Close
                                     </button>
                                 </div>
@@ -741,7 +809,7 @@ export default function AdminExamApplicationsPage() {
             <AnimatePresence>
                 {confirmModal?.open && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
                         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
                             {confirmModal.type === "APPROVE_EDIT" ? (
                                 <>
@@ -750,10 +818,10 @@ export default function AdminExamApplicationsPage() {
                                         This will permanently discard the current application and allow the student to submit a fresh one. This action cannot be undone.
                                     </p>
                                     <div className="flex justify-center gap-3">
-                                        <button onClick={() => setConfirmModal(null)} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                                        <button onClick={closeModals} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
                                             Cancel
                                         </button>
-                                        <button onClick={() => handleApproveEdit(confirmModal.id)} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
+                                        <button onClick={async () => { await handleApproveEdit(confirmModal.id); closeModals(); }} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
                                             {actionLoading === confirmModal.id ? <LogoSpinner fullScreen={false} /> : "Approve Edit"}
                                         </button>
                                     </div>
@@ -765,10 +833,10 @@ export default function AdminExamApplicationsPage() {
                                         Are you sure you want to delete this application? This will allow the student to resubmit. This action cannot be undone.
                                     </p>
                                     <div className="flex justify-center gap-3">
-                                        <button onClick={() => setConfirmModal(null)} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                                        <button onClick={closeModals} className="rounded-xl px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
                                             Cancel
                                         </button>
-                                        <button onClick={() => handleDeleteApplication(confirmModal.id)} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
+                                        <button onClick={async () => { await handleDeleteApplication(confirmModal.id); closeModals(); }} disabled={actionLoading === confirmModal.id} className="rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-50 w-[140px] flex justify-center items-center">
                                             {actionLoading === confirmModal.id ? <LogoSpinner fullScreen={false} /> : "Delete"}
                                         </button>
                                     </div>
@@ -783,11 +851,11 @@ export default function AdminExamApplicationsPage() {
             <AnimatePresence>
                 {viewModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setViewModal(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
                         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between items-start mb-4">
                                 <h3 className="text-xl font-bold text-slate-800">Application Details</h3>
-                                <button onClick={() => setViewModal(null)} className="text-slate-400 hover:text-slate-700"><FaTimes /></button>
+                                <button onClick={closeModals} className="text-slate-400 hover:text-slate-700"><FaTimes /></button>
                             </div>
                             
                             {viewModal.editRequested && (
@@ -872,7 +940,7 @@ export default function AdminExamApplicationsPage() {
                             </div>
 
                             <div className="mt-6 flex justify-end gap-3 rounded-xl bg-slate-50 p-4 border border-slate-100">
-                                <button onClick={() => setViewModal(null)} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300">Close</button>
+                                <button onClick={closeModals} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300">Close</button>
                                 {viewModal.status === "PENDING" && (
                                     <>
                                         <button
@@ -883,7 +951,7 @@ export default function AdminExamApplicationsPage() {
                                             Reject
                                         </button>
                                         <button
-                                            onClick={() => { handleApprove(viewModal.id); setViewModal(null); }}
+                                            onClick={async () => { await handleApprove(viewModal.id); closeModals(); }}
                                             disabled={actionLoading === viewModal.id}
                                             className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                                         >
@@ -901,7 +969,7 @@ export default function AdminExamApplicationsPage() {
             <AnimatePresence>
                 {rejectModal.open && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setRejectModal({ id: "", open: false })} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeModals} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
                         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
                             <h3 className="mb-2 text-lg font-bold text-slate-900">Reject Application</h3>
                             <p className="mb-4 text-sm text-slate-500">Please enter the reason for rejection.</p>
@@ -913,8 +981,8 @@ export default function AdminExamApplicationsPage() {
                                 placeholder="Remarks (optional)"
                             />
                             <div className="mt-4 flex gap-3 justify-end">
-                                <button onClick={() => setRejectModal({ id: "", open: false })} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">Cancel</button>
-                                <button onClick={handleReject} disabled={!!actionLoading} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                                <button onClick={closeModals} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">Cancel</button>
+                                <button onClick={async () => { await handleReject(); closeModals(); }} disabled={!!actionLoading} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
                                     {actionLoading ? <LogoSpinner fullScreen={false} /> : "Reject"}
                                 </button>
                             </div>
