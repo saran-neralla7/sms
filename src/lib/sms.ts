@@ -19,6 +19,7 @@ export async function sendAbsenteeSMS(mobile: string, rollNumber: string, name: 
 
         const response = await fetch(url.toString(), {
             method: 'GET',
+            signal: AbortSignal.timeout(5000)
         });
 
         const data = await response.text();
@@ -106,6 +107,7 @@ Gayatri Vidya Parishad`;
 
         const response = await fetch(url.toString(), {
             method: 'GET',
+            signal: AbortSignal.timeout(5000)
         });
 
         const data = await response.text();

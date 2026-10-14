@@ -289,8 +289,7 @@ export async function POST(request: Request) {
                         sectionId: sid,
                         periodId: pid,
                         year: String(year),
-                        departmentId: sectionDeptId,
-                        downloadedBy: (session.user as any).id
+                        departmentId: sectionDeptId
                     };
                     if (finalSubjectId) {
                         existingWhere.subjectId = finalSubjectId;

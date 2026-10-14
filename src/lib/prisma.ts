@@ -64,8 +64,8 @@ const prismaClientSingleton = () => {
                         // Background or non-request contexts
                     }
 
-                    // Create audit log record
-                    await client.auditLog.create({
+                    // Create audit log record asynchronously so it doesn't block the caller or hold transaction connections
+                    client.auditLog.create({
                         data: {
                             action: actionType,
                             entity: params.model,
@@ -79,11 +79,13 @@ const prismaClientSingleton = () => {
                             browser: deviceInfo?.browser || null,
                             userAgent: deviceInfo?.userAgent || null
                         }
+                    }).catch((auditError) => {
+                        console.error("Auto audit log error:", auditError);
                     });
                 }
             } catch (error) {
                 // Silently catch errors to avoid interrupting the main database operation
-                console.error("Auto audit log error:", error);
+                console.error("Auto audit log setup error:", error);
             }
         }
 
